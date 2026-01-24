@@ -6,6 +6,8 @@
 
 El Secretario is an intelligent audio transcription and organization tool designed to help you manage your recordings and notes efficiently. It leverages advanced AI models for transcription, diarization, and semantic search, allowing you to easily find and interact with your audio content.
 
+Read this in [Español](README_ES.md) | [Asturianu](README_AST.md)
+
 ## Features
 
 - **Audio Recording & Import**: Record audio directly within the app or import existing files.
