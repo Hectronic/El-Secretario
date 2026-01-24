@@ -1,0 +1,20 @@
+# Python
+__pycache__/
+*.pyc
+venv/
+.env
+
+# Database
+*.db
+chroma_db/
+
+# Data
+recordings/
+notebooks_audio/
+
+# Logs
+log/
+
+# OS
+.DS_Store
+
