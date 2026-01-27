@@ -40,6 +40,8 @@ El Secretario es una herramienta inteligente de transcripción y organización d
     sudo apt-get install ffmpeg portaudio19-dev
     ```
 
+    > **Usuarios de Windows:** Por favor consultad la [Guía de Instalación para Windows](docs/INSTALL_WINDOWS_ES.md).
+
 ## Configuración
 
 Para utilizar plenamente las funciones de El Secretario, deberás configurar los siguientes tokens de API en la configuración de la aplicación:

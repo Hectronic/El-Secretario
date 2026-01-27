@@ -42,6 +42,8 @@ Read this in [Español](README_ES.md) | [Asturianu](README_AST.md)
     sudo apt-get install ffmpeg portaudio19-dev
     ```
 
+    > **Windows Users:** Please refer to the [Windows Installation Guide](docs/INSTALL_WINDOWS.md).
+
 ## Configuration
 
 To fully utilize the features of El Secretario, you will need to configure the following API tokens in the application settings:
