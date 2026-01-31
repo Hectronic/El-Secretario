@@ -1,27 +1,28 @@
-# Guía para Agentes AI
+# AI Agents Guide
 
-Este documento contiene información útil y normas estrictas para agentes de IA que trabajen en este repositorio.
+This document contains useful information and strict rules for AI agents working on this repository.
 
-## Normas Generales
+## General Rules
 
-1.  **Tests Obligatorios**:
-    *   Siempre se debe verificar el código generado o modificado mediante tests.
-    *   **Toda nueva funcionalidad debe incluir nuevos tests** (unitarios o de integración según corresponda).
-    *   Nunca asumas que el código funciona sin probarlo.
+1.  **Mandatory Tests**:
+    *   **Always** verify generated or modified code with tests.
+    *   **Every new feature must include new tests** (unit or integration as appropriate).
+    *   Never assume code works without testing it.
 
-2.  **Documentación Actualizada**:
-    *   **La documentación debe mantenerse al día.**
-    *   Con cada nueva funcionalidad o cambio significativo, verifica y actualiza la documentación pertinente (README, guías de instalación, comentarios en código, etc.).
+2.  **Documentation Updates**:
+    *   **Documentation must be kept up to date.**
+    *   With every new feature or significant change, verify and update the relevant documentation (README, installation guides, code comments, etc.).
+    *   **CRITICAL**: You must update the documentation in **ALL available languages** (e.g., English, Spanish, Asturian). If a file exists in multiple languages (like `README.md`, `README_ES.md`, `README_AST.md`), you must update all of them to maintain consistency.
 
-3.  **Contexto del Proyecto**:
-    *   Este proyecto utiliza un sistema de logs en `log/app.log`. Utilízalo para depurar.
-    *   La estructura del proyecto separa el código fuente en `src/` y los tests en `tests/`.
+3.  **Project Context**:
+    *   This project uses a logging system in `log/app.log`. Use it for debugging.
+    *   The project structure separates source code in `src/` and tests in `tests/`.
 
-## Flujo de Trabajo Recomendado
+## Recommended Workflow
 
-1.  Entender el requerimiento.
-2.  Planificar los cambios (crear/modificar archivos).
-3.  Implementar los cambios.
-4.  **Crear/Actualizar Tests**.
-5.  Ejecutar Tests y Verificar.
-6.  Actualizar Documentación.
+1.  Understand the requirement.
+2.  Plan the changes (create/modify files).
+3.  Implement the changes.
+4.  **Create/Update Tests**.
+5.  Run Tests and Verify.
+6.  Update Documentation (in all languages).
