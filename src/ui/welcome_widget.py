@@ -16,6 +16,7 @@ from PyQt6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLab
 from PyQt6.QtCore import Qt, pyqtSignal, QTimer
 from PyQt6.QtGui import QPixmap
 from src.ui.styles import LIST_WIDGET_STYLE
+from src.ui.styles import LIST_WIDGET_STYLE
 from src.audio import Recorder
 import sounddevice as sd
 import numpy as np
@@ -31,6 +32,7 @@ class WelcomeWidget(QWidget):
     batch_process_requested = pyqtSignal()
     import_audio_requested = pyqtSignal(dict)  # Also include config for import
     notebooks_requested = pyqtSignal()
+    maintenance_requested = pyqtSignal()
 
     def __init__(self, db, parent=None):
         super().__init__(parent)
@@ -202,7 +204,12 @@ class WelcomeWidget(QWidget):
         btn_layout.addWidget(self.import_btn)
         btn_layout.addWidget(self.notebooks_btn)
 
+        # Maintenance Button (Small, near bottom or separate)
+        self.maint_btn = self.create_big_button("Maintenance", "#607D8B", self.maintenance_requested.emit, width=160, height=60)
+        btn_layout.addWidget(self.maint_btn)
+
         layout.addLayout(btn_layout)
+
 
         
         # Two-column layout for Favorites and Today's Summary
@@ -551,4 +558,6 @@ class WelcomeWidget(QWidget):
     def on_today_clicked(self, item):
         record_id = int(item.data(Qt.ItemDataRole.UserRole))
         self.result_clicked.emit(record_id)
+
+
 

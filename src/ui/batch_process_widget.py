@@ -15,7 +15,7 @@
 import os
 from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QPushButton, 
                              QLabel, QProgressBar, QTextEdit, QMessageBox, QListWidget, QListWidgetItem)
-from PyQt6.QtCore import Qt, pyqtSignal
+from PyQt6.QtCore import Qt, pyqtSignal, QTimer
 from src.database import DBManager
 from src.worker import TranscriberThread
 from PyQt6.QtCore import QSettings
@@ -69,7 +69,12 @@ class BatchProcessWidget(QWidget):
         
         self.remove_btn = QPushButton("Remove Selected")
         self.remove_btn.clicked.connect(self.remove_selected)
+        self.remove_btn.clicked.connect(self.remove_selected)
         list_btn_layout.addWidget(self.remove_btn)
+
+        self.retry_btn = QPushButton("Retry Failed")
+        self.retry_btn.clicked.connect(self.retry_failed)
+        list_btn_layout.addWidget(self.retry_btn)
         
         layout.addLayout(list_btn_layout)
         
@@ -77,6 +82,7 @@ class BatchProcessWidget(QWidget):
         self.log_text = QTextEdit()
         self.log_text.setReadOnly(True)
         layout.addWidget(self.log_text)
+        
         
         # Controls
         btn_layout = QHBoxLayout()
@@ -97,12 +103,21 @@ class BatchProcessWidget(QWidget):
         self.queue = self.db.fetch_pending_diarization()
         self.total_files = len(self.queue)
         self.file_progress_label.setText(f"0/{self.total_files} files processed")
+        self.file_progress_label.setText(f"0/{self.total_files} files processed")
         self.log(f"Found {self.total_files} pending recordings.")
         
         self.pending_list.clear()
         for rec in self.queue:
             item = QListWidgetItem(f"{rec['filename']} ({rec['duration']:.1f}s)")
             item.setData(Qt.ItemDataRole.UserRole, rec)
+            
+            # Highlight errors
+            if rec.get('last_error'):
+                item.setText(f"FAILED: {rec['filename']} (Attempts: {rec.get('processing_attempts')})")
+                item.setBackground(Qt.GlobalColor.red)
+                item.setForeground(Qt.GlobalColor.white)
+                item.setToolTip(rec['last_error'])
+                
             self.pending_list.addItem(item)
         
         if self.total_files == 0:
@@ -202,7 +217,19 @@ class BatchProcessWidget(QWidget):
         self.thread.error.connect(self.on_file_error)
         self.thread.start()
         
+
+        
+    def cleanup_thread(self):
+        if self.thread:
+            try:
+                self.thread.wait()
+                self.thread.deleteLater()
+            except:
+                pass
+            self.thread = None
+            
     def on_file_finished(self, result):
+        self.cleanup_thread() # Cleanup previous thread
         if not self.is_processing:
             return
 
@@ -241,21 +268,59 @@ class BatchProcessWidget(QWidget):
         self.process_next()
         
     def on_file_error(self, err):
-        self.log(f"Error processing {self.current_record['filename']}: {err}")
+        self.cleanup_thread() # Cleanup previous thread
+        error_msg = str(err)
+        self.log(f"Error processing {self.current_record['filename']}: {error_msg}")
+        
+        record_id = self.current_record['id']
+        
+        # Save error to DB
+        self.db.set_error(record_id, error_msg)
+        attempts = self.db.increment_attempt(record_id)
         
         # Update item in list to show error
         if self.current_item:
-            self.current_item.setText(f"FAILED: {self.current_record['filename']}")
+            self.current_item.setText(f"FAILED: {self.current_record['filename']} (Attempts: {attempts})")
             self.current_item.setBackground(Qt.GlobalColor.red)
             self.current_item.setForeground(Qt.GlobalColor.white)
-            self.current_item.setToolTip(str(err))
+            self.current_item.setToolTip(error_msg)
             
+        # Retry logic
+        if attempts < 3:
+            self.log(f"Retrying... (Attempt {attempts + 1}/3)")
+            self.status_label.setText(f"Retrying {self.current_record['filename']}...")
+            # We don't pop from queue, so it will be retried in next process_next call
+            # But we need to delay slightly? Loop handled via signal, so safe to call process_next
+            # Maybe add a small delay?
+            QTimer.singleShot(2000, self.process_next)
+            return
+
+        self.log("Max retries reached. Moving to next file.")
+
         # Remove from queue so we move to next, but KEEP in list
         if self.queue:
             self.queue.pop(0)
             
         # Continue to next even on error
         self.process_next()
+
+    def retry_failed(self):
+        """Reset attempts for selected failed items."""
+        selected_items = self.pending_list.selectedItems()
+        if not selected_items:
+            # If nothing selected, retry ALL failed
+            for i in range(self.pending_list.count()):
+                item = self.pending_list.item(i)
+                rec = item.data(Qt.ItemDataRole.UserRole)
+                if rec.get('last_error') or item.background().color() == Qt.GlobalColor.red:
+                    self.db.reset_attempts(rec['id'])
+        else:
+            for item in selected_items:
+                rec = item.data(Qt.ItemDataRole.UserRole)
+                self.db.reset_attempts(rec['id'])
+        
+        self.load_pending()
+        self.log("Reset attempts for failed items.")
         
     def finish_processing(self):
         self.is_processing = False

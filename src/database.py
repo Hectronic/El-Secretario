@@ -54,7 +54,10 @@ class DBManager:
                     cleaned_text TEXT,
                     is_favorite INTEGER DEFAULT 0,
                     is_diarized INTEGER DEFAULT 0,
-                    transcription_model TEXT
+                    is_diarized INTEGER DEFAULT 0,
+                    transcription_model TEXT,
+                    processing_attempts INTEGER DEFAULT 0,
+                    last_error TEXT
                 )
             ''')
             
@@ -100,6 +103,10 @@ class DBManager:
                     cursor.execute('ALTER TABLE records ADD COLUMN is_diarized INTEGER DEFAULT 0')
                 if 'transcription_model' not in columns:
                     cursor.execute('ALTER TABLE records ADD COLUMN transcription_model TEXT')
+                if 'processing_attempts' not in columns:
+                    cursor.execute('ALTER TABLE records ADD COLUMN processing_attempts INTEGER DEFAULT 0')
+                if 'last_error' not in columns:
+                    cursor.execute('ALTER TABLE records ADD COLUMN last_error TEXT')
                 
                 # Migration for chat_sessions
                 cursor.execute("PRAGMA table_info(chat_sessions)")
@@ -150,6 +157,15 @@ class DBManager:
                 query += " LIMIT ?"
                 params.append(limit)
             cursor.execute(query, params)
+            rows = cursor.fetchall()
+            return [dict(row) for row in rows]
+
+    def fetch_diarized_records(self) -> List[Dict[str, Any]]:
+        """Fetch all records that have been diarized."""
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            query = "SELECT * FROM records WHERE is_diarized = 1 ORDER BY created_at DESC"
+            cursor.execute(query)
             rows = cursor.fetchall()
             return [dict(row) for row in rows]
 
@@ -425,3 +441,27 @@ class DBManager:
             cursor.execute('DELETE FROM records WHERE id = ?', (record_id,))
             conn.commit()
             return filename
+
+    def increment_attempt(self, record_id: int) -> int:
+        """Increment the processing attempts count and return the new value."""
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute('UPDATE records SET processing_attempts = processing_attempts + 1 WHERE id = ?', (record_id,))
+            conn.commit()
+            
+            cursor.execute('SELECT processing_attempts FROM records WHERE id = ?', (record_id,))
+            return cursor.fetchone()[0]
+
+    def set_error(self, record_id: int, error_message: str) -> None:
+        """Set the last error message for a record."""
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute('UPDATE records SET last_error = ? WHERE id = ?', (error_message, record_id))
+            conn.commit()
+
+    def reset_attempts(self, record_id: int) -> None:
+        """Reset attempts and clear error message (for manual retry)."""
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute('UPDATE records SET processing_attempts = 0, last_error = NULL WHERE id = ?', (record_id,))
+            conn.commit()

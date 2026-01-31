@@ -39,6 +39,12 @@ Thank you for your interest in contributing to El Secretario! We welcome contrib
 
 If you find a bug or have a feature request, please open an issue on the GitHub repository. Provide as much detail as possible to help us understand and resolve the issue.
 
+
+## AI Agents
+
+If you are an AI agent contributing to this repository, please refer to [docs/agents.md](docs/agents.md) for specific guidelines and rules.
+
 ## License
+
 
 By contributing to this project, you agree that your contributions will be licensed under the GNU General Public License v3.0.
