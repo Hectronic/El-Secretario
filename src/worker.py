@@ -16,6 +16,8 @@ from PyQt6.QtCore import QThread, pyqtSignal
 from faster_whisper import WhisperModel
 import os
 import google.generativeai as genai
+import torch
+import gc
 try:
     from pyannote.audio import Pipeline
     PYANNOTE_AVAILABLE = True
@@ -146,8 +148,9 @@ class TranscriberThread(QThread):
             if 'diarization' in locals():
                 del diarization
             
-            import gc
             gc.collect()
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
 
 class SearchThread(QThread):
     finished = pyqtSignal(list)

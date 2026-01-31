@@ -41,6 +41,7 @@ from src.ui.batch_process_widget import BatchProcessWidget
 from src.notebook_database import NotebookDBManager
 from src.ui.notebooks_list_widget import NotebooksListWidget
 from src.ui.notebook_widget import NotebookWidget
+from src.ui.maintenance_widget import MaintenanceWidget
 
 class MainWindow(QMainWindow):
     def __init__(self):
@@ -222,6 +223,7 @@ class MainWindow(QMainWindow):
         self.welcome_widget.batch_process_requested.connect(self.open_batch_process_tab)
         self.welcome_widget.import_audio_requested.connect(self.import_audio_file)
         self.welcome_widget.notebooks_requested.connect(self.open_notebooks_list)
+        self.welcome_widget.maintenance_requested.connect(self.open_maintenance_tab)
         
         # Add as first tab, not closable
         self.central_tabs.addTab(self.welcome_widget, "Welcome")
@@ -722,3 +724,18 @@ class MainWindow(QMainWindow):
         # But for now, let's just open a new one or rely on user to manage
         
         self.open_chat_tab(initial_contexts=[{"type": "notebook", "value": notebook_id, "label": notebook_name}])
+
+    def open_maintenance_tab(self):
+        # Check if already open
+        for i in range(self.central_tabs.count()):
+            widget = self.central_tabs.widget(i)
+            if isinstance(widget, MaintenanceWidget):
+                self.central_tabs.setCurrentIndex(i)
+                return
+
+        maint_widget = MaintenanceWidget(self.db)
+        maint_widget.batch_processing_requested.connect(self.open_batch_process_tab)
+        
+        index = self.central_tabs.addTab(maint_widget, "Maintenance")
+        self.central_tabs.setCurrentIndex(index)
+
