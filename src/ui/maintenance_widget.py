@@ -6,15 +6,17 @@
 
 from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QLabel, QPushButton, 
                              QProgressBar, QHBoxLayout, QMessageBox, QFrame)
-from PyQt6.QtCore import Qt, pyqtSignal, QTimer
+from PyQt6.QtCore import Qt, QTimer
 import os
 
-class MaintenanceWidget(QWidget):
-    batch_processing_requested = pyqtSignal()
 
-    def __init__(self, db, parent=None):
+class MaintenanceWidget(QWidget):
+    """Widget for storage cleanup and statistics."""
+
+    def __init__(self, db, notebook_db=None, parent=None):
         super().__init__(parent)
         self.db = db
+        self.notebook_db = notebook_db
         
         self.init_ui()
         self.calculate_stats()
@@ -97,24 +99,6 @@ class MaintenanceWidget(QWidget):
         """)
         self.clean_btn.clicked.connect(self.clean_up)
         btn_layout.addWidget(self.clean_btn)
-
-        self.batch_btn = QPushButton("Go to Batch Processor")
-        self.batch_btn.setFixedSize(220, 50)
-        self.batch_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #FF9800;
-                color: white;
-                font-weight: bold;
-                font-size: 15px;
-                padding: 10px;
-                border-radius: 5px;
-            }
-            QPushButton:hover {
-                background-color: #F57C00;
-            }
-        """)
-        self.batch_btn.clicked.connect(self.batch_processing_requested.emit)
-        btn_layout.addWidget(self.batch_btn)
         
         btn_layout.addStretch()
         

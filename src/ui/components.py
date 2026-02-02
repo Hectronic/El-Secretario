@@ -36,14 +36,16 @@ class RecordingListItemWidget(QWidget):
         
         title = self.record.get('title') or self.record.get('created_at')
         self.title_label = QLabel(title)
-        self.title_label.setStyleSheet("font-weight: bold; font-size: 14px; color: #eeeeee;")
+        self.title_label.setObjectName("record_title")
+        self.title_label.setStyleSheet("font-weight: bold; font-size: 14px;")
         info_layout.addWidget(self.title_label)
         
         date_str = self.record.get('created_at')
         duration = self.record.get('duration', 0)
         details = f"{date_str} • {duration:.1f}s"
         self.details_label = QLabel(details)
-        self.details_label.setStyleSheet("color: #aaaaaa; font-size: 12px;")
+        self.details_label.setObjectName("record_details")
+        self.details_label.setStyleSheet("font-size: 12px;")
         info_layout.addWidget(self.details_label)
         
         layout.addLayout(info_layout)

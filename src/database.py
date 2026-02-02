@@ -54,7 +54,6 @@ class DBManager:
                     cleaned_text TEXT,
                     is_favorite INTEGER DEFAULT 0,
                     is_diarized INTEGER DEFAULT 0,
-                    is_diarized INTEGER DEFAULT 0,
                     transcription_model TEXT,
                     processing_attempts INTEGER DEFAULT 0,
                     last_error TEXT
@@ -465,3 +464,121 @@ class DBManager:
             cursor = conn.cursor()
             cursor.execute('UPDATE records SET processing_attempts = 0, last_error = NULL WHERE id = ?', (record_id,))
             conn.commit()
+
+    # =========================================================================
+    # EXPORT/IMPORT METHODS
+    # =========================================================================
+
+    def fetch_transcription_logs(self) -> List[Dict[str, Any]]:
+        """Fetch all transcription logs for export."""
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute('SELECT * FROM transcription_logs ORDER BY created_at DESC')
+            rows = cursor.fetchall()
+            return [dict(row) for row in rows]
+
+    def record_exists_by_hash(self, created_at: str, content_hash: str) -> bool:
+        """
+        Check if a record already exists based on timestamp and content hash.
+        
+        Args:
+            created_at: Record creation timestamp.
+            content_hash: Hash of the transcription content.
+            
+        Returns:
+            True if a matching record exists.
+        """
+        import hashlib
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            # First check by created_at timestamp
+            cursor.execute('SELECT transcription FROM records WHERE created_at = ?', (created_at,))
+            rows = cursor.fetchall()
+            
+            for row in rows:
+                transcription = row['transcription'] or ''
+                existing_hash = hashlib.sha256(transcription.encode('utf-8')).hexdigest()
+                if existing_hash == content_hash:
+                    return True
+            return False
+
+    def chat_session_exists(self, name: str, created_at: str) -> bool:
+        """
+        Check if a chat session already exists based on name and timestamp.
+        
+        Args:
+            name: Session name.
+            created_at: Session creation timestamp.
+            
+        Returns:
+            True if a matching session exists.
+        """
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute('SELECT id FROM chat_sessions WHERE name = ? AND created_at = ?', (name, created_at))
+            return cursor.fetchone() is not None
+
+    def import_record(self, record: Dict[str, Any]) -> Optional[int]:
+        """
+        Import a single record from export data.
+        
+        Args:
+            record: Record dictionary with all fields.
+            
+        Returns:
+            The new record ID, or None if import failed.
+        """
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute('''
+                INSERT INTO records (
+                    created_at, filename, duration, transcription, title, tags,
+                    summary, cleaned_text, is_favorite, is_diarized, transcription_model,
+                    processing_attempts, last_error
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ''', (
+                record.get('created_at'),
+                record.get('filename', ''),
+                record.get('duration', 0),
+                record.get('transcription', ''),
+                record.get('title'),
+                record.get('tags'),
+                record.get('summary'),
+                record.get('cleaned_text'),
+                record.get('is_favorite', 0),
+                record.get('is_diarized', 0),
+                record.get('transcription_model'),
+                record.get('processing_attempts', 0),
+                record.get('last_error')
+            ))
+            conn.commit()
+            return cursor.lastrowid
+
+    def import_chat_session(self, session: Dict[str, Any]) -> Optional[int]:
+        """
+        Import a single chat session from export data.
+        
+        Args:
+            session: Chat session dictionary with all fields.
+            
+        Returns:
+            The new session ID, or None if import failed.
+        """
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute('''
+                INSERT INTO chat_sessions (
+                    name, collection, messages, filter_date, filter_tags, context_data, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?)
+            ''', (
+                session.get('name'),
+                session.get('collection'),
+                session.get('messages'),
+                session.get('filter_date'),
+                session.get('filter_tags'),
+                session.get('context_data'),
+                session.get('created_at')
+            ))
+            conn.commit()
+            return cursor.lastrowid
+

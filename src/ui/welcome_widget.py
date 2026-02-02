@@ -29,10 +29,12 @@ class WelcomeWidget(QWidget):
     search_triggered = pyqtSignal(str)
     result_clicked = pyqtSignal(int)
     new_chat_requested = pyqtSignal()
-    batch_process_requested = pyqtSignal()
+    batch_process_requested = pyqtSignal()  # Kept for compatibility
     import_audio_requested = pyqtSignal(dict)  # Also include config for import
     notebooks_requested = pyqtSignal()
-    maintenance_requested = pyqtSignal()
+    maintenance_requested = pyqtSignal()  # Kept for compatibility
+    tools_requested = pyqtSignal()  # Unified tools signal
+    settings_requested = pyqtSignal() # New settings signal
 
     def __init__(self, db, parent=None):
         super().__init__(parent)
@@ -195,18 +197,14 @@ class WelcomeWidget(QWidget):
         btn_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
         self.chat_btn = self.create_big_button("Start Chat", "#4CAF50", self.new_chat_requested.emit, width=160, height=60)
-        self.batch_btn = self.create_big_button("Process Pending", "#FF9800", self.batch_process_requested.emit, width=160, height=60)
         self.import_btn = self.create_big_button("Import Audio", "#9C27B0", self.on_import_audio, width=160, height=60)
-        self.notebooks_btn = self.create_big_button("Libretas", "#00BCD4", self.notebooks_requested.emit, width=160, height=60)
+        self.tools_btn = self.create_big_button("⚙️ Tools", "#607D8B", self.tools_requested.emit, width=160, height=60)
+        self.settings_btn = self.create_big_button("🔧 Settings", "#009688", self.settings_requested.emit, width=160, height=60)
 
         btn_layout.addWidget(self.chat_btn)
-        btn_layout.addWidget(self.batch_btn)
         btn_layout.addWidget(self.import_btn)
-        btn_layout.addWidget(self.notebooks_btn)
-
-        # Maintenance Button (Small, near bottom or separate)
-        self.maint_btn = self.create_big_button("Maintenance", "#607D8B", self.maintenance_requested.emit, width=160, height=60)
-        btn_layout.addWidget(self.maint_btn)
+        btn_layout.addWidget(self.tools_btn)
+        btn_layout.addWidget(self.settings_btn)
 
         layout.addLayout(btn_layout)
 

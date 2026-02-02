@@ -11,9 +11,10 @@ El Secretario ye una ferramienta intelixente de trescripción y organización d'
 - **Grabación ya Importación d'Audio**: Graba audio direutamente na aplicación o importa archivos esistentes.
 - **Trescripción y Diarización**: Trescribe audio automáticamente ya identifica distintos falantes (diarización) usando Whisper d'OpenAI y pyannote.audio.
 - **Gueta Intelixente (RAG)**: Usa Xeneración Aumentada por Recuperación (RAG) pa charrar coles tos grabaciones y alcontrar información específica.
-- **Cuadernos y Coleiciones**: Organiza les tos grabaciones en cuadernos y coleiciones pa una meyor xestión.
+- **Cuadernos y Coleiciones**: Organiza les tos grabaciones en cuadernos y coleiciones. Accede a elles direutamente dende la barra llateral.
 - **Vista de Calendariu**: Esplora les tos grabaciones per fecha.
-- **Procesamientu per Llotes**: Procesa múltiples grabaciones en segundu planu.
+- **Ferramientes Unificaes**: Llimpieza d'almacenamientu, procesamientu per llotes y esportación/importación de datos nuna sola pestaña.
+- **Tema Personalizable**: Sofitu pa temes Claru, Escuru y del Sistema.
 
 ## Instalación
 
@@ -44,7 +45,7 @@ El Secretario ye una ferramienta intelixente de trescripción y organización d'
 
 ## Configuración
 
-Pa utilizar dafechu les funciones d'El Secretario, deberás configurar los siguientes tokens d'API na configuración de l'aplicación:
+Pa utilizar dafechu les funciones d'El Secretario, deberás configurar los tokens d'API. Pues facelo fácilmente al traviés del botón **🔧 Settings** na pantalla de Bienvenida, o manualmente na configuración de l'aplicación.
 
 1.  **Token de Hugging Face**: Requeríu pa la diarización de falantes (identificar quién ta falando).
     -   Crea un token en: [https://huggingface.co/settings/tokens](https://huggingface.co/settings/tokens)
@@ -63,6 +64,22 @@ Pa utilizar dafechu les funciones d'El Secretario, deberás configurar los sigui
 2.  **Entamar Grabación**: Fai clic nel iconu del micrófonu pa entamar a grabar.
 3.  **Importar Audio**: Usa'l botón d'importar p'añader archivos d'audio esistentes.
 4.  **Chat**: Abre una grabación o una coleición pa entamar a charrar colos tos datos.
+
+## Esportación/Importación de Datos
+
+El Secretario permítete esportar tolos tos datos (grabaciones, trescripciones, cuadernos, sesiones de chat) a un archivu JSON ya importarlos n'otra instalación.
+
+### Esportar Datos
+1. Fai clic en **⚙️ Tools** dende la pantalla de Bienvenida
+2. Ve a la pestaña **📦 Data**
+3. Fai clic en **Export All Data** y escueye una ubicación
+
+**Nota:** Los archivos d'audio NUN s'esporten, namás les trescripciones y metadatos.
+
+### Importar Datos
+1. Ve a **⚙️ Tools** → pestaña **📦 Data**
+2. Fai clic en **Import Data** y seleiciona un archivu JSON esportáu
+3. El sistema detectará y omitirá automáticamente los duplicaos
 
 ## Llicencia
 

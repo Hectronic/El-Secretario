@@ -11,9 +11,10 @@ El Secretario es una herramienta inteligente de transcripción y organización d
 - **Grabación e Importación de Audio**: Graba audio directamente en la aplicación o importa archivos existentes.
 - **Transcripción y Diarización**: Transcribe audio automáticamente e identifica diferentes hablantes (diarización) utilizando Whisper de OpenAI y pyannote.audio.
 - **Búsqueda Inteligente (RAG)**: Utiliza Generación Aumentada por Recuperación (RAG) para chatear con tus grabaciones y encontrar información específica.
-- **Cuadernos y Colecciones**: Organiza tus grabaciones en cuadernos y colecciones para una mejor gestión.
+- **Libretas y Colecciones**: Organiza tus grabaciones en libretas y colecciones. Accede a ellas directamente desde la barra lateral.
 - **Vista de Calendario**: Explora tus grabaciones por fecha.
-- **Procesamiento por Lotes**: Procesa múltiples grabaciones en segundo plano.
+- **Herramientas Unificadas**: Limpieza de almacenamiento, procesamiento por lotes y exportación/importación de datos en una sola pestaña.
+- **Tema Personalizable**: Soporte para temas Claro, Oscuro y del Sistema.
 
 ## Instalación
 
@@ -44,7 +45,7 @@ El Secretario es una herramienta inteligente de transcripción y organización d
 
 ## Configuración
 
-Para utilizar plenamente las funciones de El Secretario, deberás configurar los siguientes tokens de API en la configuración de la aplicación:
+Para utilizar plenamente las funciones de El Secretario, deberás configurar los tokens de API. Puedes hacerlo fácilmente a través del botón **🔧 Settings** en la pantalla de Bienvenida, o manualmente en la configuración de la aplicación.
 
 1.  **Token de Hugging Face**: Requerido para la diarización de hablantes (identificar quién está hablando).
     -   Crea un token en: [https://huggingface.co/settings/tokens](https://huggingface.co/settings/tokens)
@@ -63,6 +64,22 @@ Para utilizar plenamente las funciones de El Secretario, deberás configurar los
 2.  **Iniciar Grabación**: Haz clic en el icono del micrófono para comenzar a grabar.
 3.  **Importar Audio**: Usa el botón de importar para añadir archivos de audio existentes.
 4.  **Chat**: Abre una grabación o una colección para comenzar a chatear con tus datos.
+
+## Exportación/Importación de Datos
+
+El Secretario te permite exportar todos tus datos (grabaciones, transcripciones, libretas, sesiones de chat) a un archivo JSON e importarlos en otra instalación.
+
+### Exportar Datos
+1. Haz clic en **⚙️ Tools** desde la pantalla de Bienvenida
+2. Ve a la pestaña **📦 Data**
+3. Haz clic en **Export All Data** y elige una ubicación
+
+**Nota:** Los archivos de audio NO se exportan, solo las transcripciones y metadatos.
+
+### Importar Datos
+1. Ve a **⚙️ Tools** → pestaña **📦 Data**
+2. Haz clic en **Import Data** y selecciona un archivo JSON exportado
+3. El sistema detectará y omitirá automáticamente los duplicados
 
 ## Licencia
 

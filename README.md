@@ -13,9 +13,10 @@ Read this in [Español](README_ES.md) | [Asturianu](README_AST.md)
 - **Audio Recording & Import**: Record audio directly within the app or import existing files.
 - **Transcription & Diarization**: Automatically transcribe audio and identify different speakers (diarization) using OpenAI's Whisper and pyannote.audio.
 - **Intelligent Search (RAG)**: Use Retrieval-Augmented Generation (RAG) to chat with your recordings and find specific information.
-- **Notebooks & Collections**: Organize your recordings into notebooks and collections for better management.
+- **Notebooks & Collections**: Organize your recordings into notebooks and collections. Access them directly from the sidebar.
 - **Calendar View**: Browse your recordings by date.
-- **Batch Processing**: Process multiple recordings in the background.
+- **Unified Tools**: Storage cleanup, batch processing, and data export/import in one convenient tab.
+- **Customizable Theme**: Support for Light, Dark, and System themes.
 
 ## Installation
 
@@ -46,7 +47,7 @@ Read this in [Español](README_ES.md) | [Asturianu](README_AST.md)
 
 ## Configuration
 
-To fully utilize the features of El Secretario, you will need to configure the following API tokens in the application settings:
+To fully utilize the features of El Secretario, you will need to configure the API tokens. You can do this easily via the **🔧 Settings** button on the Welcome screen, or manually in the application settings.
 
 1.  **Hugging Face Token**: Required for speaker diarization (identifying who is speaking).
     -   Create a token at: [https://huggingface.co/settings/tokens](https://huggingface.co/settings/tokens)
@@ -65,6 +66,22 @@ To fully utilize the features of El Secretario, you will need to configure the f
 2.  **Start Recording**: Click the microphone icon to start recording.
 3.  **Import Audio**: Use the import button to add existing audio files.
 4.  **Chat**: Open a recording or a collection to start chatting with your data.
+
+## Data Export/Import
+
+El Secretario allows you to export all your data (recordings, transcriptions, notebooks, chat sessions) to a JSON file and import it back on another installation.
+
+### Exporting Data
+1. Click **⚙️ Tools** from the Welcome screen
+2. Go to the **📦 Data** tab
+3. Click **Export All Data** and choose a location
+
+**Note:** Audio files are NOT exported, only transcriptions and metadata.
+
+### Importing Data
+1. Go to **⚙️ Tools** → **📦 Data** tab
+2. Click **Import Data** and select an exported JSON file
+3. The system will automatically detect and skip duplicates
 
 ## License
 
