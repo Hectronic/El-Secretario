@@ -21,12 +21,13 @@ from PyQt6.QtWidgets import (QMainWindow, QWidget, QVBoxLayout,
                              QTabWidget, QSplitter, QApplication, QStyle, QLineEdit, QTabBar,
                              QCalendarWidget, QCheckBox, QFileDialog, QMenu)
 from PyQt6.QtCore import Qt, QSettings, QUrl
-from PyQt6.QtGui import QCursor, QAction, QIcon
+from PyQt6.QtGui import QAction, QIcon, QDesktopServices
 
 from src.database import DBManager
+from src.notebook_database import NotebookDBManager
 from src.audio import Recorder
 from src.worker import SearchThread
-from src.ui.dialogs import SettingsDialog
+from src.ui.dialogs import SettingsWidget, SpeakerDialog
 from src.ui.welcome_widget import WelcomeWidget
 from src.ui.recording_widget import RecordingWidget
 from src.ui.recording_in_progress_widget import RecordingInProgressWidget
@@ -34,7 +35,7 @@ from src.ui.search_results_widget import SearchResultsWidget
 from src.ui.chat_widget import ChatWidget
 from src.ui.collection_widget import CollectionWidget
 from src.ui.calendar_widget import CalendarWidget
-from src.ui.styles import LIST_WIDGET_STYLE, NEW_CHAT_BUTTON_STYLE
+from src.ui.styles import LIST_WIDGET_STYLE, NEW_CHAT_BUTTON_STYLE, apply_theme
 from src.ui.components import RecordingListItemWidget
 
 from src.ui.batch_process_widget import BatchProcessWidget
@@ -42,6 +43,7 @@ from src.notebook_database import NotebookDBManager
 from src.ui.notebooks_list_widget import NotebooksListWidget
 from src.ui.notebook_widget import NotebookWidget
 from src.ui.maintenance_widget import MaintenanceWidget
+from src.ui.tools_widget import ToolsWidget
 
 class MainWindow(QMainWindow):
     def __init__(self):
@@ -60,6 +62,8 @@ class MainWindow(QMainWindow):
         
         self.search_thread = None
         
+        apply_theme()
+        
         self.init_ui()
         self.load_history()
         self.refresh_tag_filter()
@@ -67,6 +71,7 @@ class MainWindow(QMainWindow):
         self.refresh_tag_filter()
         self.load_chat_sessions()
         self.load_collections()
+        self.load_notebooks()
         
         # Show Welcome Tab
         self.show_welcome_screen()
@@ -111,15 +116,15 @@ class MainWindow(QMainWindow):
         
         # History List
         self.history_list = QListWidget()
-        self.history_list.setStyleSheet(LIST_WIDGET_STYLE)
+        # self.history_list.setStyleSheet(LIST_WIDGET_STYLE) # Use Global Theme
         self.history_list.itemClicked.connect(self.on_history_item_clicked)
         left_layout.addWidget(self.history_list)
 
 
-        # Settings Button
-        self.settings_btn = QPushButton("Settings")
-        self.settings_btn.clicked.connect(self.open_settings)
-        left_layout.addWidget(self.settings_btn)
+        # Settings Button removed as per request (now in Welcome screen)
+        # self.settings_btn = QPushButton("Settings")
+        # self.settings_btn.clicked.connect(self.open_settings_tab)
+        # left_layout.addWidget(self.settings_btn)
         
         # Calendar Widget
         self.calendar = QCalendarWidget()
@@ -151,45 +156,68 @@ class MainWindow(QMainWindow):
         self.central_tabs.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.central_tabs.customContextMenuRequested.connect(self.show_tab_context_menu)
         self.splitter.addWidget(self.central_tabs)
-        
-        # --- Right Panel: Chat History & Collections ---
+        # --- Right Panel: Chat History & Collections & Notebooks ---
         right_panel = QWidget()
         right_layout = QVBoxLayout(right_panel)
-        right_panel.setMinimumWidth(300) # Ensure it's at least this wide
-        right_layout.setContentsMargins(0, 0, 0, 0)
+        right_panel.setMinimumWidth(300)
+        right_layout.setContentsMargins(5, 5, 5, 5)
+        right_layout.setSpacing(10) # Small spacing between the 3 main blocks
         
-        # Chat History Section
-        chat_hist_group = QWidget()
-        chat_hist_layout = QVBoxLayout(chat_hist_group)
-        chat_hist_layout.setContentsMargins(0, 0, 0, 0)
-        
-        chat_hist_layout.addWidget(QLabel("<b>Chat History</b>"))
-        
-        self.new_chat_btn = QPushButton("New Chat")
-        self.new_chat_btn.clicked.connect(lambda: self.open_chat_tab(None))
-        self.new_chat_btn.setStyleSheet(NEW_CHAT_BUTTON_STYLE)
-        chat_hist_layout.addWidget(self.new_chat_btn)
-        
+        # Helper to create section
+        def create_section(title, list_widget, button=None):
+            container = QWidget()
+            layout = QVBoxLayout(container)
+            layout.setContentsMargins(0, 0, 0, 0)
+            layout.setSpacing(0)
+            
+            lbl = QLabel(title)
+            lbl.setStyleSheet("font-weight: bold; font-size: 16px; color: #2196F3; margin: 0; padding: 5px 0px 5px 0px;")
+            layout.addWidget(lbl)
+            
+            list_widget.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+            # list_widget.setStyleSheet(LIST_WIDGET_STYLE + "QListWidget { margin: 0; padding: 0; border: 1px solid #444; }")
+            list_widget.setProperty("class", "embedded-list")
+            list_widget.style().unpolish(list_widget)
+            list_widget.style().polish(list_widget)
+            layout.addWidget(list_widget)
+            
+            if button:
+                # Remove custom styling to match left sidebar buttons
+                # button.setStyleSheet("margin-top: 0px; border-top-left-radius: 0; border-top-right-radius: 0;")
+                layout.addWidget(button)
+            
+            return container
+
+        # 1. Chat History Section
         self.sessions_list = QListWidget()
-        self.sessions_list.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff) # No scrollbar
-        self.sessions_list.setStyleSheet(LIST_WIDGET_STYLE)
         self.sessions_list.itemClicked.connect(self.on_chat_session_clicked)
-        chat_hist_layout.addWidget(self.sessions_list)
         
         self.delete_chat_session_btn = QPushButton("Delete Chat")
-        self.delete_chat_session_btn.setStyleSheet("color: #f44336;")
+        self.delete_chat_session_btn.setStyleSheet("color: #f44336;") # Keep red color for delete
         self.delete_chat_session_btn.clicked.connect(self.delete_selected_chat_session)
-        chat_hist_layout.addWidget(self.delete_chat_session_btn)
         
-        right_layout.addWidget(chat_hist_group)
+        chat_section = create_section("💬 Chat History", self.sessions_list, self.delete_chat_session_btn)
+        right_layout.addWidget(chat_section, stretch=1)
         
-        # Collections Section
-        right_layout.addWidget(QLabel("<b>Collections</b>"))
-        
+        # 2. Collections Section
         self.collections_list = QListWidget()
-        self.collections_list.setStyleSheet(LIST_WIDGET_STYLE)
         self.collections_list.itemClicked.connect(self.on_collection_clicked)
-        right_layout.addWidget(self.collections_list)
+        
+        self.open_collections_btn = QPushButton("Ver todas las colecciones")
+        self.open_collections_btn.clicked.connect(self.open_collections_list)
+        
+        col_section = create_section("🏷️ Collections", self.collections_list, self.open_collections_btn)
+        right_layout.addWidget(col_section, stretch=1)
+        
+        # 3. Libretas (Notebooks) Section
+        self.notebooks_list = QListWidget()
+        self.notebooks_list.itemClicked.connect(self.on_notebook_clicked)
+        
+        self.open_notebooks_btn = QPushButton("Ver todas las libretas")
+        self.open_notebooks_btn.clicked.connect(self.open_notebooks_list)
+        
+        nb_section = create_section("📓 Libretas", self.notebooks_list, self.open_notebooks_btn)
+        right_layout.addWidget(nb_section, stretch=1)
         
         self.splitter.addWidget(right_panel)
 
@@ -220,10 +248,10 @@ class MainWindow(QMainWindow):
         self.welcome_widget.search_triggered.connect(self.perform_welcome_search)
         self.welcome_widget.result_clicked.connect(self.open_recording_tab)
         self.welcome_widget.new_chat_requested.connect(lambda: self.open_chat_tab(None))
-        self.welcome_widget.batch_process_requested.connect(self.open_batch_process_tab)
         self.welcome_widget.import_audio_requested.connect(self.import_audio_file)
         self.welcome_widget.notebooks_requested.connect(self.open_notebooks_list)
-        self.welcome_widget.maintenance_requested.connect(self.open_maintenance_tab)
+        self.welcome_widget.tools_requested.connect(lambda: self.open_tools_tab())
+        self.welcome_widget.settings_requested.connect(self.open_settings_tab)
         
         # Add as first tab, not closable
         self.central_tabs.addTab(self.welcome_widget, "Welcome")
@@ -334,20 +362,21 @@ class MainWindow(QMainWindow):
         index = self.central_tabs.addTab(chat_widget, title)
         self.central_tabs.setCurrentIndex(index)
 
-    def open_batch_process_tab(self):
+    def open_tools_tab(self, tab_index=0):
+        """Open the unified Tools tab, optionally switching to a specific sub-tab."""
         # Check if already open
         for i in range(self.central_tabs.count()):
             widget = self.central_tabs.widget(i)
-            if isinstance(widget, BatchProcessWidget):
+            if isinstance(widget, ToolsWidget):
                 self.central_tabs.setCurrentIndex(i)
+                widget.show_tab(tab_index)
                 return
 
-        batch_widget = BatchProcessWidget()
-        # Connect finished signal if we want to do something, e.g. reload history
-        # batch_widget.finished.connect(self.load_history) 
+        tools_widget = ToolsWidget(self.db, self.notebook_db)
         
-        index = self.central_tabs.addTab(batch_widget, "Batch Processing")
+        index = self.central_tabs.addTab(tools_widget, "⚙️ Tools")
         self.central_tabs.setCurrentIndex(index)
+        tools_widget.show_tab(tab_index)
 
     def close_tab(self, index):
         widget = self.central_tabs.widget(index)
@@ -469,6 +498,21 @@ class MainWindow(QMainWindow):
         self.collections_list.clear()
         tags = self.db.get_all_tags()
         self.collections_list.addItems(tags)
+
+    def load_notebooks(self):
+        """Load notebooks into the sidebar list."""
+        self.notebooks_list.clear()
+        notebooks = self.notebook_db.get_notebooks()
+        for nb in notebooks[:5]:  # Show only first 5 in sidebar
+            item = QListWidgetItem(f"📓 {nb['name']}")
+            item.setData(Qt.ItemDataRole.UserRole, nb['id'])
+            self.notebooks_list.addItem(item)
+
+    def on_notebook_clicked(self, item):
+        """Handle notebook click in sidebar."""
+        notebook_id = item.data(Qt.ItemDataRole.UserRole)
+        notebook_name = item.text().replace("📓 ", "")
+        self.open_notebook(notebook_id, notebook_name)
 
     def on_collection_clicked(self, item):
         tag = item.text()
@@ -649,9 +693,18 @@ class MainWindow(QMainWindow):
                     widget.deleteLater()
                     break
 
-    def open_settings(self):
-        dialog = SettingsDialog(self)
-        dialog.exec()
+    def open_settings_tab(self):
+        """Open settings as a tab."""
+        # Check if already open
+        for i in range(self.central_tabs.count()):
+            widget = self.central_tabs.widget(i)
+            if isinstance(widget, SettingsWidget):
+                self.central_tabs.setCurrentIndex(i)
+                return
+
+        settings_widget = SettingsWidget()
+        index = self.central_tabs.addTab(settings_widget, "Settings")
+        self.central_tabs.setCurrentIndex(index)
 
     def import_audio_file(self, config):
         """Import an audio file with the given transcription configuration."""
@@ -689,6 +742,44 @@ class MainWindow(QMainWindow):
         except Exception as e:
             QMessageBox.critical(self, "Import Error", f"Failed to import audio: {e}")
 
+    def open_collections_list(self):
+        """Open a tab showing all collections."""
+        # Check if already open
+        for i in range(self.central_tabs.count()):
+            tab_text = self.central_tabs.tabText(i)
+            if tab_text == "Colecciones":
+                self.central_tabs.setCurrentIndex(i)
+                return
+        
+        # Create a simple widget listing all collections
+        from PyQt6.QtWidgets import QScrollArea
+        
+        collections_widget = QWidget()
+        layout = QVBoxLayout(collections_widget)
+        layout.setSpacing(10)
+        
+        title = QLabel("<h2>🏷️ Todas las Colecciones</h2>")
+        layout.addWidget(title)
+        
+        tags = self.db.get_all_tags()
+        
+        if not tags:
+            layout.addWidget(QLabel("No hay colecciones aún. Añade tags a tus grabaciones."))
+        else:
+            list_widget = QListWidget()
+            # list_widget.setStyleSheet(LIST_WIDGET_STYLE)
+            for tag in tags:
+                item = QListWidgetItem(f"🏷️ {tag}")
+                item.setData(Qt.ItemDataRole.UserRole, tag)
+                list_widget.addItem(item)
+            list_widget.itemClicked.connect(lambda item: self.open_collection_tab(item.data(Qt.ItemDataRole.UserRole)))
+            layout.addWidget(list_widget)
+        
+        layout.addStretch()
+        
+        index = self.central_tabs.addTab(collections_widget, "Colecciones")
+        self.central_tabs.setCurrentIndex(index)
+
     def open_notebooks_list(self):
         # Check if already open
         for i in range(self.central_tabs.count()):
@@ -725,17 +816,5 @@ class MainWindow(QMainWindow):
         
         self.open_chat_tab(initial_contexts=[{"type": "notebook", "value": notebook_id, "label": notebook_name}])
 
-    def open_maintenance_tab(self):
-        # Check if already open
-        for i in range(self.central_tabs.count()):
-            widget = self.central_tabs.widget(i)
-            if isinstance(widget, MaintenanceWidget):
-                self.central_tabs.setCurrentIndex(i)
-                return
-
-        maint_widget = MaintenanceWidget(self.db)
-        maint_widget.batch_processing_requested.connect(self.open_batch_process_tab)
-        
-        index = self.central_tabs.addTab(maint_widget, "Maintenance")
-        self.central_tabs.setCurrentIndex(index)
+    # open_maintenance_tab removed - now handled by open_tools_tab
 

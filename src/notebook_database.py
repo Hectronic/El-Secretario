@@ -155,3 +155,90 @@ class NotebookDBManager:
             cursor = conn.cursor()
             cursor.execute('UPDATE entries SET title = ? WHERE id = ?', (new_title, entry_id))
             conn.commit()
+
+    # =========================================================================
+    # EXPORT/IMPORT METHODS
+    # =========================================================================
+
+    def get_all_notebooks_with_entries(self) -> List[Dict[str, Any]]:
+        """Get all notebooks with their entries for export."""
+        notebooks = self.get_notebooks()
+        for notebook in notebooks:
+            notebook['entries'] = self.get_entries(notebook['id'])
+        return notebooks
+
+    def notebook_exists(self, name: str, created_at: str) -> bool:
+        """
+        Check if a notebook already exists based on name and timestamp.
+        
+        Args:
+            name: Notebook name.
+            created_at: Notebook creation timestamp.
+            
+        Returns:
+            True if a matching notebook exists.
+        """
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute('SELECT id FROM notebooks WHERE name = ? AND created_at = ?', (name, created_at))
+            return cursor.fetchone() is not None
+
+    def import_notebook(self, notebook: Dict[str, Any]) -> Optional[int]:
+        """
+        Import a notebook with its entries from export data.
+        
+        Args:
+            notebook: Notebook dictionary with entries list.
+            
+        Returns:
+            The new notebook ID, or None if import failed.
+        """
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            
+            # Insert notebook with original timestamp
+            cursor.execute('''
+                INSERT INTO notebooks (name, description, created_at)
+                VALUES (?, ?, ?)
+            ''', (
+                notebook.get('name', ''),
+                notebook.get('description', ''),
+                notebook.get('created_at')
+            ))
+            notebook_id = cursor.lastrowid
+            
+            # Import entries
+            entries = notebook.get('entries', [])
+            for entry in entries:
+                self._import_entry(cursor, notebook_id, entry)
+            
+            conn.commit()
+            return notebook_id
+
+    def _import_entry(self, cursor, notebook_id: int, entry: Dict[str, Any]) -> int:
+        """
+        Import a single entry to a notebook.
+        
+        Args:
+            cursor: Database cursor.
+            notebook_id: Target notebook ID.
+            entry: Entry dictionary with all fields.
+            
+        Returns:
+            The new entry ID.
+        """
+        cursor.execute('''
+            INSERT INTO entries (
+                notebook_id, type, content, title, file_path, duration, created_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?)
+        ''', (
+            notebook_id,
+            entry.get('type', 'text'),
+            entry.get('content', ''),
+            entry.get('title', ''),
+            entry.get('file_path'),  # Will be empty for text entries
+            entry.get('duration'),   # Will be empty for text entries
+            entry.get('created_at')
+        ))
+        return cursor.lastrowid
+
