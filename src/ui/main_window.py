@@ -319,8 +319,18 @@ class MainWindow(QMainWindow):
         
         try:
             filename = os.path.basename(file_path)
+            # Use title from config, fallback to filename
+            title = config.get("title") or filename
             # Create DB entry to get an ID
-            record_id = self.db.save(filename, "", 0.0, title=filename)
+            record_id = self.db.save(filename, "", 0.0, title=title)
+            
+            # Update tags if provided
+            tags = config.get("tags", "")
+            if tags:
+                self.db.update_tags(record_id, tags)
+            
+            # Refresh sidebar to show new recording with title
+            self.load_history()
             
             # Open standard recording tab with config
             rec_widget = self.open_recording_tab(record_id, config)
@@ -331,6 +341,8 @@ class MainWindow(QMainWindow):
                 
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Failed to save recording: {e}")
+
+
 
     def open_chat_tab(self, session_id=None, initial_contexts=None):
         if not self.rag:
