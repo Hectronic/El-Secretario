@@ -8,6 +8,7 @@ torch==2.5.1
 torchaudio==2.5.1
 huggingface_hub==0.22.2
 google-generativeai>=0.3.0
+ollama
 chromadb
 sentence-transformers
 markdown

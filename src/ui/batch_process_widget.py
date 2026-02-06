@@ -201,14 +201,20 @@ class BatchProcessWidget(QWidget):
         
         settings = QSettings("Hectronic", "Secretario")
         hf_token = settings.value("hf_token", "")
+        force_cpu = settings.value("force_cpu", False, type=bool)
+        compute_type = settings.value("compute_type", "int8")
+        if compute_type == "auto":
+            compute_type = None
         
         # Use large-v3 and enable diarization as requested
         self.thread = TranscriberThread(
             file_path, 
             model_size="large-v3", 
+            compute_type=compute_type,
             hf_token=hf_token, 
             enable_diarization=True,
-            total_duration=record['duration']
+            total_duration=record['duration'],
+            force_cpu=force_cpu
         )
         
         self.thread.finished.connect(self.on_file_finished)

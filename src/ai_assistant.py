@@ -12,28 +12,31 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-import google.generativeai as genai
-from PyQt6.QtCore import QThread, pyqtSignal
-from typing import Optional
+from PyQt6.QtCore import QThread, pyqtSignal, QSettings
+from src.ai_provider import get_ai_provider
 
 class AIAssistant(QThread):
     finished = pyqtSignal(str, str) # type (summary/clean), result
     error = pyqtSignal(str)
 
     def __init__(self, api_key: str, task_type: str, text: str, model_name: str = "gemini-3-flash-preview"):
+        """Initialize the AI Assistant.
+        
+        Note: api_key parameter is kept for backward compatibility but the actual
+        provider configuration is read from QSettings.
+        """
         super().__init__()
-        self.api_key = api_key
         self.task_type = task_type # "summary", "clean", or "weekly_summary"
         self.text = text
-        self.model_name = model_name
+        # api_key and model_name are kept for backward compatibility
+        # but the actual configuration comes from QSettings
+        self._legacy_api_key = api_key
+        self._legacy_model_name = model_name
 
     def run(self) -> None:
         try:
-            if not self.api_key:
-                raise ValueError("Gemini API Key is missing.")
-
-            genai.configure(api_key=self.api_key)
-            model = genai.GenerativeModel(self.model_name)
+            settings = QSettings("Hectronic", "Secretario")
+            provider = get_ai_provider(settings)
 
             if self.task_type == "summary":
                 prompt = f"""
@@ -66,8 +69,7 @@ class AIAssistant(QThread):
             else:
                 raise ValueError("Invalid task type.")
 
-            response = model.generate_content(prompt)
-            result = response.text
+            result = provider.generate_content(prompt)
             
             self.finished.emit(self.task_type, result)
 

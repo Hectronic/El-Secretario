@@ -41,17 +41,85 @@ class SettingsWidget(QWidget):
         hf_val = self.settings.value("hf_token", "")
         self.hf_container, self.token_input = self.create_token_field(hf_val, "hf_...")
         
-        # Gemini Key
-        gemini_val = self.settings.value("gemini_key", "")
-        self.gemini_container, self.gemini_key_input = self.create_token_field(gemini_val, "AIza...")
-        
         lbl_hf = QLabel("Hugging Face Token:")
         lbl_hf.setStyleSheet("font-weight: bold;")
+        form_layout.addRow(lbl_hf, self.hf_container)
+        
+        # --- AI Provider Section ---
+        ai_section_label = QLabel("🤖 AI Provider")
+        ai_section_label.setStyleSheet("font-size: 18px; font-weight: bold; color: #607D8B; margin-top: 20px;")
+        form_layout.addRow(ai_section_label)
+        
+        # AI Provider Selector
+        lbl_provider = QLabel("AI Provider:")
+        lbl_provider.setStyleSheet("font-weight: bold;")
+        self.provider_combo = QComboBox()
+        self.provider_combo.addItems(["Google Gemini", "Ollama (Local)"])
+        current_provider = self.settings.value("ai_provider", "gemini")
+        self.provider_combo.setCurrentIndex(0 if current_provider == "gemini" else 1)
+        self.provider_combo.currentIndexChanged.connect(self.on_provider_changed)
+        form_layout.addRow(lbl_provider, self.provider_combo)
+        
+        # Gemini Settings Container
+        self.gemini_widget = QWidget()
+        gemini_layout = QFormLayout(self.gemini_widget)
+        gemini_layout.setContentsMargins(0, 0, 0, 0)
+        
+        gemini_val = self.settings.value("gemini_key", "")
+        self.gemini_container, self.gemini_key_input = self.create_token_field(gemini_val, "AIza...")
         lbl_gemini = QLabel("Gemini API Key:")
         lbl_gemini.setStyleSheet("font-weight: bold;")
+        gemini_layout.addRow(lbl_gemini, self.gemini_container)
         
-        form_layout.addRow(lbl_hf, self.hf_container)
-        form_layout.addRow(lbl_gemini, self.gemini_container)
+        # Gemini Model Selector
+        lbl_gemini_model = QLabel("Gemini Model:")
+        lbl_gemini_model.setStyleSheet("font-weight: bold;")
+        self.gemini_model_combo = QComboBox()
+        self.gemini_model_combo.addItems(["gemini-3-flash-preview", "gemini-3-preview"])
+        self.gemini_model_combo.setCurrentText(self.settings.value("gemini_model", "gemini-3-flash-preview"))
+        gemini_layout.addRow(lbl_gemini_model, self.gemini_model_combo)
+        
+        form_layout.addRow(self.gemini_widget)
+        
+        # Ollama Settings Container
+        self.ollama_widget = QWidget()
+        ollama_layout = QFormLayout(self.ollama_widget)
+        ollama_layout.setContentsMargins(0, 0, 0, 0)
+        
+        lbl_ollama_host = QLabel("Ollama Server:")
+        lbl_ollama_host.setStyleSheet("font-weight: bold;")
+        self.ollama_host_input = QLineEdit()
+        self.ollama_host_input.setPlaceholderText("http://localhost:11434")
+        self.ollama_host_input.setText(self.settings.value("ollama_host", "http://localhost:11434"))
+        ollama_layout.addRow(lbl_ollama_host, self.ollama_host_input)
+        
+        # Ollama Model Selector with Refresh
+        lbl_ollama_model = QLabel("Ollama Model:")
+        lbl_ollama_model.setStyleSheet("font-weight: bold;")
+        ollama_model_container = QWidget()
+        ollama_model_layout = QHBoxLayout(ollama_model_container)
+        ollama_model_layout.setContentsMargins(0, 0, 0, 0)
+        
+        self.ollama_model_combo = QComboBox()
+        self.ollama_model_combo.setMinimumWidth(200)
+        saved_model = self.settings.value("ollama_model", "")
+        if saved_model:
+            self.ollama_model_combo.addItem(saved_model)
+        ollama_model_layout.addWidget(self.ollama_model_combo)
+        
+        self.refresh_ollama_btn = QPushButton("🔄 Refresh")
+        self.refresh_ollama_btn.setFixedWidth(80)
+        self.refresh_ollama_btn.clicked.connect(self.refresh_ollama_models)
+        ollama_model_layout.addWidget(self.refresh_ollama_btn)
+        
+        ollama_layout.addRow(lbl_ollama_model, ollama_model_container)
+        
+        # Ollama Status
+        self.ollama_status_label = QLabel("")
+        self.ollama_status_label.setStyleSheet("color: gray; font-size: 12px;")
+        ollama_layout.addRow("", self.ollama_status_label)
+        
+        form_layout.addRow(self.ollama_widget)
         
         # Theme Setting
         lbl_theme = QLabel("Interface Theme:")
@@ -61,10 +129,33 @@ class SettingsWidget(QWidget):
         self.theme_combo.setCurrentText(self.settings.value("app_theme", "System"))
         form_layout.addRow(lbl_theme, self.theme_combo)
         
+        # Force CPU Setting
+        lbl_force_cpu = QLabel("Force CPU:")
+        lbl_force_cpu.setStyleSheet("font-weight: bold;")
+        self.force_cpu_check = QCheckBox("Disable GPU acceleration")
+        self.force_cpu_check.setToolTip("Force transcription and diarization to use CPU even if GPU is available")
+        self.force_cpu_check.setChecked(self.settings.value("force_cpu", False, type=bool))
+        form_layout.addRow(lbl_force_cpu, self.force_cpu_check)
+        
+        # Compute Type Setting
+        lbl_compute = QLabel("Compute Type:")
+        lbl_compute.setStyleSheet("font-weight: bold;")
+        self.compute_combo = QComboBox()
+        self.compute_combo.addItems(["auto", "int8", "int8_float16", "float16", "float32"])
+        self.compute_combo.setCurrentText(self.settings.value("compute_type", "int8"))
+        self.compute_combo.setToolTip(
+            "int8: Best for GPUs with limited VRAM (6-8GB), fastest\n"
+            "int8_float16: Hybrid precision, good balance\n"
+            "float16: Better quality, needs more VRAM\n"
+            "float32: Highest quality, needs most VRAM\n"
+            "auto: Let the app decide based on your GPU"
+        )
+        form_layout.addRow(lbl_compute, self.compute_combo)
+        
         layout.addLayout(form_layout)
         
         info_label = QLabel("HF Token: Required for Speaker Diarization.\n"
-                            "Gemini Key: Required for Summarization and Cleanup (Google AI).")
+                            "AI Provider: Choose between Google Gemini (cloud) or Ollama (local LLM).")
         info_label.setWordWrap(True)
         info_label.setStyleSheet("color: gray; font-size: 13px; margin-top: 10px;")
         layout.addWidget(info_label)
@@ -92,6 +183,54 @@ class SettingsWidget(QWidget):
         layout.addWidget(save_btn)
         
         layout.addStretch()
+        
+        # Initialize visibility
+        self.on_provider_changed()
+
+    def on_provider_changed(self):
+        """Show/hide provider-specific settings based on selection."""
+        is_gemini = self.provider_combo.currentIndex() == 0
+        self.gemini_widget.setVisible(is_gemini)
+        self.ollama_widget.setVisible(not is_gemini)
+        
+        # Auto-refresh Ollama models when switching to Ollama
+        if not is_gemini and self.ollama_model_combo.count() <= 1:
+            QTimer.singleShot(100, self.refresh_ollama_models)
+
+    def refresh_ollama_models(self):
+        """Fetch available models from Ollama server."""
+        self.ollama_status_label.setText("Fetching models...")
+        self.ollama_status_label.setStyleSheet("color: gray; font-size: 12px;")
+        QApplication.processEvents()
+        
+        try:
+            from src.ai_provider import get_available_ollama_models, is_ollama_available
+            
+            host = self.ollama_host_input.text().strip() or "http://localhost:11434"
+            
+            if not is_ollama_available(host):
+                self.ollama_status_label.setText("⚠️ Ollama not running. Start it with: ollama serve")
+                self.ollama_status_label.setStyleSheet("color: orange; font-size: 12px;")
+                return
+            
+            models = get_available_ollama_models(host)
+            
+            current_model = self.ollama_model_combo.currentText()
+            self.ollama_model_combo.clear()
+            
+            if models:
+                self.ollama_model_combo.addItems(models)
+                if current_model in models:
+                    self.ollama_model_combo.setCurrentText(current_model)
+                self.ollama_status_label.setText(f"✅ Found {len(models)} models")
+                self.ollama_status_label.setStyleSheet("color: green; font-size: 12px;")
+            else:
+                self.ollama_status_label.setText("⚠️ No models found. Install one with: ollama pull llama3")
+                self.ollama_status_label.setStyleSheet("color: orange; font-size: 12px;")
+                
+        except Exception as e:
+            self.ollama_status_label.setText(f"❌ Error: {str(e)[:50]}")
+            self.ollama_status_label.setStyleSheet("color: red; font-size: 12px;")
 
     def create_token_field(self, current_value, placeholder):
         """Creates a hidden input field with Show/Hide and Copy buttons."""
@@ -142,10 +281,24 @@ class SettingsWidget(QWidget):
 
     def save_settings(self):
         self.settings.setValue("hf_token", self.token_input.text().strip())
+        
+        # Always save Gemini key (even when using Ollama, to preserve it)
         self.settings.setValue("gemini_key", self.gemini_key_input.text().strip())
+        self.settings.setValue("gemini_model", self.gemini_model_combo.currentText())
+        
+        # Save AI provider selection
+        provider = "gemini" if self.provider_combo.currentIndex() == 0 else "ollama"
+        self.settings.setValue("ai_provider", provider)
+        
+        # Save Ollama settings
+        self.settings.setValue("ollama_host", self.ollama_host_input.text().strip() or "http://localhost:11434")
+        if self.ollama_model_combo.currentText():
+            self.settings.setValue("ollama_model", self.ollama_model_combo.currentText())
         
         selected_theme = self.theme_combo.currentText()
         self.settings.setValue("app_theme", selected_theme)
+        self.settings.setValue("force_cpu", self.force_cpu_check.isChecked())
+        self.settings.setValue("compute_type", self.compute_combo.currentText())
         apply_theme(selected_theme)
         
         self.status_label.setText("✅ Settings saved successfully!")

@@ -333,6 +333,11 @@ class RecordingWidget(QWidget):
         settings = QSettings("Hectronic", "Secretario")
         hf_token = settings.value("hf_token", "")
         enable_diarization = self.diarization_check.isChecked()
+        force_cpu = settings.value("force_cpu", False, type=bool)
+        compute_type = settings.value("compute_type", "int8")
+        # If "auto", pass None to let TranscriberThread auto-detect
+        if compute_type == "auto":
+            compute_type = None
         
         # Get duration for progress calculation
         duration = 0
@@ -341,7 +346,7 @@ class RecordingWidget(QWidget):
             duration = len(f) / f.samplerate
         except: pass
         
-        self.transcriber_thread = TranscriberThread(audio_path, model_size=model_size, language=language_code, hf_token=hf_token, enable_diarization=enable_diarization, total_duration=duration)
+        self.transcriber_thread = TranscriberThread(audio_path, model_size=model_size, compute_type=compute_type, language=language_code, hf_token=hf_token, enable_diarization=enable_diarization, total_duration=duration, force_cpu=force_cpu)
         self.transcriber_thread.finished.connect(self.on_transcription_finished)
         self.transcriber_thread.progress.connect(self.progress_bar.setValue)
         self.transcriber_thread.status_update.connect(self.status_label.setText)
@@ -428,13 +433,17 @@ class RecordingWidget(QWidget):
         if not text: return
         
         settings = QSettings("Hectronic", "Secretario")
-        api_key = settings.value("gemini_key", "")
-        if not api_key:
-            QMessageBox.warning(self, "Error", "API Key missing.")
+        
+        # Validate AI provider configuration
+        from src.ai_provider import validate_ai_provider_config
+        is_valid, error_msg = validate_ai_provider_config(settings)
+        if not is_valid:
+            QMessageBox.warning(self, "Error", error_msg)
             return
             
         self.status_label.setText(f"Running {task_type}...")
-        self.ai_thread = AIAssistant(api_key, task_type, text)
+        # api_key parameter kept for backward compatibility
+        self.ai_thread = AIAssistant("", task_type, text)
         self.ai_thread.finished.connect(self.on_ai_finished)
         self.ai_thread.error.connect(self.on_ai_error)
         self.ai_thread.start()

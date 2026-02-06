@@ -403,17 +403,19 @@ class CalendarWidget(QWidget):
         self.progress.setWindowModality(Qt.WindowModality.WindowModal)
         self.progress.show()
 
-        # Retrieve API Key from Settings
+        # Validate AI provider configuration
         settings = QSettings("Hectronic", "Secretario")
-        api_key = settings.value("gemini_key", "")
+        from src.ai_provider import validate_ai_provider_config
+        is_valid, error_msg = validate_ai_provider_config(settings)
         
-        if not api_key:
+        if not is_valid:
             self.progress.close()
-            QMessageBox.critical(self, "Error", "Gemini API Key not found. Please set it in the Settings dialog.")
+            QMessageBox.critical(self, "Error", error_msg)
             return
 
         self.pending_summary_key = self.get_summary_key()
-        self.worker = AIAssistant(api_key, "weekly_summary", full_text)
+        # api_key parameter kept for backward compatibility
+        self.worker = AIAssistant("", "weekly_summary", full_text)
         self.worker.finished.connect(self.on_summary_finished)
         self.worker.error.connect(self.on_summary_error)
         self.worker.start()

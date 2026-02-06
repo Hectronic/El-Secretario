@@ -17,7 +17,7 @@ import shutil
 from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QPushButton, 
                              QListWidget, QListWidgetItem, QInputDialog, QMessageBox, 
                              QLabel, QTextEdit, QDialog, QDialogButtonBox, QProgressBar)
-from PyQt6.QtCore import Qt, pyqtSignal, QTimer
+from PyQt6.QtCore import Qt, pyqtSignal, QTimer, QSettings
 from src.ui.styles import LIST_WIDGET_STYLE
 from src.worker import TranscriberThread
 
@@ -290,9 +290,14 @@ class NotebookWidget(QWidget):
             self.rec_status.setText(f"Recording: {mins:02d}:{secs:02d}")
 
     def start_transcription(self, entry_id, file_path):
-        # Use existing worker logic
-        # Fix arguments: model_size="base", device="cpu", compute_type="int8"
-        self.transcriber_thread = TranscriberThread(file_path, model_size="base", device="cpu", compute_type="int8")
+        # Use existing worker logic with auto GPU detection
+        settings = QSettings("Hectronic", "Secretario")
+        force_cpu = settings.value("force_cpu", False, type=bool)
+        compute_type = settings.value("compute_type", "int8")
+        if compute_type == "auto":
+            compute_type = None
+        
+        self.transcriber_thread = TranscriberThread(file_path, model_size="base", compute_type=compute_type, force_cpu=force_cpu)
         self.transcriber_thread.finished.connect(lambda res: self.on_transcription_finished(entry_id, res))
         self.transcriber_thread.error.connect(lambda err: self.on_transcription_error(entry_id, err))
         self.transcriber_thread.start()

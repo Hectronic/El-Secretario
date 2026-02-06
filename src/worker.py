@@ -15,7 +15,6 @@
 from PyQt6.QtCore import QThread, pyqtSignal
 from faster_whisper import WhisperModel
 import os
-import google.generativeai as genai
 import torch
 import gc
 try:
@@ -24,18 +23,56 @@ try:
 except ImportError:
     PYANNOTE_AVAILABLE = False
 
+
+def get_optimal_device(force_cpu: bool = False, model_size: str = "base"):
+    """
+    Determine optimal device and compute type for transcription.
+    
+    Uses int8 quantization on GPU for better memory efficiency (especially
+    important for GPUs with limited VRAM like RTX 3060 with 6GB).
+    
+    Returns:
+        tuple: (device, compute_type) - e.g., ("cuda", "int8") or ("cpu", "int8")
+    """
+    if not force_cpu and torch.cuda.is_available():
+        # Get available GPU memory
+        try:
+            gpu_mem_gb = torch.cuda.get_device_properties(0).total_memory / (1024**3)
+            # For large models on GPUs with <= 8GB, use int8 for memory efficiency
+            # int8 is generally recommended for inference anyway (faster + less memory)
+            if model_size in ("large-v3", "large", "medium") and gpu_mem_gb <= 8:
+                return ("cuda", "int8")
+            # For smaller models or larger GPUs, float16 is fine
+            if gpu_mem_gb > 8:
+                return ("cuda", "float16")
+        except Exception:
+            pass
+        # Default: use int8 for safety on most consumer GPUs
+        return ("cuda", "int8")
+    return ("cpu", "int8")
+
+
 class TranscriberThread(QThread):
     finished = pyqtSignal(dict) # Changed to emit dict with text and stats
     progress = pyqtSignal(int)
     status_update = pyqtSignal(str)
     error = pyqtSignal(str)
 
-    def __init__(self, audio_path, model_size="base", device="cpu", compute_type="int8", language=None, hf_token=None, enable_diarization=False, total_duration=0):
+    def __init__(self, audio_path, model_size="base", device=None, compute_type=None, language=None, hf_token=None, enable_diarization=False, total_duration=0, force_cpu=False):
         super().__init__()
         self.audio_path = audio_path
         self.model_size = model_size
-        self.device = device
-        self.compute_type = compute_type
+        self.force_cpu = force_cpu
+        
+        # Auto-detect optimal device if not explicitly provided
+        if device is None or compute_type is None:
+            auto_device, auto_compute = get_optimal_device(force_cpu, model_size)
+            self.device = device if device else auto_device
+            self.compute_type = compute_type if compute_type else auto_compute
+        else:
+            self.device = device
+            self.compute_type = compute_type
+            
         self.language = language
         self.hf_token = hf_token
         self.enable_diarization = enable_diarization
@@ -78,7 +115,10 @@ class TranscriberThread(QThread):
                 try:
                     pipeline = Pipeline.from_pretrained("pyannote/speaker-diarization-3.1", use_auth_token=self.hf_token)
                     if pipeline:
-                        # Move to device if possible, but pyannote defaults to CPU if no GPU
+                        # Move pipeline to GPU if CUDA available and not forced to CPU
+                        if torch.cuda.is_available() and not self.force_cpu:
+                            pipeline = pipeline.to(torch.device("cuda"))
+                            logging.info("Pyannote pipeline moved to GPU.")
                         diarization = pipeline(self.audio_path)
                         logging.info("Diarization completed successfully.")
                 except Exception as e:
@@ -173,44 +213,29 @@ class ChatThread(QThread):
     error = pyqtSignal(str)
 
     def __init__(self, api_key, query, context_text, history=None, model_name="gemini-3-flash-preview"):
+        """Initialize the Chat Thread.
+        
+        Note: api_key parameter is kept for backward compatibility but the actual
+        provider configuration is read from QSettings.
+        """
         super().__init__()
-        self.api_key = api_key
         self.query = query
         self.context_text = context_text
         self.history = history or []
-        self.model_name = model_name
+        # api_key and model_name kept for backward compatibility
+        self._legacy_api_key = api_key
+        self._legacy_model_name = model_name
 
     def run(self):
         try:
-            if not self.api_key:
-                raise ValueError("Gemini API Key is missing.")
-
-            genai.configure(api_key=self.api_key)
-            model = genai.GenerativeModel(self.model_name)
-
-            # Construct prompt with context and history
-            history_str = ""
-            for msg in self.history:
-                role = "User" if msg['role'] == 'user' else "Assistant"
-                history_str += f"{role}: {msg['content']}\n"
-
-            prompt = f"""
-            You are a helpful assistant that answers questions based on the user's notes and transcriptions.
-            Use the provided context to answer the question. If the answer is not in the context, say you don't know based on the notes, but try to be as helpful as possible.
+            from PyQt6.QtCore import QSettings
+            from src.ai_provider import get_ai_provider
             
-            Context:
-            {self.context_text}
-            
-            Chat History:
-            {history_str}
-            
-            User Question: {self.query}
-            
-            Assistant:
-            """
+            settings = QSettings("Hectronic", "Secretario")
+            provider = get_ai_provider(settings)
 
-            response = model.generate_content(prompt)
-            self.finished.emit(response.text)
+            response = provider.chat(self.history, self.query, self.context_text)
+            self.finished.emit(response)
 
         except Exception as e:
             self.error.emit(str(e))
