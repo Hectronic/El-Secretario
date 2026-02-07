@@ -38,36 +38,40 @@ class AIAssistant(QThread):
             settings = QSettings("Hectronic", "Secretario")
             provider = get_ai_provider(settings)
 
-            if self.task_type == "summary":
-                prompt = f"""
-                Please provide a concise and structured summary of the following transcription.
-                Highlight key points, decisions made, and action items if any.
-                
-                Transcription:
-                {self.text}
-                """
-            elif self.task_type == "clean":
-                prompt = f"""
-                Please clean up the following transcription.
-                - Fix grammatical errors and punctuation.
-                - Remove filler words (uh, um, like).
-                - Improve readability while maintaining the original meaning and tone.
-                - Do NOT summarize, keep the full content.
-                
-                Transcription:
-                {self.text}
-                """
-            elif self.task_type == "weekly_summary":
-                prompt = f"""
-                Please provide a comprehensive summary of the following recordings from this week.
-                Group the summary by topic or day if relevant.
-                Highlight key achievements, decisions, and action items.
-                
-                Recordings Content:
-                {self.text}
-                """
-            else:
-                raise ValueError("Invalid task type.")
+            # Default prompts (used if not customized in settings)
+            default_prompts = {
+                "summary": """Please provide a concise and structured summary of the following transcription.
+Highlight key points, decisions made, and action items if any.
+
+Transcription:
+{text}""",
+                "clean": """Please clean up the following transcription.
+- Fix grammatical errors and punctuation.
+- Remove filler words (uh, um, like).
+- Improve readability while maintaining the original meaning and tone.
+- Do NOT summarize, keep the full content.
+
+Transcription:
+{text}""",
+                "weekly_summary": """Please provide a comprehensive summary of the following recordings from this week.
+Group the summary by topic or day if relevant.
+Highlight key achievements, decisions, and action items.
+
+Recordings Content:
+{text}"""
+            }
+
+            # Load prompt from settings or use default
+            prompt_template = settings.value(
+                f"prompt_{self.task_type}", 
+                default_prompts.get(self.task_type, "")
+            )
+            
+            if not prompt_template:
+                raise ValueError(f"Invalid task type: {self.task_type}")
+            
+            # Replace {text} placeholder with actual content
+            prompt = prompt_template.replace("{text}", self.text)
 
             result = provider.generate_content(prompt)
             

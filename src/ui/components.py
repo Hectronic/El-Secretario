@@ -123,9 +123,15 @@ class RecordingListItemWidget(QWidget):
     def init_ui(self):
         layout = QHBoxLayout(self)
         layout.setContentsMargins(5, 5, 5, 5)
+        layout.setSpacing(5)
         
-        # Info Section
-        info_layout = QVBoxLayout()
+        # Info Section - wrap in a widget to control size properly
+        info_widget = QWidget()
+        # Use Ignored policy so it can shrink below its preferred size
+        info_widget.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
+        info_widget.setMinimumWidth(50)  # Ensure at least some text is visible
+        info_layout = QVBoxLayout(info_widget)
+        info_layout.setContentsMargins(0, 0, 0, 0)
         info_layout.setSpacing(2)
         
         title = self.record.get('title') or self.record.get('created_at')
@@ -142,10 +148,10 @@ class RecordingListItemWidget(QWidget):
         self.details_label.setStyleSheet("font-size: 12px;")
         info_layout.addWidget(self.details_label)
         
-        layout.addLayout(info_layout)
-        layout.addStretch()
+        # Add the info widget with stretch factor 1 so it takes remaining space
+        layout.addWidget(info_widget, 1)
         
-        # Buttons
+        # Buttons - fixed size, no stretch, always visible
         self.fav_btn = QPushButton()
         self.fav_btn.setCheckable(True)
         self.fav_btn.setFixedSize(30, 30)
@@ -154,13 +160,13 @@ class RecordingListItemWidget(QWidget):
         # ★ (U+2605) filled, ☆ (U+2606) empty
         self.update_fav_icon(bool(self.record.get('is_favorite', 0)))
         self.fav_btn.toggled.connect(self.on_fav_toggled)
-        layout.addWidget(self.fav_btn)
+        layout.addWidget(self.fav_btn, 0)  # stretch factor 0 = don't stretch
         
         self.del_btn = QPushButton("🗑") # Trash bin unicode
         self.del_btn.setFixedSize(30, 30)
         self.del_btn.setStyleSheet("QPushButton { border: none; color: #f44336; } QPushButton:hover { background-color: #3a3a3a; border-radius: 15px; }")
         self.del_btn.clicked.connect(self.delete_requested.emit)
-        layout.addWidget(self.del_btn)
+        layout.addWidget(self.del_btn, 0)  # stretch factor 0 = don't stretch
         
     def update_fav_icon(self, is_fav):
         self.fav_btn.setText("★" if is_fav else "☆")

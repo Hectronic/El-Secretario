@@ -116,6 +116,8 @@ class MainWindow(QMainWindow):
         
         # History List
         self.history_list = QListWidget()
+        # Disable horizontal scrolling - long titles will be clipped
+        self.history_list.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         # self.history_list.setStyleSheet(LIST_WIDGET_STYLE) # Use Global Theme
         self.history_list.itemClicked.connect(self.on_history_item_clicked)
         left_layout.addWidget(self.history_list)
