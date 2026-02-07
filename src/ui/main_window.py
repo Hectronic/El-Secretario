@@ -192,6 +192,7 @@ class MainWindow(QMainWindow):
 
         # 1. Chat History Section
         self.sessions_list = QListWidget()
+        self.sessions_list.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.sessions_list.itemClicked.connect(self.on_chat_session_clicked)
         
         self.delete_chat_session_btn = QPushButton("Delete Chat")
@@ -203,6 +204,7 @@ class MainWindow(QMainWindow):
         
         # 2. Collections Section
         self.collections_list = QListWidget()
+        self.collections_list.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.collections_list.itemClicked.connect(self.on_collection_clicked)
         
         self.open_collections_btn = QPushButton("Ver todas las colecciones")
@@ -213,6 +215,7 @@ class MainWindow(QMainWindow):
         
         # 3. Libretas (Notebooks) Section
         self.notebooks_list = QListWidget()
+        self.notebooks_list.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.notebooks_list.itemClicked.connect(self.on_notebook_clicked)
         
         self.open_notebooks_btn = QPushButton("Ver todas las libretas")
@@ -781,6 +784,7 @@ class MainWindow(QMainWindow):
             layout.addWidget(QLabel("No hay colecciones aún. Añade tags a tus grabaciones."))
         else:
             list_widget = QListWidget()
+            list_widget.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
             # list_widget.setStyleSheet(LIST_WIDGET_STYLE)
             for tag in tags:
                 item = QListWidgetItem(f"🏷️ {tag}")
