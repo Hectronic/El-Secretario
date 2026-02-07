@@ -188,8 +188,8 @@ class TestCalendarUI(unittest.TestCase):
         # Click Generate
         self.widget.on_generate_summary_clicked()
         
-        # Verify AI started with correct content
-        mock_ai_cls.assert_called_with("fake_key_from_settings", "weekly_summary", "\n\n--- Recording: Rec Week (2026-01-01) ---\nContent Week")
+        # Verify AI started with correct content (API key param kept for backward compatibility, now empty)
+        mock_ai_cls.assert_called_with("", "weekly_summary", "\n\n--- Recording: Rec Week (2026-01-01) ---\nContent Week")
         mock_ai.start.assert_called_once()
         
         # Simulate finish

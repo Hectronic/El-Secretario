@@ -14,10 +14,11 @@
 
 from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QPushButton, 
                              QLabel, QProgressBar, QComboBox, QSpacerItem, QSizePolicy,
-                             QLineEdit, QFormLayout, QGroupBox, QCheckBox, QCompleter)
+                             QLineEdit, QFormLayout, QGroupBox, QCheckBox)
 from PyQt6.QtCore import Qt, QTimer, pyqtSignal
 from src.audio import Recorder
 from src.database import DBManager
+from src.ui.components import TagsLineEdit
 
 class RecordingInProgressWidget(QWidget):
     finished = pyqtSignal(str, dict)  # Emits file path and config when finished
@@ -104,13 +105,9 @@ class RecordingInProgressWidget(QWidget):
         options_layout.addRow("Title:", self.title_input)
 
         # Tags field with autocomplete
-        self.tags_input = QLineEdit()
-        self.tags_input.setPlaceholderText("Work, Meeting, ...")
+        self.tags_input = TagsLineEdit()
         all_tags = self.db.get_all_tags()
-        self.tags_completer = QCompleter(all_tags)
-        self.tags_completer.setCaseSensitivity(Qt.CaseSensitivity.CaseInsensitive)
-        self.tags_completer.setFilterMode(Qt.MatchFlag.MatchContains)
-        self.tags_input.setCompleter(self.tags_completer)
+        self.tags_input.set_tags(all_tags)
         options_layout.addRow("Tags:", self.tags_input)
 
         # Model selector

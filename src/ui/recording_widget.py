@@ -18,8 +18,8 @@ import soundfile as sf
 from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QTextEdit, 
                              QPushButton, QLabel, QComboBox, QFormLayout, 
                              QLineEdit, QGroupBox, QTabWidget, QFrame, 
-                             QMessageBox, QStyle, QSlider, QProgressBar, QApplication, QCheckBox, QCompleter)
-from PyQt6.QtCore import Qt, QSettings, QUrl, pyqtSignal, QStringListModel
+                             QMessageBox, QStyle, QSlider, QProgressBar, QApplication, QCheckBox)
+from PyQt6.QtCore import Qt, QSettings, QUrl, pyqtSignal
 from PyQt6.QtMultimedia import QMediaPlayer, QAudioOutput
 from PyQt6.QtGui import QCursor
 
@@ -28,6 +28,7 @@ from src.audio import Recorder
 from src.worker import TranscriberThread
 from src.ai_assistant import AIAssistant
 from src.ui.dialogs import SpeakerDialog
+from src.ui.components import TagsLineEdit
 
 class RecordingWidget(QWidget):
     recording_saved = pyqtSignal() # To refresh history list in MainWindow
@@ -159,16 +160,12 @@ class RecordingWidget(QWidget):
         self.duration_label = QLabel("-")
         meta_layout.addRow("Duration:", self.duration_label)
         
-        self.tags_input = QLineEdit()
-        self.tags_input.setPlaceholderText("Work, Meeting, ...")
+        self.tags_input = TagsLineEdit()
         self.tags_input.setEnabled(False)
         
         # Setup Autocomplete for Tags
         all_tags = self.db.get_all_tags()
-        self.tags_completer = QCompleter(all_tags)
-        self.tags_completer.setCaseSensitivity(Qt.CaseSensitivity.CaseInsensitive)
-        self.tags_completer.setFilterMode(Qt.MatchFlag.MatchContains)
-        self.tags_input.setCompleter(self.tags_completer)
+        self.tags_input.set_tags(all_tags)
         
         meta_layout.addRow("Tags:", self.tags_input)
 
