@@ -39,6 +39,9 @@ class TestCalendarUI(unittest.TestCase):
         self.mock_db = self.mock_db_cls.return_value
         self.mock_db.get_all_tags.return_value = ["Tag1", "Tag2"]
         self.mock_db.fetch_by_dates.return_value = []
+        # Mock new summary methods - return None by default
+        self.mock_db.get_daily_summary.return_value = None
+        self.mock_db.get_weekly_summary.return_value = None
         
         # Patch RAGEngine
         self.rag = MagicMock()
@@ -185,6 +188,9 @@ class TestCalendarUI(unittest.TestCase):
             {'title': 'Rec Week', 'created_at': '2026-01-01', 'transcription': 'Content Week', 'tags': ''}
         ]
         
+        # Mock get_weekly_summary to return None initially, then the saved summary
+        self.mock_db.get_weekly_summary.return_value = None
+        
         # Click Generate
         self.widget.on_generate_summary_clicked()
         
@@ -192,15 +198,24 @@ class TestCalendarUI(unittest.TestCase):
         mock_ai_cls.assert_called_with("", "weekly_summary", "\n\n--- Recording: Rec Week (2026-01-01) ---\nContent Week")
         mock_ai.start.assert_called_once()
         
+        # Now mock get_weekly_summary to return the saved summary
+        self.mock_db.get_weekly_summary.return_value = "Summary Result"
+        
         # Simulate finish
         self.widget.on_summary_finished("weekly_summary", "Summary Result")
+        
+        # Verify save_weekly_summary was called
+        self.mock_db.save_weekly_summary.assert_called()
+        
+        # Verify the summary is displayed
         self.assertEqual(self.widget.summary_text.toMarkdown().strip(), "Summary Result")
 
     @patch('src.ui.calendar_widget.AIAssistant')
     @patch('src.ui.calendar_widget.QProgressDialog')
     @patch('src.ui.calendar_widget.QMessageBox')
     @patch('src.ui.calendar_widget.QSettings')
-    def test_summary_caching(self, mock_settings_cls, mock_msg, mock_progress, mock_ai_cls):
+    def test_summary_persistence(self, mock_settings_cls, mock_msg, mock_progress, mock_ai_cls):
+        """Test that summaries are stored in and retrieved from database."""
         # Mock Settings
         mock_settings = mock_settings_cls.return_value
         mock_settings.value.side_effect = lambda key, default: "fake_key" if key == "gemini_key" else default
@@ -212,37 +227,30 @@ class TestCalendarUI(unittest.TestCase):
         self.widget.current_week_monday = QDate(2026, 1, 1)
         self.mock_db.fetch_by_dates.return_value = [{'title': 'T', 'created_at': 'D', 'transcription': 'C', 'tags': ''}]
         
-        # 1. Generate Global Summary
-        self.widget.on_generate_summary_clicked()
-        self.widget.on_summary_finished("weekly_summary", "Global Summary")
-        self.assertEqual(self.widget.summary_text.toMarkdown().strip(), "Global Summary")
+        # 1. Initially no summary exists
+        self.mock_db.get_weekly_summary.return_value = None
+        self.widget.update_summary_view()
+        self.assertEqual(self.widget.summary_text.toMarkdown().strip(), "")
         
-        # 2. Select a Tag
-        # Mock tag selection
+        # 2. Generate and save a summary
+        self.widget.on_generate_summary_clicked()
+        self.mock_db.get_weekly_summary.return_value = "Global Summary"
+        self.widget.on_summary_finished("weekly_summary", "Global Summary")
+        
+        # Verify save was called
+        self.mock_db.save_weekly_summary.assert_called()
+        
+        # 3. When we switch to a different tag filter, it should query the database again
         with patch.object(self.widget, 'get_selected_tags', return_value=['Tag1']):
-            # Trigger tag change
+            self.mock_db.get_weekly_summary.return_value = None  # No summary for this tag
             self.widget.on_tag_changed(None)
-            
-            # Should be empty initially
             self.assertEqual(self.widget.summary_text.toMarkdown().strip(), "")
             
-            # Generate Tagged Summary
-            self.widget.on_generate_summary_clicked()
-            self.widget.on_summary_finished("weekly_summary", "Tag1 Summary")
-            self.assertEqual(self.widget.summary_text.toMarkdown().strip(), "Tag1 Summary")
-            
-        # 3. Switch back to Global (no tags)
-        # Mock tag selection returning empty
+        # 4. Switch back to no tags - should restore from database
         with patch.object(self.widget, 'get_selected_tags', return_value=[]):
+            self.mock_db.get_weekly_summary.return_value = "Global Summary"
             self.widget.on_tag_changed(None)
-            # Should restore Global Summary from cache
             self.assertEqual(self.widget.summary_text.toMarkdown().strip(), "Global Summary")
-            
-        # 4. Switch back to Tag1
-        with patch.object(self.widget, 'get_selected_tags', return_value=['Tag1']):
-            self.widget.on_tag_changed(None)
-            # Should restore Tag1 Summary from cache
-            self.assertEqual(self.widget.summary_text.toMarkdown().strip(), "Tag1 Summary")
 
 if __name__ == '__main__':
     unittest.main()

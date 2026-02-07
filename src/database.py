@@ -85,6 +85,32 @@ class DBManager:
                         FOREIGN KEY(record_id) REFERENCES records(id)
                     )
                 ''')
+
+                # Daily summaries table
+                cursor.execute('''
+                    CREATE TABLE IF NOT EXISTS daily_summaries (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        date TEXT NOT NULL,
+                        summary TEXT NOT NULL,
+                        tags_filter TEXT,
+                        generated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                        UNIQUE(date, tags_filter)
+                    )
+                ''')
+
+                # Weekly summaries table
+                cursor.execute('''
+                    CREATE TABLE IF NOT EXISTS weekly_summaries (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        week_start TEXT NOT NULL,
+                        summary TEXT NOT NULL,
+                        tags_filter TEXT,
+                        generated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                        UNIQUE(week_start, tags_filter)
+                    )
+                ''')
                 
                 # Migration: Add columns if they don't exist
                 cursor.execute("PRAGMA table_info(records)")
@@ -582,3 +608,228 @@ class DBManager:
             conn.commit()
             return cursor.lastrowid
 
+    # =========================================================================
+    # DAILY/WEEKLY SUMMARY METHODS
+    # =========================================================================
+
+    def save_daily_summary(self, date: str, summary: str, tags_filter: Optional[str] = None) -> int:
+        """
+        Save or update a daily summary.
+        
+        Args:
+            date: Date string in 'YYYY-MM-DD' format.
+            summary: The summary text.
+            tags_filter: Comma-separated tags used for filtering (None = no filter).
+            
+        Returns:
+            The summary ID.
+        """
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            now = datetime.now().isoformat(sep=' ', timespec='seconds')
+            # Use empty string instead of NULL for tags_filter to make UNIQUE constraint work
+            tags_value = tags_filter if tags_filter else ''
+            
+            cursor.execute('''
+                INSERT INTO daily_summaries (date, summary, tags_filter, generated_at, updated_at)
+                VALUES (?, ?, ?, ?, ?)
+                ON CONFLICT(date, tags_filter) DO UPDATE SET
+                    summary = excluded.summary,
+                    updated_at = excluded.updated_at
+            ''', (date, summary, tags_value, now, now))
+            conn.commit()
+            return cursor.lastrowid
+
+    def get_daily_summary(self, date: str, tags_filter: Optional[str] = None) -> Optional[str]:
+        """
+        Get a daily summary.
+        
+        Args:
+            date: Date string in 'YYYY-MM-DD' format.
+            tags_filter: Tags filter to match (None = no filter).
+            
+        Returns:
+            The summary text if found, None otherwise.
+        """
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            tags_value = tags_filter if tags_filter else ''
+            cursor.execute(
+                'SELECT summary FROM daily_summaries WHERE date = ? AND tags_filter = ?',
+                (date, tags_value)
+            )
+            row = cursor.fetchone()
+            return row['summary'] if row else None
+
+    def save_weekly_summary(self, week_start: str, summary: str, tags_filter: Optional[str] = None) -> int:
+        """
+        Save or update a weekly summary.
+        
+        Args:
+            week_start: Monday of the week in 'YYYY-MM-DD' format.
+            summary: The summary text.
+            tags_filter: Comma-separated tags used for filtering (None = no filter).
+            
+        Returns:
+            The summary ID.
+        """
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            now = datetime.now().isoformat(sep=' ', timespec='seconds')
+            # Use empty string instead of NULL for tags_filter to make UNIQUE constraint work
+            tags_value = tags_filter if tags_filter else ''
+            
+            cursor.execute('''
+                INSERT INTO weekly_summaries (week_start, summary, tags_filter, generated_at, updated_at)
+                VALUES (?, ?, ?, ?, ?)
+                ON CONFLICT(week_start, tags_filter) DO UPDATE SET
+                    summary = excluded.summary,
+                    updated_at = excluded.updated_at
+            ''', (week_start, summary, tags_value, now, now))
+            conn.commit()
+            return cursor.lastrowid
+
+    def get_weekly_summary(self, week_start: str, tags_filter: Optional[str] = None) -> Optional[str]:
+        """
+        Get a weekly summary.
+        
+        Args:
+            week_start: Monday of the week in 'YYYY-MM-DD' format.
+            tags_filter: Tags filter to match (None = no filter).
+            
+        Returns:
+            The summary text if found, None otherwise.
+        """
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            tags_value = tags_filter if tags_filter else ''
+            cursor.execute(
+                'SELECT summary FROM weekly_summaries WHERE week_start = ? AND tags_filter = ?',
+                (week_start, tags_value)
+            )
+            row = cursor.fetchone()
+            return row['summary'] if row else None
+
+    def get_dates_with_content(self) -> List[str]:
+        """
+        Get all dates that have at least one recording.
+        
+        Returns:
+            List of date strings in 'YYYY-MM-DD' format.
+        """
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute('''
+                SELECT DISTINCT date(created_at) as record_date
+                FROM records
+                WHERE transcription IS NOT NULL AND transcription != ''
+                ORDER BY record_date DESC
+            ''')
+            return [row['record_date'] for row in cursor.fetchall()]
+
+    def get_weeks_with_content(self) -> List[str]:
+        """
+        Get all week start dates (Mondays) that have at least one recording.
+        
+        Returns:
+            List of Monday date strings in 'YYYY-MM-DD' format.
+        """
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            # SQLite: strftime('%w', date) returns day of week (0=Sunday, 1=Monday)
+            # To get Monday: date - (day_of_week - 1) days, but handle Sunday specially
+            cursor.execute('''
+                SELECT DISTINCT 
+                    date(created_at, 'weekday 1', '-7 days') as week_monday
+                FROM records
+                WHERE transcription IS NOT NULL AND transcription != ''
+                ORDER BY week_monday DESC
+            ''')
+            return [row['week_monday'] for row in cursor.fetchall()]
+
+    def get_dates_without_summary(self, tags_filter: Optional[str] = None) -> List[str]:
+        """
+        Get dates with content but without a summary.
+        
+        Args:
+            tags_filter: Tags filter to check against (None = no filter).
+            
+        Returns:
+            List of date strings in 'YYYY-MM-DD' format.
+        """
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            tags_value = tags_filter if tags_filter else ''
+            cursor.execute('''
+                SELECT DISTINCT date(created_at) as record_date
+                FROM records
+                WHERE transcription IS NOT NULL AND transcription != ''
+                AND date(created_at) NOT IN (
+                    SELECT date FROM daily_summaries WHERE tags_filter = ?
+                )
+                ORDER BY record_date DESC
+            ''', (tags_value,))
+            return [row['record_date'] for row in cursor.fetchall()]
+
+    def get_weeks_without_summary(self, tags_filter: Optional[str] = None) -> List[str]:
+        """
+        Get weeks with content but without a summary.
+        
+        Args:
+            tags_filter: Tags filter to check against (None = no filter).
+            
+        Returns:
+            List of Monday date strings in 'YYYY-MM-DD' format.
+        """
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            tags_value = tags_filter if tags_filter else ''
+            cursor.execute('''
+                SELECT DISTINCT 
+                    date(created_at, 'weekday 1', '-7 days') as week_monday
+                FROM records
+                WHERE transcription IS NOT NULL AND transcription != ''
+                AND date(created_at, 'weekday 1', '-7 days') NOT IN (
+                    SELECT week_start FROM weekly_summaries WHERE tags_filter = ?
+                )
+                ORDER BY week_monday DESC
+            ''', (tags_value,))
+            return [row['week_monday'] for row in cursor.fetchall()]
+
+    def get_dates_with_summary(self, tags_filter: Optional[str] = None) -> List[str]:
+        """
+        Get all dates that have a summary generated.
+        
+        Args:
+            tags_filter: Tags filter to check against (None = no filter).
+            
+        Returns:
+            List of date strings in 'YYYY-MM-DD' format.
+        """
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            tags_value = tags_filter if tags_filter else ''
+            cursor.execute(
+                'SELECT date FROM daily_summaries WHERE tags_filter = ? ORDER BY date DESC',
+                (tags_value,)
+            )
+            return [row['date'] for row in cursor.fetchall()]
+
+    def get_weeks_with_summary(self, tags_filter: Optional[str] = None) -> List[str]:
+        """
+        Get all weeks that have a summary generated.
+        
+        Args:
+            tags_filter: Tags filter to check against (None = no filter).
+            
+        Returns:
+            List of Monday date strings in 'YYYY-MM-DD' format.
+        """
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            tags_value = tags_filter if tags_filter else ''
+            cursor.execute(
+                'SELECT week_start FROM weekly_summaries WHERE tags_filter = ? ORDER BY week_start DESC',
+                (tags_value,)
+            )
+            return [row['week_start'] for row in cursor.fetchall()]

@@ -19,6 +19,7 @@ from PyQt6.QtCore import Qt, pyqtSignal, QDate, QTimer, QSettings
 from PyQt6.QtGui import QTextCharFormat, QColor, QTextCursor
 from src.database import DBManager
 from src.ai_assistant import AIAssistant
+from src.summary_generator import SummaryGenerator, get_pending_summary_counts
 
 class CalendarWidget(QWidget):
     start_chat_requested = pyqtSignal(str, list) # Emits (date_str_or_list, tags_list)
@@ -32,8 +33,8 @@ class CalendarWidget(QWidget):
         self.current_week_monday = None # QDate of the Monday of the currently highlighted week
         self.last_clicked_date = None
         
-        self.summary_cache = {} # Key: (week_str, tags_tuple), Value: summary_text
         self.pending_summary_key = None
+        self.pending_daily_key = None
         
         self.init_ui()
         
@@ -77,10 +78,19 @@ class CalendarWidget(QWidget):
         nav_layout.addWidget(self.next_week_btn)
         left_layout.addLayout(nav_layout)
 
-        # Generate Summary Button
+        # Generate Summary Buttons
         self.summary_btn = QPushButton("Generate Weekly Summary")
         self.summary_btn.clicked.connect(self.on_generate_summary_clicked)
         left_layout.addWidget(self.summary_btn)
+        
+        self.daily_summary_btn = QPushButton("Generate Daily Summary")
+        self.daily_summary_btn.clicked.connect(self.on_generate_daily_summary_clicked)
+        left_layout.addWidget(self.daily_summary_btn)
+        
+        # Generate Pending Summaries Button
+        self.pending_btn = QPushButton("Generate All Pending Summaries")
+        self.pending_btn.clicked.connect(self.on_generate_pending_clicked)
+        left_layout.addWidget(self.pending_btn)
 
         splitter.addWidget(left_widget)
         
@@ -104,7 +114,19 @@ class CalendarWidget(QWidget):
         
         right_splitter.addWidget(recordings_widget)
         
-        # Bottom: Summary
+        # Middle: Daily Summary
+        daily_summary_widget = QWidget()
+        daily_summary_layout = QVBoxLayout(daily_summary_widget)
+        daily_summary_layout.setContentsMargins(0, 0, 0, 0)
+        daily_summary_layout.addWidget(QLabel("<b>Daily Summary:</b>"))
+        
+        self.daily_summary_text = QTextEdit()
+        self.daily_summary_text.setReadOnly(True)
+        daily_summary_layout.addWidget(self.daily_summary_text)
+        
+        right_splitter.addWidget(daily_summary_widget)
+        
+        # Bottom: Weekly Summary
         summary_widget = QWidget()
         summary_layout = QVBoxLayout(summary_widget)
         summary_layout.setContentsMargins(0, 0, 0, 0)
@@ -121,7 +143,7 @@ class CalendarWidget(QWidget):
         
         # Set initial sizes
         splitter.setSizes([300, 800])
-        right_splitter.setSizes([400, 400])
+        right_splitter.setSizes([300, 200, 300])
         
         layout.addWidget(splitter)
         
@@ -159,6 +181,7 @@ class CalendarWidget(QWidget):
         
     def on_tag_changed(self, item):
         self.refresh_recordings()
+        self.update_daily_summary_view()
         self.update_summary_view()
         
     def on_date_clicked(self, date):
@@ -204,6 +227,7 @@ class CalendarWidget(QWidget):
             # We need to refresh if selection changed OR if week changed
             if previous_selection != self.selected_dates or previous_week_monday != self.current_week_monday:
                 self.update_calendar_visuals(previous_selection, previous_week_monday)
+                self.update_daily_summary_view()
                 if previous_week_monday != self.current_week_monday:
                     self.update_summary_view()
                 
@@ -361,22 +385,103 @@ class CalendarWidget(QWidget):
         tags = tuple(sorted(self.get_selected_tags()))
         return (week_str, tags)
 
+    def get_tags_filter_str(self):
+        """Get tags as comma-separated string for database queries."""
+        tags = self.get_selected_tags()
+        return ",".join(sorted(tags)) if tags else None
+
+    def update_daily_summary_view(self):
+        """Update the daily summary display based on selected date."""
+        if len(self.selected_dates) == 1:
+            date = list(self.selected_dates)[0]
+            date_str = date.toString("yyyy-MM-dd")
+            tags_filter = self.get_tags_filter_str()
+            
+            summary = self.db.get_daily_summary(date_str, tags_filter)
+            if summary:
+                self.daily_summary_text.setMarkdown(summary)
+            else:
+                self.daily_summary_text.clear()
+                self.daily_summary_text.setPlaceholderText(
+                    f"No daily summary for {date_str}. Click 'Generate Daily Summary' to create one."
+                )
+        else:
+            self.daily_summary_text.clear()
+            if len(self.selected_dates) > 1:
+                self.daily_summary_text.setPlaceholderText("Select a single date to view its summary.")
+            else:
+                self.daily_summary_text.setPlaceholderText("No date selected.")
+
     def update_summary_view(self):
-        key = self.get_summary_key()
-        if key and key in self.summary_cache:
-            self.summary_text.setMarkdown(self.summary_cache[key])
+        """Update the weekly summary display based on current week."""
+        if not self.current_week_monday:
+            self.summary_text.clear()
+            return
+            
+        week_str = self.current_week_monday.toString("yyyy-MM-dd")
+        tags_filter = self.get_tags_filter_str()
+        
+        summary = self.db.get_weekly_summary(week_str, tags_filter)
+        if summary:
+            self.summary_text.setMarkdown(summary)
         else:
             self.summary_text.clear()
-            if key:
-                self.summary_text.setPlaceholderText("No summary generated for this week and tag selection. Click 'Generate Weekly Summary' to create one.")
+            self.summary_text.setPlaceholderText(
+                "No summary for this week. Click 'Generate Weekly Summary' to create one."
+            )
+
+    def on_generate_daily_summary_clicked(self):
+        """Generate summary for the selected date."""
+        if len(self.selected_dates) != 1:
+            QMessageBox.warning(self, "Select One Date", "Please select exactly one date to generate a daily summary.")
+            return
+            
+        date = list(self.selected_dates)[0]
+        date_str = date.toString("yyyy-MM-dd")
+        tags = self.get_selected_tags()
+        
+        recordings = self.db.fetch_by_dates([date_str], tags)
+        if not recordings:
+            QMessageBox.warning(self, "No Recordings", "No recordings found for the selected date.")
+            return
+            
+        # Prepare text
+        full_text = ""
+        for rec in recordings:
+            full_text += f"\n\n--- Recording: {rec['title'] or 'Untitled'} ({rec['created_at']}) ---\n"
+            full_text += rec['transcription'] or ""
+            
+        if not full_text.strip():
+            QMessageBox.warning(self, "No Content", "No transcription content for the selected date.")
+            return
+            
+        # Show progress
+        self.progress = QProgressDialog("Generating Daily Summary...", "Cancel", 0, 0, self)
+        self.progress.setWindowModality(Qt.WindowModality.WindowModal)
+        self.progress.show()
+        
+        # Validate AI provider
+        settings = QSettings("Hectronic", "Secretario")
+        from src.ai_provider import validate_ai_provider_config
+        is_valid, error_msg = validate_ai_provider_config(settings)
+        
+        if not is_valid:
+            self.progress.close()
+            QMessageBox.critical(self, "Error", error_msg)
+            return
+            
+        self.pending_daily_key = (date_str, self.get_tags_filter_str())
+        self.worker = AIAssistant("", "daily_summary", full_text)
+        self.worker.finished.connect(self.on_summary_finished)
+        self.worker.error.connect(self.on_summary_error)
+        self.worker.start()
 
     def on_generate_summary_clicked(self):
-        # Generate summary for the CURRENT HIGHLIGHTED WEEK, not the selected dates
+        """Generate summary for the CURRENT HIGHLIGHTED WEEK."""
         if not self.current_week_monday:
             QMessageBox.warning(self, "No Week Selected", "Please select a week first.")
             return
             
-        # Fetch recordings for the week
         week_dates = []
         for i in range(7):
             week_dates.append(self.current_week_monday.addDays(i).toString("yyyy-MM-dd"))
@@ -391,7 +496,7 @@ class CalendarWidget(QWidget):
         # Prepare text for summary
         full_text = ""
         for rec in recordings_for_summary:
-            full_text += f"\n\n--- Recording: {rec['title']} ({rec['created_at']}) ---\n"
+            full_text += f"\n\n--- Recording: {rec['title'] or 'Untitled'} ({rec['created_at']}) ---\n"
             full_text += rec['transcription'] or ""
 
         if not full_text.strip():
@@ -414,23 +519,96 @@ class CalendarWidget(QWidget):
             return
 
         self.pending_summary_key = self.get_summary_key()
-        # api_key parameter kept for backward compatibility
         self.worker = AIAssistant("", "weekly_summary", full_text)
         self.worker.finished.connect(self.on_summary_finished)
         self.worker.error.connect(self.on_summary_error)
         self.worker.start()
 
+    def on_generate_pending_clicked(self):
+        """Generate all pending summaries for days and weeks with content."""
+        tags_filter = self.get_tags_filter_str()
+        
+        # Check how many pending items
+        pending_daily, pending_weekly = get_pending_summary_counts(tags_filter)
+        
+        if pending_daily == 0 and pending_weekly == 0:
+            QMessageBox.information(self, "All Done", "All days and weeks with content already have summaries!")
+            return
+            
+        # Confirm with user
+        msg = f"Found {pending_daily} days and {pending_weekly} weeks without summaries.\n\nDo you want to generate all of them? This may take a while."
+        reply = QMessageBox.question(self, "Generate Pending Summaries", msg,
+                                     QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+        if reply != QMessageBox.StandardButton.Yes:
+            return
+            
+        # Start generation
+        self.pending_progress = QProgressDialog("Generating pending summaries...", "Cancel", 0, pending_daily + pending_weekly, self)
+        self.pending_progress.setWindowModality(Qt.WindowModality.WindowModal)
+        self.pending_progress.show()
+        
+        self.summary_generator = SummaryGenerator(
+            generate_daily=True,
+            generate_weekly=True,
+            tags_filter=tags_filter,
+            parent=self
+        )
+        self.summary_generator.progress.connect(self.on_pending_progress)
+        self.summary_generator.finished.connect(self.on_pending_finished)
+        self.summary_generator.error.connect(self.on_pending_error)
+        self.pending_progress.canceled.connect(self.summary_generator.cancel)
+        self.summary_generator.start()
+
+    def on_pending_progress(self, current, total):
+        """Update progress bar for pending generation."""
+        if hasattr(self, 'pending_progress'):
+            self.pending_progress.setValue(current)
+
+    def on_pending_finished(self, daily_count, weekly_count):
+        """Handle completion of pending summary generation."""
+        if hasattr(self, 'pending_progress'):
+            self.pending_progress.close()
+        QMessageBox.information(
+            self, "Complete",
+            f"Generated {daily_count} daily summaries and {weekly_count} weekly summaries."
+        )
+        # Refresh views
+        self.update_daily_summary_view()
+        self.update_summary_view()
+
+    def on_pending_error(self, error_msg):
+        """Handle error in pending summary generation."""
+        if hasattr(self, 'pending_progress'):
+            self.pending_progress.close()
+        QMessageBox.critical(self, "Error", f"Summary generation failed: {error_msg}")
+
     def on_summary_finished(self, task_type, result):
+        """Handle completion of a single summary generation."""
         self.progress.close()
+        
         if task_type == "weekly_summary":
             if self.pending_summary_key:
-                self.summary_cache[self.pending_summary_key] = result
-                # Only update view if the key matches current state (user might have changed tags while waiting)
+                week_str, tags_tuple = self.pending_summary_key
+                tags_filter = ",".join(tags_tuple) if tags_tuple else None
+                self.db.save_weekly_summary(week_str, result, tags_filter)
                 if self.pending_summary_key == self.get_summary_key():
                     self.update_summary_view()
             self.pending_summary_key = None
+            
+        elif task_type == "daily_summary":
+            if self.pending_daily_key:
+                date_str, tags_filter = self.pending_daily_key
+                self.db.save_daily_summary(date_str, result, tags_filter)
+                # Refresh if still viewing the same date
+                if len(self.selected_dates) == 1:
+                    current_date = list(self.selected_dates)[0].toString("yyyy-MM-dd")
+                    if current_date == date_str:
+                        self.update_daily_summary_view()
+            self.pending_daily_key = None
 
     def on_summary_error(self, error_msg):
+        """Handle error in summary generation."""
         self.progress.close()
         self.pending_summary_key = None
+        self.pending_daily_key = None
         QMessageBox.critical(self, "Error", f"Summary generation failed: {error_msg}")

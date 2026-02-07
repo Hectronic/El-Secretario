@@ -53,6 +53,12 @@ Transcription:
 
 Transcription:
 {text}""",
+                "daily_summary": """Please provide a concise summary of all recordings from this day.
+Highlight key points, decisions made, and action items if any.
+Keep it brief but comprehensive.
+
+Day's recordings:
+{text}""",
                 "weekly_summary": """Please provide a comprehensive summary of the following recordings from this week.
 Group the summary by topic or day if relevant.
 Highlight key achievements, decisions, and action items.
