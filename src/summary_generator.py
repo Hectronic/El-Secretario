@@ -13,6 +13,7 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 from typing import List, Tuple, Optional
+from datetime import datetime
 from PyQt6.QtCore import QThread, pyqtSignal, QSettings
 from src.database import DBManager
 from src.ai_provider import get_ai_provider, validate_ai_provider_config
@@ -30,25 +31,38 @@ class SummaryGenerator(QThread):
     """
     
     progress = pyqtSignal(int, int)  # current, total
-    item_completed = pyqtSignal(str, str, str)  # type ("daily"/"weekly"), date, summary
-    finished = pyqtSignal(int, int)  # daily_count, weekly_count
+    item_completed = pyqtSignal(str, str, str)  # type ("daily"/"weekly"/"recording"), date/title, summary
+    finished = pyqtSignal(int, int, int)  # local_recordings_count, daily_count, weekly_count
     error = pyqtSignal(str)
     
     def __init__(self, generate_daily: bool = True, generate_weekly: bool = True, 
-                 tags_filter: Optional[str] = None, parent=None):
+                 generate_recordings: bool = True,
+                 tags_filter: Optional[str] = None, 
+                 exclude_today: bool = True,
+                 exclude_current_week: bool = True,
+                 specific_dates: Optional[List[str]] = None,
+                 parent=None):
         """
         Initialize the summary generator.
         
         Args:
             generate_daily: Whether to generate daily summaries.
             generate_weekly: Whether to generate weekly summaries.
+            generate_recordings: Whether to generate summaries for individual recordings.
             tags_filter: Optional tags filter (comma-separated).
+            exclude_today: Whether to exclude today from daily summaries.
+            exclude_current_week: Whether to exclude current week from weekly summaries.
+            specific_dates: Optional list of specific dates (YYYY-MM-DD) to process.
             parent: Parent QObject.
         """
         super().__init__(parent)
         self.generate_daily = generate_daily
         self.generate_weekly = generate_weekly
+        self.generate_recordings = generate_recordings
         self.tags_filter = tags_filter
+        self.exclude_today = exclude_today
+        self.exclude_current_week = exclude_current_week
+        self.specific_dates = specific_dates
         self.db = DBManager()
         self._cancelled = False
         
@@ -69,31 +83,63 @@ class SummaryGenerator(QThread):
                 
             provider = get_ai_provider(settings)
             
-            # Get pending dates/weeks
-            pending_dates = []
-            pending_weeks = []
             
-            if self.generate_daily:
-                pending_dates = self.db.get_dates_without_summary(self.tags_filter)
-                
-            if self.generate_weekly:
-                pending_weeks = self.db.get_weeks_without_summary(self.tags_filter)
-                
-            total = len(pending_dates) + len(pending_weeks)
-            if total == 0:
-                self.finished.emit(0, 0)
+        except Exception as e:
+            self.error.emit(str(e))
+        try:
+            settings = QSettings("Hectronic", "Secretario")
+            
+            # Validate AI provider
+            is_valid, error_msg = validate_ai_provider_config(settings)
+            if not is_valid:
+                self.error.emit(error_msg)
                 return
                 
-            current = 0
+            provider = get_ai_provider(settings)
+            
+            # 1. Identify all dates that need processing
+            # We need dates that:
+            # a) Have pending recording summaries (if generate_recordings is True)
+            # b) Have pending daily summary (if generate_daily is True)
+            
+            dates_to_process = set()
+            
+            if self.specific_dates:
+                 # If specific dates are provided, use them directly
+                 for date in self.specific_dates:
+                     dates_to_process.add(date)
+            elif self.generate_daily or self.generate_recordings:
+                all_dates = self.db.get_dates_with_content()
+                for date in all_dates:
+                    # Check exclusions
+                    if self.exclude_today and date == datetime.now().strftime("%Y-%m-%d"):
+                        continue
+                    dates_to_process.add(date)
+            
+            # Sort dates Newest -> Oldest
+            sorted_dates = sorted(list(dates_to_process), reverse=True)
+            
+            # Identify weeks to process
+            weeks_to_process = []
+            if self.generate_weekly:
+                pending_weeks = self.db.get_weeks_without_summary(self.tags_filter, self.exclude_current_week)
+                weeks_to_process = sorted(pending_weeks, reverse=True)
+                
+            total_steps = len(sorted_dates) + len(weeks_to_process)
+            if total_steps == 0:
+                self.finished.emit(0, 0, 0)
+                return
+                
+            current_step = 0
             daily_count = 0
             weekly_count = 0
+            recordings_count = 0 
             
-            # Load prompts from settings
-            default_daily_prompt = """Please provide a concise summary of all recordings from this day.
+            # Load prompts
+            default_daily_prompt = """Please provide a concise summary of the day based on the following meeting summaries.
 Highlight key points, decisions made, and action items if any.
-Keep it brief but comprehensive.
 
-Day's recordings:
+Meeting Summaries:
 {text}"""
 
             default_weekly_prompt = """Please provide a comprehensive summary of the following recordings from this week.
@@ -102,17 +148,28 @@ Highlight key achievements, decisions, and action items.
 
 Recordings Content:
 {text}"""
+
+            default_recording_prompt = """Please provide a concise and structured summary of the following transcription.
+Highlight key points, decisions made, and action items if any.
+
+Transcription:
+{text}"""
             
-            daily_prompt_template = settings.value("prompt_daily_summary", default_daily_prompt)
+            daily_prompt_template = settings.value("prompt_daily_summary_from_summaries", default_daily_prompt)
+            # Fallback if the new prompt key doesn't exist yet, maybe use the old one but it might expect raw text?
+            # actually, the old prompt expects {text}, so it might work if we verify wording.
+            # But let's stick to a specific one for "from summaries".
+            
             weekly_prompt_template = settings.value("prompt_weekly_summary", default_weekly_prompt)
+            recording_prompt_template = settings.value("prompt_summary", default_recording_prompt)
             
-            # Process daily summaries
-            for date in pending_dates:
+            # 2. Process Dates (Newest -> Oldest)
+            for date in sorted_dates:
                 if self._cancelled:
                     break
                     
-                current += 1
-                self.progress.emit(current, total)
+                current_step += 1
+                self.progress.emit(current_step, total_steps)
                 
                 # Fetch recordings for the day
                 tags_list = self.tags_filter.split(',') if self.tags_filter else None
@@ -120,30 +177,70 @@ Recordings Content:
                 
                 if not recordings:
                     continue
-                    
-                # Prepare text
-                full_text = self._prepare_recordings_text(recordings)
-                if not full_text.strip():
-                    continue
-                    
-                # Generate summary
-                prompt = daily_prompt_template.replace("{text}", full_text)
-                summary = provider.generate_content(prompt)
                 
-                # Save to database
-                self.db.save_daily_summary(date, summary, self.tags_filter)
-                daily_count += 1
-                self.item_completed.emit("daily", date, summary)
+                # Sort recordings Newest -> Oldest (created_at desc) - fetch_by_dates already does this
                 
-            # Process weekly summaries
-            for week_start in pending_weeks:
+                day_generated_summaries = [] # To store summaries we might use for daily summary
+                day_has_pending_daily = False
+                
+                # Check if daily summary is missing
+                # If specific_dates is active, we force generation (treat as missing)
+                existing_daily = self.db.get_daily_summary(date, self.tags_filter)
+                if not existing_daily or (self.specific_dates and date in self.specific_dates):
+                    day_has_pending_daily = True
+                
+                # Process recordings for this day
+                processed_rec_for_day = False
+                for rec in recordings:
+                    if self._cancelled:
+                        break
+                        
+                    # Check if recording needs summary
+                    param_summary = rec.get('summary')
+                    
+                    rec_summary = None
+                    if not param_summary or not param_summary.strip():
+                        if self.generate_recordings:
+                            text = rec.get('transcription', '')
+                            if text and text.strip():
+                                prompt = recording_prompt_template.replace("{text}", text)
+                                rec_summary = provider.generate_content(prompt)
+                                self.db.update_ai_content(rec['id'], summary=rec_summary)
+                                recordings_count += 1
+                                self.item_completed.emit("recording", rec.get('title', 'Untitled'), rec_summary)
+                                processed_rec_for_day = True
+                                
+                    if not rec_summary and param_summary:
+                        rec_summary = param_summary
+                    
+                    if rec_summary:
+                        day_generated_summaries.append(f"Title: {rec.get('title', 'Untitled')}\nSummary: {rec_summary}")
+                
+                # Generate Daily Summary if needed
+                # We generate if:
+                # 1. generate_daily is True AND
+                # 2. (Daily summary is missing OR We just generated new recording summaries which might update the day)
+                # Actually, strictly following "Daily summary uses summaries of each meeting", 
+                # if we just generated a recording summary, the old daily summary is stale.
+                # So we should regenerate if processed_rec_for_day is True OR day_has_pending_daily.
+                
+                if self.generate_daily and (day_has_pending_daily or processed_rec_for_day) and day_generated_summaries:
+                    full_text = "\n\n".join(day_generated_summaries)
+                    prompt = daily_prompt_template.replace("{text}", full_text)
+                    summary = provider.generate_content(prompt)
+                    
+                    self.db.save_daily_summary(date, summary, self.tags_filter)
+                    daily_count += 1
+                    self.item_completed.emit("daily", date, summary)
+
+            # 3. Process Weeks (Newest -> Oldest)
+            for week_start in weeks_to_process:
                 if self._cancelled:
                     break
                     
-                current += 1
-                self.progress.emit(current, total)
+                current_step += 1
+                self.progress.emit(current_step, total_steps)
                 
-                # Fetch recordings for the week (7 days starting from Monday)
                 week_dates = self._get_week_dates(week_start)
                 tags_list = self.tags_filter.split(',') if self.tags_filter else None
                 recordings = self.db.fetch_by_dates(week_dates, tags_list)
@@ -151,21 +248,18 @@ Recordings Content:
                 if not recordings:
                     continue
                     
-                # Prepare text
                 full_text = self._prepare_recordings_text(recordings)
                 if not full_text.strip():
                     continue
                     
-                # Generate summary
                 prompt = weekly_prompt_template.replace("{text}", full_text)
                 summary = provider.generate_content(prompt)
                 
-                # Save to database
                 self.db.save_weekly_summary(week_start, summary, self.tags_filter)
                 weekly_count += 1
                 self.item_completed.emit("weekly", week_start, summary)
                 
-            self.finished.emit(daily_count, weekly_count)
+            self.finished.emit(recordings_count, daily_count, weekly_count)
             
         except Exception as e:
             self.error.emit(str(e))

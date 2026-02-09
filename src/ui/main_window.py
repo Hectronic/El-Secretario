@@ -36,9 +36,10 @@ from src.ui.chat_widget import ChatWidget
 from src.ui.collection_widget import CollectionWidget
 from src.ui.calendar_widget import CalendarWidget
 from src.ui.styles import LIST_WIDGET_STYLE, NEW_CHAT_BUTTON_STYLE, apply_theme
-from src.ui.components import RecordingListItemWidget
+from src.ui.components import RecordingListItemWidget, SummaryListItemWidget
 
 from src.ui.batch_process_widget import BatchProcessWidget
+from src.ui.summary_viewer import SummaryViewerWidget
 from src.notebook_database import NotebookDBManager
 from src.ui.notebooks_list_widget import NotebooksListWidget
 from src.ui.notebook_widget import NotebookWidget
@@ -111,6 +112,14 @@ class MainWindow(QMainWindow):
         self.fav_filter_cb.setToolTip("Show Favorites Only")
         self.fav_filter_cb.stateChanged.connect(self.load_history)
         filter_layout.addWidget(self.fav_filter_cb)
+        
+        # Refresh Button
+        self.refresh_btn = QPushButton()
+        self.refresh_btn.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_BrowserReload))
+        self.refresh_btn.setToolTip("Refresh List")
+        self.refresh_btn.setFixedSize(24, 24)
+        self.refresh_btn.clicked.connect(self.refresh_sidebar)
+        filter_layout.addWidget(self.refresh_btn, alignment=Qt.AlignmentFlag.AlignRight)
         
         left_layout.addLayout(filter_layout)
         
@@ -461,17 +470,45 @@ class MainWindow(QMainWindow):
         else:
             records = self.db.fetch_all(tag_filter=tag_filter, favorites_only=favorites_only)
             
-        for record in records:
+        # Fetch summaries (only if not filtering by favorites, as summaries don't have favorites yet)
+        all_items = []
+        for r in records:
+            r['type'] = 'recording'
+            r['sort_date'] = r['created_at']
+            all_items.append(r)
+            
+        if not favorites_only and not self.current_date_filter:
+            # Fetch Daily Summaries
+            daily_sums = self.db.fetch_daily_summaries(limit=20) # Limit to recent ones for now
+            for ds in daily_sums:
+                ds['type'] = 'daily'
+                ds['sort_date'] = ds['date'] + " 23:59:59" # Put at end of day
+                all_items.append(ds)
+                
+            # Fetch Weekly Summaries
+            weekly_sums = self.db.fetch_weekly_summaries(limit=5)
+            for ws in weekly_sums:
+                ws['type'] = 'weekly'
+                ws['sort_date'] = ws['week_start'] + " 00:00:00" # Put at start of week
+                all_items.append(ws)
+        
+        # Sort combined list by date descending
+        all_items.sort(key=lambda x: x['sort_date'], reverse=True)
+
+        for item_data in all_items:
             item = QListWidgetItem(self.history_list)
-            widget = RecordingListItemWidget(record)
+            
+            if item_data['type'] == 'recording':
+                widget = RecordingListItemWidget(item_data)
+                widget.favorite_toggled.connect(lambda checked, r_id=item_data['id']: self.on_favorite_toggled(r_id, checked))
+                widget.delete_requested.connect(lambda r_id=item_data['id']: self.delete_recording(r_id))
+            else:
+                widget = SummaryListItemWidget(item_data)
+                
             item.setSizeHint(widget.sizeHint())
-            
-            widget.favorite_toggled.connect(lambda checked, r_id=record['id']: self.on_favorite_toggled(r_id, checked))
-            widget.delete_requested.connect(lambda r_id=record['id']: self.delete_recording(r_id))
-            
             self.history_list.addItem(item)
             self.history_list.setItemWidget(item, widget)
-            item.setData(Qt.ItemDataRole.UserRole, record) # Still store data for click handler
+            item.setData(Qt.ItemDataRole.UserRole, item_data) # Store data for click handler
             
         # Re-apply search filter if any
         self.filter_history_list(self.search_input.text())
@@ -483,6 +520,11 @@ class MainWindow(QMainWindow):
                 self.welcome_widget.load_today()
             except Exception as e:
                 print(f"Error refreshing welcome widget: {e}")
+
+    def refresh_sidebar(self):
+        """Manually refresh the history list and tags."""
+        self.load_history()
+        self.refresh_tag_filter()
 
     def refresh_tag_filter(self):
         current_tag = self.tag_filter_combo.currentText()
@@ -579,8 +621,98 @@ class MainWindow(QMainWindow):
         self.open_chat_tab(initial_contexts=contexts)
 
     def on_history_item_clicked(self, item):
-        record = item.data(Qt.ItemDataRole.UserRole)
-        self.open_recording_tab(record['id'])
+        data = item.data(Qt.ItemDataRole.UserRole)
+        type_ = data.get('type', 'recording')
+        
+        if type_ == 'recording':
+            self.open_recording_tab(data['id'])
+        else:
+            self.open_summary_tab(data)
+
+    def open_summary_tab(self, summary_data):
+        # Check if already open
+        for i in range(self.central_tabs.count()):
+            widget = self.central_tabs.widget(i)
+            if isinstance(widget, SummaryViewerWidget):
+                # Compare content or ID to identify duplicate?
+                # For summaries, we might use date/week_start + type as ID
+                w_data = widget.summary_data
+                if w_data.get('type') == summary_data.get('type'):
+                    if w_data.get('type') == 'daily' and w_data.get('date') == summary_data.get('date'):
+                        self.central_tabs.setCurrentIndex(i)
+                        return
+                    if w_data.get('type') == 'weekly' and w_data.get('week_start') == summary_data.get('week_start'):
+                        self.central_tabs.setCurrentIndex(i)
+                        return
+
+        viewer = SummaryViewerWidget(summary_data)
+        viewer.regenerate_requested.connect(self.regenerate_summary)
+        # viewer.close_requested.connect(...) # If we added a close signal
+        
+        type_ = summary_data.get('type')
+        title = f"📅 {summary_data.get('date')}" if type_ == 'daily' else f"Week {summary_data.get('week_start')}"
+        
+        index = self.central_tabs.addTab(viewer, title)
+        self.central_tabs.setCurrentIndex(index)
+
+    def regenerate_summary(self, summary_data):
+        from src.summary_generator import SummaryGenerator
+        from PyQt6.QtWidgets import QProgressDialog
+        
+        date = summary_data.get('date')
+        if not date:
+            return
+
+        # Create progress dialog
+        progress = QProgressDialog(f"Regenerating summary for {date}...", "Cancel", 0, 0, self)
+        progress.setWindowModality(Qt.WindowModality.WindowModal)
+        progress.show()
+        
+        # Instantiate Generator
+        self.regen_worker = SummaryGenerator(
+            generate_daily=True,
+            generate_weekly=False,
+            generate_recordings=True, # Ensure recordings are checked/generated
+            specific_dates=[date],
+            exclude_today=False # We want to allow today regeneration
+        )
+        
+        self.regen_worker.progress.connect(lambda c, t: progress.setValue(c)) # Indeterminate mostly
+        self.regen_worker.finished.connect(lambda: self.on_regeneration_finished(progress, summary_data))
+        self.regen_worker.error.connect(lambda e: self.on_regeneration_error(progress, e))
+        
+        progress.canceled.connect(self.regen_worker.cancel)
+        self.regen_worker.start()
+
+    def on_regeneration_finished(self, progress, summary_data):
+        progress.close()
+        QMessageBox.information(self, "Success", "Summary regenerated successfully.")
+        
+        # Reload the tab content
+        # We need to fetch the fresh summary from DB
+        date = summary_data.get('date')
+        new_summary_data = self.db.get_daily_summary_details(date)
+        
+        if new_summary_data:
+            # maintain type info
+            new_summary_data['type'] = 'daily'
+            
+            # Update the summary_data in the viewer
+            # Find the viewer
+            for i in range(self.central_tabs.count()):
+                widget = self.central_tabs.widget(i)
+                if isinstance(widget, SummaryViewerWidget):
+                    w_data = widget.summary_data
+                    if w_data.get('type') == 'daily' and w_data.get('date') == date:
+                        widget.update_content(new_summary_data)
+                        break
+                    
+        # Refresh sidebar
+        self.load_history()
+
+    def on_regeneration_error(self, progress, error_msg):
+        progress.close()
+        QMessageBox.critical(self, "Error", f"Failed to regenerate summary: {error_msg}")
 
 
 

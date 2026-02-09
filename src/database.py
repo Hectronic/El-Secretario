@@ -143,6 +143,12 @@ class DBManager:
                 if 'context_data' not in chat_columns:
                     cursor.execute('ALTER TABLE chat_sessions ADD COLUMN context_data TEXT')
                     
+                # Migration: Update existing summaries to have 23:59:59 timestamp
+                # Ensures they appear after recordings for the day when sorted by time (if applicable)
+                # or just meets user requirement.
+                cursor.execute("UPDATE daily_summaries SET generated_at = date || ' 23:59:59' WHERE generated_at NOT LIKE '%23:59:59'")
+                cursor.execute("UPDATE weekly_summaries SET generated_at = week_start || ' 23:59:59' WHERE generated_at NOT LIKE '%23:59:59'")
+
                 conn.commit()
             logging.info(f"Database initialized: {self.db_name}")
         except Exception as e:
@@ -626,7 +632,8 @@ class DBManager:
         """
         with self.get_connection() as conn:
             cursor = conn.cursor()
-            now = datetime.now().isoformat(sep=' ', timespec='seconds')
+            # Set time to 23:59:59 of the given date
+            now = f"{date} 23:59:59"
             # Use empty string instead of NULL for tags_filter to make UNIQUE constraint work
             tags_value = tags_filter if tags_filter else ''
             
@@ -661,6 +668,27 @@ class DBManager:
             row = cursor.fetchone()
             return row['summary'] if row else None
 
+    def get_daily_summary_details(self, date: str, tags_filter: Optional[str] = None) -> Optional[Dict[str, Any]]:
+        """
+        Get full daily summary details.
+        
+        Args:
+            date: Date string in 'YYYY-MM-DD' format.
+            tags_filter: Tags filter to match (None = no filter).
+            
+        Returns:
+            The summary dict if found, None otherwise.
+        """
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            tags_value = tags_filter if tags_filter else ''
+            cursor.execute(
+                'SELECT * FROM daily_summaries WHERE date = ? AND tags_filter = ?',
+                (date, tags_value)
+            )
+            row = cursor.fetchone()
+            return dict(row) if row else None
+
     def save_weekly_summary(self, week_start: str, summary: str, tags_filter: Optional[str] = None) -> int:
         """
         Save or update a weekly summary.
@@ -675,7 +703,8 @@ class DBManager:
         """
         with self.get_connection() as conn:
             cursor = conn.cursor()
-            now = datetime.now().isoformat(sep=' ', timespec='seconds')
+            # Set time to 23:59:59 of the week start date
+            now = f"{week_start} 23:59:59"
             # Use empty string instead of NULL for tags_filter to make UNIQUE constraint work
             tags_value = tags_filter if tags_filter else ''
             
@@ -706,6 +735,53 @@ class DBManager:
             cursor.execute(
                 'SELECT summary FROM weekly_summaries WHERE week_start = ? AND tags_filter = ?',
                 (week_start, tags_value)
+            )
+            row = cursor.fetchone()
+            return row['summary'] if row else None
+
+    def get_records_without_summary(self, limit: Optional[int] = None) -> List[Dict[str, Any]]:
+        """
+        Get recordings that have transcription but no summary.
+        
+        Args:
+            limit: Optional limit on number of records to return.
+            
+        Returns:
+            List of record dictionaries.
+        """
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            query = '''
+                SELECT * FROM records 
+                WHERE transcription IS NOT NULL AND transcription != ''
+                AND (summary IS NULL OR summary = '')
+                ORDER BY created_at DESC
+            '''
+            params = []
+            if limit:
+                query += " LIMIT ?"
+                params.append(limit)
+                
+            cursor.execute(query, params)
+            return [dict(row) for row in cursor.fetchall()]
+
+    def get_daily_summary(self, date: str, tags_filter: Optional[str] = None) -> Optional[str]:
+        """
+        Get a daily summary.
+        
+        Args:
+            date: Date string in 'YYYY-MM-DD' format.
+            tags_filter: Tags filter to match (None = no filter).
+            
+        Returns:
+            The summary text if found, None otherwise.
+        """
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            tags_value = tags_filter if tags_filter else ''
+            cursor.execute(
+                'SELECT summary FROM daily_summaries WHERE date = ? AND tags_filter = ?',
+                (date, tags_value)
             )
             row = cursor.fetchone()
             return row['summary'] if row else None
@@ -747,12 +823,13 @@ class DBManager:
             ''')
             return [row['week_monday'] for row in cursor.fetchall()]
 
-    def get_dates_without_summary(self, tags_filter: Optional[str] = None) -> List[str]:
+    def get_dates_without_summary(self, tags_filter: Optional[str] = None, exclude_today: bool = False) -> List[str]:
         """
         Get dates with content but without a summary.
         
         Args:
             tags_filter: Tags filter to check against (None = no filter).
+            exclude_today: If True, exclude the current date.
             
         Returns:
             List of date strings in 'YYYY-MM-DD' format.
@@ -760,23 +837,62 @@ class DBManager:
         with self.get_connection() as conn:
             cursor = conn.cursor()
             tags_value = tags_filter if tags_filter else ''
-            cursor.execute('''
+            
+            query = '''
                 SELECT DISTINCT date(created_at) as record_date
                 FROM records
                 WHERE transcription IS NOT NULL AND transcription != ''
                 AND date(created_at) NOT IN (
                     SELECT date FROM daily_summaries WHERE tags_filter = ?
                 )
-                ORDER BY record_date DESC
-            ''', (tags_value,))
+            '''
+            params = [tags_value]
+            
+            if exclude_today:
+                query += " AND date(created_at) != date('now', 'localtime')"
+                
+            query += " ORDER BY record_date DESC"
+            
+            cursor.execute(query, params)
             return [row['record_date'] for row in cursor.fetchall()]
 
-    def get_weeks_without_summary(self, tags_filter: Optional[str] = None) -> List[str]:
+    def fetch_daily_summaries(self, limit: Optional[int] = None) -> List[Dict[str, Any]]:
+        """
+        Fetch all daily summaries ordered by date descending.
+        """
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            query = "SELECT * FROM daily_summaries ORDER BY date DESC"
+            params = []
+            if limit:
+                query += " LIMIT ?"
+                params.append(limit)
+                
+            cursor.execute(query, params)
+            return [dict(row) for row in cursor.fetchall()]
+
+    def fetch_weekly_summaries(self, limit: Optional[int] = None) -> List[Dict[str, Any]]:
+        """
+        Fetch all weekly summaries ordered by week_start descending.
+        """
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            query = "SELECT * FROM weekly_summaries ORDER BY week_start DESC"
+            params = []
+            if limit:
+                query += " LIMIT ?"
+                params.append(limit)
+                
+            cursor.execute(query, params)
+            return [dict(row) for row in cursor.fetchall()]
+
+    def get_weeks_without_summary(self, tags_filter: Optional[str] = None, exclude_current_week: bool = False) -> List[str]:
         """
         Get weeks with content but without a summary.
         
         Args:
             tags_filter: Tags filter to check against (None = no filter).
+            exclude_current_week: If True, exclude the current week.
             
         Returns:
             List of Monday date strings in 'YYYY-MM-DD' format.
@@ -784,7 +900,8 @@ class DBManager:
         with self.get_connection() as conn:
             cursor = conn.cursor()
             tags_value = tags_filter if tags_filter else ''
-            cursor.execute('''
+            
+            query = '''
                 SELECT DISTINCT 
                     date(created_at, 'weekday 1', '-7 days') as week_monday
                 FROM records
@@ -792,8 +909,16 @@ class DBManager:
                 AND date(created_at, 'weekday 1', '-7 days') NOT IN (
                     SELECT week_start FROM weekly_summaries WHERE tags_filter = ?
                 )
-                ORDER BY week_monday DESC
-            ''', (tags_value,))
+            '''
+            params = [tags_value]
+            
+            if exclude_current_week:
+                # Calculate current week's monday
+                query += " AND date(created_at, 'weekday 1', '-7 days') != date('now', 'weekday 1', '-7 days')"
+                
+            query += " ORDER BY week_monday DESC"
+            
+            cursor.execute(query, params)
             return [row['week_monday'] for row in cursor.fetchall()]
 
     def get_dates_with_summary(self, tags_filter: Optional[str] = None) -> List[str]:

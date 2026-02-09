@@ -176,3 +176,49 @@ class RecordingListItemWidget(QWidget):
     def on_fav_toggled(self, checked):
         self.update_fav_icon(checked)
         self.favorite_toggled.emit(checked)
+
+
+class SummaryListItemWidget(QWidget):
+    """Widget for displaying daily/weekly summaries in the list."""
+    
+    def __init__(self, summary_data, parent=None):
+        super().__init__(parent)
+        self.summary_data = summary_data
+        self.init_ui()
+        
+    def init_ui(self):
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(5, 5, 5, 5)
+        layout.setSpacing(5)
+        
+        # Info Section
+        info_widget = QWidget()
+        info_widget.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
+        info_widget.setMinimumWidth(50)
+        info_layout = QVBoxLayout(info_widget)
+        info_layout.setContentsMargins(0, 0, 0, 0)
+        info_layout.setSpacing(2)
+        
+        type_ = self.summary_data.get('type', 'daily')
+        if type_ == 'daily':
+            date_str = self.summary_data.get('date')
+            title = f"📅 Daily Summary"
+            subtitle = date_str
+            # Icon or color distinction could be added here
+        else:
+            week_start = self.summary_data.get('week_start')
+            title = f"Week Summary"
+            subtitle = f"Week of {week_start}"
+            
+        self.title_label = QLabel(title)
+        self.title_label.setStyleSheet("font-weight: bold; font-size: 14px; color: #4CAF50;") # Green for summaries
+        info_layout.addWidget(self.title_label)
+        
+        self.subtitle_label = QLabel(subtitle)
+        self.subtitle_label.setStyleSheet("font-size: 12px; color: #888;")
+        info_layout.addWidget(self.subtitle_label)
+        
+        layout.addWidget(info_widget, 1)
+        
+        # We could add delete button specifically for summaries if needed
+        # For now, keep it simple.

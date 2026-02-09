@@ -21,6 +21,7 @@ from PyQt6.QtCore import Qt
 
 from src.ui.maintenance_widget import MaintenanceWidget
 from src.ui.batch_process_widget import BatchProcessWidget
+from src.ui.summary_batch_widget import SummaryBatchWidget
 
 
 class ToolsWidget(QWidget):
@@ -85,6 +86,10 @@ class ToolsWidget(QWidget):
         # Processing Tab (from BatchProcessWidget)
         self.processing_widget = BatchProcessWidget()
         self.tabs.addTab(self.processing_widget, "⏳ Processing")
+
+        # Summary Tab (New)
+        self.summary_widget = SummaryBatchWidget()
+        self.tabs.addTab(self.summary_widget, "📝 Summaries")
 
         # Data Tab (from MaintenanceWidget - export/import)
         self.data_widget = self._create_data_tab()

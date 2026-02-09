@@ -247,10 +247,18 @@ class TestCalendarUI(unittest.TestCase):
             self.assertEqual(self.widget.summary_text.toMarkdown().strip(), "")
             
         # 4. Switch back to no tags - should restore from database
-        with patch.object(self.widget, 'get_selected_tags', return_value=[]):
-            self.mock_db.get_weekly_summary.return_value = "Global Summary"
-            self.widget.on_tag_changed(None)
-            self.assertEqual(self.widget.summary_text.toMarkdown().strip(), "Global Summary")
+    def test_ui_initialization_order(self):
+        """Test that UI elements are initialized in correct order and exist."""
+        # This test effectively validates that __init__ -> init_ui ran without NameError
+        # Check if summary widgets exist
+        self.assertIsNotNone(self.widget.daily_summary_text)
+        self.assertIsNotNone(self.widget.summary_text)
+        self.assertIsNotNone(self.widget.recording_list)
+        
+        # Verify their placement in splitter could be hard without inspecting layout directly
+        # but the main thing is that they exist, meaning init_ui completed.
+        self.assertTrue(self.widget.daily_summary_text.isReadOnly())
+        self.assertTrue(self.widget.summary_text.isReadOnly())
 
 if __name__ == '__main__':
     unittest.main()

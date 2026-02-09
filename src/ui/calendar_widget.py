@@ -112,8 +112,6 @@ class CalendarWidget(QWidget):
         self.open_tab_btn.setMinimumHeight(40)
         recordings_layout.addWidget(self.open_tab_btn)
         
-        right_splitter.addWidget(recordings_widget)
-        
         # Middle: Daily Summary
         daily_summary_widget = QWidget()
         daily_summary_layout = QVBoxLayout(daily_summary_widget)
@@ -124,8 +122,6 @@ class CalendarWidget(QWidget):
         self.daily_summary_text.setReadOnly(True)
         daily_summary_layout.addWidget(self.daily_summary_text)
         
-        right_splitter.addWidget(daily_summary_widget)
-        
         # Bottom: Weekly Summary
         summary_widget = QWidget()
         summary_layout = QVBoxLayout(summary_widget)
@@ -135,15 +131,20 @@ class CalendarWidget(QWidget):
         self.summary_text = QTextEdit()
         self.summary_text.setReadOnly(True)
         summary_layout.addWidget(self.summary_text)
-        
+
+        # Add to main splitter
+        # Order: Daily Summary -> Weekly Summary -> Recordings
+        right_splitter.addWidget(daily_summary_widget)
         right_splitter.addWidget(summary_widget)
+        right_splitter.addWidget(recordings_widget)
         
         # Add to main splitter
         splitter.addWidget(right_splitter)
         
         # Set initial sizes
         splitter.setSizes([300, 800])
-        right_splitter.setSizes([300, 200, 300])
+        # New order: Daily, Weekly, Recordings
+        right_splitter.setSizes([250, 250, 400])
         
         layout.addWidget(splitter)
         
