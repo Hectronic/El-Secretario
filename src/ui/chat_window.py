@@ -125,14 +125,18 @@ class ChatWindow(QDialog):
 
         # 2. Start Chat Thread
         settings = QSettings("Hectronic", "Secretario")
-        api_key = settings.value("gemini_key", "")
         
-        if not api_key:
-            self.append_to_chat("System", "Error: Gemini API Key not set in Settings.")
+        # Validate AI provider configuration
+        from src.ai_provider import validate_ai_provider_config
+        is_valid, error_msg = validate_ai_provider_config(settings)
+        
+        if not is_valid:
+            self.append_to_chat("System", f"Error: {error_msg}")
             return
 
         self.set_busy(True)
-        self.chat_thread = ChatThread(api_key, query, context_text, self.chat_history)
+        # api_key parameter kept for backward compatibility
+        self.chat_thread = ChatThread("", query, context_text, self.chat_history)
         self.chat_thread.finished.connect(self.on_chat_finished)
         self.chat_thread.error.connect(self.on_chat_error)
         self.chat_thread.start()

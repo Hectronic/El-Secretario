@@ -13,9 +13,12 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QPushButton, 
-                             QLabel, QProgressBar, QComboBox, QSpacerItem, QSizePolicy)
+                             QLabel, QProgressBar, QComboBox, QSpacerItem, QSizePolicy,
+                             QLineEdit, QFormLayout, QGroupBox, QCheckBox)
 from PyQt6.QtCore import Qt, QTimer, pyqtSignal
 from src.audio import Recorder
+from src.database import DBManager
+from src.ui.components import TagsLineEdit
 
 class RecordingInProgressWidget(QWidget):
     finished = pyqtSignal(str, dict)  # Emits file path and config when finished
@@ -27,6 +30,7 @@ class RecordingInProgressWidget(QWidget):
         self.recorder.amplitude_changed.connect(self.update_vu_meter)
         self.config = config or {}
         self.recording_started = False
+        self.db = DBManager()  # For tags autocomplete
         
         # Set device from config if provided
         if self.config.get("device_index") is not None:
@@ -44,7 +48,7 @@ class RecordingInProgressWidget(QWidget):
     def init_ui(self):
         layout = QVBoxLayout(self)
         layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        layout.setSpacing(30)
+        layout.setSpacing(20)
 
         # Status Label
         self.status_label = QLabel("Recording in Progress...")
@@ -55,17 +59,6 @@ class RecordingInProgressWidget(QWidget):
         self.timer_label = QLabel("00:00")
         self.timer_label.setStyleSheet("font-size: 64px; font-weight: bold; color: #eeeeee;")
         layout.addWidget(self.timer_label, alignment=Qt.AlignmentFlag.AlignCenter)
-
-        # Config info
-        config_info = []
-        if self.config.get("model"):
-            config_info.append(f"Model: {self.config['model']}")
-        if self.config.get("diarization"):
-            config_info.append("Diarization: ON")
-        if config_info:
-            config_label = QLabel(" | ".join(config_info))
-            config_label.setStyleSheet("font-size: 14px; color: #888;")
-            layout.addWidget(config_label, alignment=Qt.AlignmentFlag.AlignCenter)
 
         # VU Meter
         self.vu_meter = QProgressBar()
@@ -84,6 +77,54 @@ class RecordingInProgressWidget(QWidget):
             }
         """)
         layout.addWidget(self.vu_meter, alignment=Qt.AlignmentFlag.AlignCenter)
+
+        # Recording Options Group
+        options_group = QGroupBox("Recording Options")
+        options_group.setMinimumWidth(450)
+        options_group.setStyleSheet("""
+            QGroupBox {
+                font-size: 14px;
+                font-weight: bold;
+                border: 2px solid #555;
+                border-radius: 10px;
+                margin-top: 10px;
+                padding-top: 10px;
+            }
+            QGroupBox::title {
+                subcontrol-origin: margin;
+                left: 10px;
+                padding: 0 5px;
+            }
+        """)
+        options_layout = QFormLayout()
+        options_layout.setSpacing(10)
+
+        # Title field
+        self.title_input = QLineEdit()
+        self.title_input.setPlaceholderText("Enter recording title...")
+        options_layout.addRow("Title:", self.title_input)
+
+        # Tags field with autocomplete
+        self.tags_input = TagsLineEdit()
+        all_tags = self.db.get_all_tags()
+        self.tags_input.set_tags(all_tags)
+        options_layout.addRow("Tags:", self.tags_input)
+
+        # Model selector
+        self.model_combo = QComboBox()
+        self.model_combo.addItems(["tiny", "base", "small", "medium", "large-v3"])
+        initial_model = self.config.get("model", "base")
+        self.model_combo.setCurrentText(initial_model)
+        options_layout.addRow("Model:", self.model_combo)
+
+        # Diarization checkbox
+        self.diarization_check = QCheckBox("Enable speaker diarization")
+        self.diarization_check.setToolTip("Enable speaker diarization (Requires HF Token)")
+        self.diarization_check.setChecked(self.config.get("diarization", False))
+        options_layout.addRow("", self.diarization_check)
+
+        options_group.setLayout(options_layout)
+        layout.addWidget(options_group, alignment=Qt.AlignmentFlag.AlignCenter)
 
         # Controls
         controls_layout = QHBoxLayout()
@@ -145,7 +186,15 @@ class RecordingInProgressWidget(QWidget):
             return
         file_path = self.recorder.stop()
         if file_path:
-            self.finished.emit(file_path, self.config)
+            # Build final config with user inputs
+            final_config = {
+                **self.config,
+                "title": self.title_input.text().strip(),
+                "tags": self.tags_input.text().strip(),
+                "model": self.model_combo.currentText(),
+                "diarization": self.diarization_check.isChecked()
+            }
+            self.finished.emit(file_path, final_config)
         else:
             self.cancelled.emit()
 

@@ -18,8 +18,8 @@ import soundfile as sf
 from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QTextEdit, 
                              QPushButton, QLabel, QComboBox, QFormLayout, 
                              QLineEdit, QGroupBox, QTabWidget, QFrame, 
-                             QMessageBox, QStyle, QSlider, QProgressBar, QApplication, QCheckBox, QCompleter)
-from PyQt6.QtCore import Qt, QSettings, QUrl, pyqtSignal, QStringListModel
+                             QMessageBox, QStyle, QSlider, QProgressBar, QApplication, QCheckBox)
+from PyQt6.QtCore import Qt, QSettings, QUrl, pyqtSignal
 from PyQt6.QtMultimedia import QMediaPlayer, QAudioOutput
 from PyQt6.QtGui import QCursor
 
@@ -28,6 +28,7 @@ from src.audio import Recorder
 from src.worker import TranscriberThread
 from src.ai_assistant import AIAssistant
 from src.ui.dialogs import SpeakerDialog
+from src.ui.components import TagsLineEdit
 
 class RecordingWidget(QWidget):
     recording_saved = pyqtSignal() # To refresh history list in MainWindow
@@ -159,16 +160,12 @@ class RecordingWidget(QWidget):
         self.duration_label = QLabel("-")
         meta_layout.addRow("Duration:", self.duration_label)
         
-        self.tags_input = QLineEdit()
-        self.tags_input.setPlaceholderText("Work, Meeting, ...")
+        self.tags_input = TagsLineEdit()
         self.tags_input.setEnabled(False)
         
         # Setup Autocomplete for Tags
         all_tags = self.db.get_all_tags()
-        self.tags_completer = QCompleter(all_tags)
-        self.tags_completer.setCaseSensitivity(Qt.CaseSensitivity.CaseInsensitive)
-        self.tags_completer.setFilterMode(Qt.MatchFlag.MatchContains)
-        self.tags_input.setCompleter(self.tags_completer)
+        self.tags_input.set_tags(all_tags)
         
         meta_layout.addRow("Tags:", self.tags_input)
 
@@ -199,10 +196,7 @@ class RecordingWidget(QWidget):
         original_layout.addWidget(self.text_display)
         self.tabs.addTab(original_widget, "Original")
         
-        self.cleaned_display = QTextEdit()
-        self.cleaned_display.setReadOnly(True)
-        self.cleaned_display.setPlaceholderText("Cleaned text will appear here...")
-        self.tabs.addTab(self.cleaned_display, "Cleaned")
+
         
         self.summary_display = QTextEdit()
         self.summary_display.setReadOnly(True)
@@ -213,10 +207,7 @@ class RecordingWidget(QWidget):
         
         # AI Actions
         ai_layout = QHBoxLayout()
-        self.clean_btn = QPushButton("Clean Text (AI)")
-        self.clean_btn.clicked.connect(lambda: self.run_ai_task("clean"))
-        self.clean_btn.setEnabled(False)
-        ai_layout.addWidget(self.clean_btn)
+
         
         self.summarize_btn = QPushButton("Summarize (AI)")
         self.summarize_btn.clicked.connect(lambda: self.run_ai_task("summary"))
@@ -262,7 +253,7 @@ class RecordingWidget(QWidget):
         if record:
             self.current_record_id = record['id']
             self.text_display.setText(record['transcription'])
-            self.cleaned_display.setText(record['cleaned_text'] if record['cleaned_text'] else "")
+
             self.summary_display.setText(record['summary'] if record['summary'] else "")
             self.title_input.setText(record['title'] if record['title'] else "")
             self.title_input.setEnabled(True)
@@ -276,7 +267,7 @@ class RecordingWidget(QWidget):
             self.duration_label.setText(f"{record['duration']:.1f}s")
             
             has_text = bool(record['transcription'])
-            self.clean_btn.setEnabled(has_text)
+
             self.summarize_btn.setEnabled(has_text)
             self.rename_speakers_btn.setEnabled(has_text)
             
@@ -333,6 +324,11 @@ class RecordingWidget(QWidget):
         settings = QSettings("Hectronic", "Secretario")
         hf_token = settings.value("hf_token", "")
         enable_diarization = self.diarization_check.isChecked()
+        force_cpu = settings.value("force_cpu", False, type=bool)
+        compute_type = settings.value("compute_type", "int8")
+        # If "auto", pass None to let TranscriberThread auto-detect
+        if compute_type == "auto":
+            compute_type = None
         
         # Get duration for progress calculation
         duration = 0
@@ -341,7 +337,7 @@ class RecordingWidget(QWidget):
             duration = len(f) / f.samplerate
         except: pass
         
-        self.transcriber_thread = TranscriberThread(audio_path, model_size=model_size, language=language_code, hf_token=hf_token, enable_diarization=enable_diarization, total_duration=duration)
+        self.transcriber_thread = TranscriberThread(audio_path, model_size=model_size, compute_type=compute_type, language=language_code, hf_token=hf_token, enable_diarization=enable_diarization, total_duration=duration, force_cpu=force_cpu)
         self.transcriber_thread.finished.connect(self.on_transcription_finished)
         self.transcriber_thread.progress.connect(self.progress_bar.setValue)
         self.transcriber_thread.status_update.connect(self.status_label.setText)
@@ -428,13 +424,18 @@ class RecordingWidget(QWidget):
         if not text: return
         
         settings = QSettings("Hectronic", "Secretario")
-        api_key = settings.value("gemini_key", "")
-        if not api_key:
-            QMessageBox.warning(self, "Error", "API Key missing.")
+        
+        # Validate AI provider configuration
+        from src.ai_provider import validate_ai_provider_config
+        is_valid, error_msg = validate_ai_provider_config(settings)
+        if not is_valid:
+            QMessageBox.warning(self, "Error", error_msg)
             return
             
+        if task_type == "clean": return
         self.status_label.setText(f"Running {task_type}...")
-        self.ai_thread = AIAssistant(api_key, task_type, text)
+        # api_key parameter kept for backward compatibility
+        self.ai_thread = AIAssistant("", task_type, text)
         self.ai_thread.finished.connect(self.on_ai_finished)
         self.ai_thread.error.connect(self.on_ai_error)
         self.ai_thread.start()
@@ -444,11 +445,10 @@ class RecordingWidget(QWidget):
         if task_type == "summary":
             self.summary_display.setText(result)
             self.db.update_ai_content(self.current_record_id, summary=result)
-            self.tabs.setCurrentIndex(2)
-        else:
-            self.cleaned_display.setText(result)
-            self.db.update_ai_content(self.current_record_id, cleaned_text=result)
             self.tabs.setCurrentIndex(1)
+            # Cleaned tab index would affect this logic, but since it's removed, the "Summary" tab index shifts.
+            # Original tab is index 0. Summary tab is now index 1.
+
 
     def on_ai_error(self, err):
         self.status_label.setText("AI Task Failed.")

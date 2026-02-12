@@ -40,6 +40,8 @@ class TestBatchProcess(unittest.TestCase):
             {'id': 2, 'filename': 'rec2.wav', 'duration': 20.0},
             {'id': 3, 'filename': 'rec3.wav', 'duration': 30.0}
         ]
+        self.mock_db.increment_attempt.return_value = 3  # Return 3 to trigger max retries path
+        self.mock_db.set_error.return_value = None
         
         self.widget = BatchProcessWidget()
 

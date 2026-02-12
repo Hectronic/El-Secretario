@@ -20,8 +20,8 @@ from PyQt6.QtWidgets import (QMainWindow, QWidget, QVBoxLayout,
                              QLabel, QMessageBox, QListWidgetItem, QComboBox,
                              QTabWidget, QSplitter, QApplication, QStyle, QLineEdit, QTabBar,
                              QCalendarWidget, QCheckBox, QFileDialog, QMenu)
-from PyQt6.QtCore import Qt, QSettings, QUrl
-from PyQt6.QtGui import QAction, QIcon, QDesktopServices
+from PyQt6.QtCore import Qt, QSettings, QUrl, QDate, QTimer
+from PyQt6.QtGui import QAction, QIcon, QDesktopServices, QTextCharFormat, QColor, QCursor
 
 from src.database import DBManager
 from src.notebook_database import NotebookDBManager
@@ -36,9 +36,10 @@ from src.ui.chat_widget import ChatWidget
 from src.ui.collection_widget import CollectionWidget
 from src.ui.calendar_widget import CalendarWidget
 from src.ui.styles import LIST_WIDGET_STYLE, NEW_CHAT_BUTTON_STYLE, apply_theme
-from src.ui.components import RecordingListItemWidget
+from src.ui.components import RecordingListItemWidget, SummaryListItemWidget
 
 from src.ui.batch_process_widget import BatchProcessWidget
+from src.ui.summary_viewer import SummaryViewerWidget
 from src.notebook_database import NotebookDBManager
 from src.ui.notebooks_list_widget import NotebooksListWidget
 from src.ui.notebook_widget import NotebookWidget
@@ -91,6 +92,44 @@ class MainWindow(QMainWindow):
         left_layout = QVBoxLayout(left_widget)
         left_layout.setContentsMargins(5, 5, 5, 5)
         
+        # Calendar Widget
+        self.calendar = QCalendarWidget()
+        self.calendar.setGridVisible(True)
+        self.calendar.selectionChanged.connect(self.on_calendar_date_changed)
+        # Set a fixed height or max height so it doesn't take too much space
+        self.calendar.setMaximumHeight(300)
+        left_layout.addWidget(self.calendar)
+        
+        # Week Details Button
+        self.open_calendar_btn = QPushButton("Week Details")
+        self.open_calendar_btn.clicked.connect(self.open_calendar_tab)
+        left_layout.addWidget(self.open_calendar_btn)
+        
+        # Calendar Navigation
+        nav_layout = QHBoxLayout()
+        self.prev_week_btn = QPushButton("<< Prev Week")
+        self.prev_week_btn.clicked.connect(self.prev_week_sidebar)
+        self.next_week_btn = QPushButton("Next Week >>")
+        self.next_week_btn.clicked.connect(self.next_week_sidebar)
+        nav_layout.addWidget(self.prev_week_btn)
+        nav_layout.addWidget(self.next_week_btn)
+        left_layout.addLayout(nav_layout)
+
+        # Reset Date Filter Button
+        self.reset_date_btn = QPushButton("Show All Dates")
+        self.reset_date_btn.clicked.connect(self.reset_date_filter)
+        left_layout.addWidget(self.reset_date_btn)
+        
+        # Initialize date filter state
+        self.current_date_filter = None # Single date (string) or None for week/all
+        self.current_week_monday = None # QDate of Monday if filtering by week
+        
+        # Set default to current week
+        today = QDate.currentDate()
+        self.current_week_monday = today.addDays(-(today.dayOfWeek() - 1))
+        # Highlight current week
+        QTimer.singleShot(100, self.update_calendar_visuals)
+
         # Search Box
         search_layout = QHBoxLayout()
         self.search_input = QLineEdit()
@@ -104,7 +143,7 @@ class MainWindow(QMainWindow):
         filter_layout.addWidget(QLabel("Filter:"))
         self.tag_filter_combo = QComboBox()
         self.tag_filter_combo.addItem("All")
-        self.tag_filter_combo.currentTextChanged.connect(self.load_history)
+        self.tag_filter_combo.currentTextChanged.connect(self.on_tag_filter_changed)
         filter_layout.addWidget(self.tag_filter_combo)
         
         self.fav_filter_cb = QCheckBox("★")
@@ -112,40 +151,23 @@ class MainWindow(QMainWindow):
         self.fav_filter_cb.stateChanged.connect(self.load_history)
         filter_layout.addWidget(self.fav_filter_cb)
         
+        # Refresh Button
+        self.refresh_btn = QPushButton()
+        self.refresh_btn.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_BrowserReload))
+        self.refresh_btn.setToolTip("Refresh List")
+        self.refresh_btn.setFixedSize(24, 24)
+        self.refresh_btn.clicked.connect(self.refresh_sidebar)
+        filter_layout.addWidget(self.refresh_btn, alignment=Qt.AlignmentFlag.AlignRight)
+        
         left_layout.addLayout(filter_layout)
         
         # History List
         self.history_list = QListWidget()
+        # Disable horizontal scrolling - long titles will be clipped
+        self.history_list.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         # self.history_list.setStyleSheet(LIST_WIDGET_STYLE) # Use Global Theme
         self.history_list.itemClicked.connect(self.on_history_item_clicked)
         left_layout.addWidget(self.history_list)
-
-
-        # Settings Button removed as per request (now in Welcome screen)
-        # self.settings_btn = QPushButton("Settings")
-        # self.settings_btn.clicked.connect(self.open_settings_tab)
-        # left_layout.addWidget(self.settings_btn)
-        
-        # Calendar Widget
-        self.calendar = QCalendarWidget()
-        self.calendar.setGridVisible(True)
-        self.calendar.selectionChanged.connect(self.on_calendar_date_changed)
-        # Set a fixed height or max height so it doesn't take too much space
-        self.calendar.setMaximumHeight(300)
-        left_layout.addWidget(self.calendar)
-        
-        # Open Full Calendar Button
-        self.open_calendar_btn = QPushButton("Open Full Calendar")
-        self.open_calendar_btn.clicked.connect(self.open_calendar_tab)
-        left_layout.addWidget(self.open_calendar_btn)
-        
-        # Reset Date Filter Button
-        self.reset_date_btn = QPushButton("Show All Dates")
-        self.reset_date_btn.clicked.connect(self.reset_date_filter)
-        left_layout.addWidget(self.reset_date_btn)
-        
-        # Initialize date filter state
-        self.current_date_filter = None
 
         self.splitter.addWidget(left_widget)
 
@@ -190,6 +212,7 @@ class MainWindow(QMainWindow):
 
         # 1. Chat History Section
         self.sessions_list = QListWidget()
+        self.sessions_list.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.sessions_list.itemClicked.connect(self.on_chat_session_clicked)
         
         self.delete_chat_session_btn = QPushButton("Delete Chat")
@@ -201,6 +224,7 @@ class MainWindow(QMainWindow):
         
         # 2. Collections Section
         self.collections_list = QListWidget()
+        self.collections_list.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.collections_list.itemClicked.connect(self.on_collection_clicked)
         
         self.open_collections_btn = QPushButton("Ver todas las colecciones")
@@ -211,6 +235,7 @@ class MainWindow(QMainWindow):
         
         # 3. Libretas (Notebooks) Section
         self.notebooks_list = QListWidget()
+        self.notebooks_list.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.notebooks_list.itemClicked.connect(self.on_notebook_clicked)
         
         self.open_notebooks_btn = QPushButton("Ver todas las libretas")
@@ -319,8 +344,18 @@ class MainWindow(QMainWindow):
         
         try:
             filename = os.path.basename(file_path)
+            # Use title from config, fallback to filename
+            title = config.get("title") or filename
             # Create DB entry to get an ID
-            record_id = self.db.save(filename, "", 0.0, title=filename)
+            record_id = self.db.save(filename, "", 0.0, title=title)
+            
+            # Update tags if provided
+            tags = config.get("tags", "")
+            if tags:
+                self.db.update_tags(record_id, tags)
+            
+            # Refresh sidebar to show new recording with title
+            self.load_history()
             
             # Open standard recording tab with config
             rec_widget = self.open_recording_tab(record_id, config)
@@ -331,6 +366,8 @@ class MainWindow(QMainWindow):
                 
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Failed to save recording: {e}")
+
+
 
     def open_chat_tab(self, session_id=None, initial_contexts=None):
         if not self.rag:
@@ -433,28 +470,108 @@ class MainWindow(QMainWindow):
         if self.central_tabs.count() == 0:
             self.show_welcome_screen()
 
-    def load_history(self):
+    def load_history(self, tag_filter="All", favorites_only=False):
         self.history_list.clear()
-        tag_filter = self.tag_filter_combo.currentText()
-        favorites_only = self.fav_filter_cb.isChecked()
         
-        if self.current_date_filter:
-            tags = [tag_filter] if tag_filter != "All" else None
-            records = self.db.fetch_by_date_range(self.current_date_filter, self.current_date_filter, tags, favorites_only=favorites_only)
+        # Get current filter settings from UI if not provided
+        if tag_filter == "All":
+            tag_filter = self.tag_filter_combo.currentText()
+        if not favorites_only:
+            favorites_only = self.fav_filter_cb.isChecked()
+
+        # 1. Fetch Recordings
+        records = []
+        tags_for_query = [tag_filter] if tag_filter != "All" else None
+
+        if self.current_week_monday:
+            # Range filtering (Monday to end of selection)
+            start_date = self.current_week_monday.toString("yyyy-MM-dd")
+            if self.current_date_filter:
+                end_date = self.current_date_filter
+            else:
+                end_date = self.current_week_monday.addDays(6).toString("yyyy-MM-dd")
+            records = self.db.fetch_by_date_range(start_date, end_date, tags_for_query, favorites_only=favorites_only)
+        elif self.current_date_filter:
+            # Specific day only (set via Ctrl+Click)
+            records = self.db.fetch_by_date_range(self.current_date_filter, self.current_date_filter, tags_for_query, favorites_only=favorites_only)
         else:
             records = self.db.fetch_all(tag_filter=tag_filter, favorites_only=favorites_only)
             
-        for record in records:
+        # 2. Combine with Summaries
+        all_items = []
+        for r in records:
+            r['type'] = 'recording'
+            r['sort_date'] = r['created_at']
+            all_items.append(r)
+            
+        if not favorites_only:
+            tags_filter = tag_filter if tag_filter != "All" else None
+            
+            if self.current_week_monday:
+                start_date = self.current_week_monday.toString("yyyy-MM-dd")
+                if self.current_date_filter:
+                    end_date = self.current_date_filter
+                else:
+                    end_date = self.current_week_monday.addDays(6).toString("yyyy-MM-dd")
+                
+                # Weekly Summary Context (Use Sunday as key)
+                week_sunday = self.current_week_monday.addDays(6).toString("yyyy-MM-dd")
+                weekly_summary = self.db.get_weekly_summary(week_sunday, tags_filter)
+                if weekly_summary:
+                    all_items.append({
+                        'type': 'weekly',
+                        'week_start': week_sunday,
+                        'summary': weekly_summary,
+                        'sort_date': week_sunday + " 23:59:59"
+                    })
+                
+                # Daily Summaries for the range
+                daily_sums = self.db.fetch_daily_summaries_by_range(start_date, end_date, tags_filter)
+                for ds in daily_sums:
+                    ds['type'] = 'daily'
+                    ds['sort_date'] = ds['date'] + " 23:59:59"
+                    all_items.append(ds)
+            elif self.current_date_filter:
+                # Specific day summary (Ctrl+Click)
+                summary_text = self.db.get_daily_summary(self.current_date_filter, tags_filter)
+                if summary_text:
+                    all_items.append({
+                        'type': 'daily',
+                        'date': self.current_date_filter,
+                        'summary': summary_text,
+                        'sort_date': self.current_date_filter + " 23:59:59"
+                    })
+            else:
+                # Fetch recent summaries as fallback when no filter
+                daily_sums = self.db.fetch_daily_summaries(limit=20)
+                for ds in daily_sums:
+                    ds['type'] = 'daily'
+                    ds['sort_date'] = ds['date'] + " 23:59:59"
+                    all_items.append(ds)
+                    
+                weekly_sums = self.db.fetch_weekly_summaries(limit=5)
+                for ws in weekly_sums:
+                    ws['type'] = 'weekly'
+                    ws['sort_date'] = ws['week_start'] + " 23:59:59"
+                    all_items.append(ws)
+        
+        # 3. Sort and Display
+        all_items.sort(key=lambda x: x['sort_date'], reverse=True)
+
+        for item_data in all_items:
             item = QListWidgetItem(self.history_list)
-            widget = RecordingListItemWidget(record)
+            
+            if item_data['type'] == 'recording':
+                widget = RecordingListItemWidget(item_data)
+                widget.favorite_toggled.connect(lambda checked, r_id=item_data['id']: self.on_favorite_toggled(r_id, checked))
+                widget.delete_requested.connect(lambda r_id=item_data['id']: self.delete_recording(r_id))
+            else:
+                widget = SummaryListItemWidget(item_data)
+                
             item.setSizeHint(widget.sizeHint())
-            
-            widget.favorite_toggled.connect(lambda checked, r_id=record['id']: self.on_favorite_toggled(r_id, checked))
-            widget.delete_requested.connect(lambda r_id=record['id']: self.delete_recording(r_id))
-            
             self.history_list.addItem(item)
             self.history_list.setItemWidget(item, widget)
-            item.setData(Qt.ItemDataRole.UserRole, record) # Still store data for click handler
+            item.setData(Qt.ItemDataRole.UserRole, item_data) # Store data for click handler
             
         # Re-apply search filter if any
         self.filter_history_list(self.search_input.text())
@@ -466,6 +583,11 @@ class MainWindow(QMainWindow):
                 self.welcome_widget.load_today()
             except Exception as e:
                 print(f"Error refreshing welcome widget: {e}")
+
+    def refresh_sidebar(self):
+        """Manually refresh the history list and tags."""
+        self.load_history()
+        self.refresh_tag_filter()
 
     def refresh_tag_filter(self):
         current_tag = self.tag_filter_combo.currentText()
@@ -537,18 +659,57 @@ class MainWindow(QMainWindow):
         self.open_chat_tab(initial_contexts=[{"type": "tag", "value": tag, "label": tag}])
 
     def open_calendar_tab(self):
-        # Check if already open
+        # If already open, switch to it and sync
         for i in range(self.central_tabs.count()):
             widget = self.central_tabs.widget(i)
             if isinstance(widget, CalendarWidget):
                 self.central_tabs.setCurrentIndex(i)
+                widget.set_selection(self.current_week_monday, self.current_date_filter)
                 return
 
-        cal_widget = CalendarWidget(self.rag)
-        cal_widget.start_chat_requested.connect(self.open_chat_tab_with_filters)
+        # Pass rag_engine (self) to the CalendarWidget
+        tab = CalendarWidget(self)
+        tab.start_chat_requested.connect(self.open_chat_tab_with_filters)
+        tab.selection_changed.connect(self.on_tab_selection_sync)
         
-        index = self.central_tabs.addTab(cal_widget, "Calendar")
+        # Set initial selection and tags
+        tag = self.tag_filter_combo.currentText()
+        tab.set_selection(self.current_week_monday, self.current_date_filter, tag if tag != "All" else None)
+        
+        index = self.central_tabs.addTab(tab, "Week Details")
         self.central_tabs.setCurrentIndex(index)
+
+    def on_tag_filter_changed(self, tag):
+        self.load_history()
+        self.sync_week_details_tab()
+
+    def on_tab_selection_sync(self, monday, date_str, tag=None):
+        """Update sidebar calendar state when user navigates inside the Week Details tab."""
+        self.current_week_monday = monday if monday.isValid() else None
+        self.current_date_filter = date_str
+        
+        # Update calendar widget without triggering signals
+        self.calendar.blockSignals(True)
+        if date_str:
+            target = QDate.fromString(date_str, "yyyy-MM-dd")
+            self.calendar.setSelectedDate(target)
+        self.calendar.blockSignals(False)
+        
+        # Sync tags if provided
+        if tag:
+            idx = self.tag_filter_combo.findText(tag)
+            if idx >= 0:
+                self.tag_filter_combo.blockSignals(True)
+                self.tag_filter_combo.setCurrentIndex(idx)
+                self.tag_filter_combo.blockSignals(False)
+        elif tag == "": # All
+             self.tag_filter_combo.blockSignals(True)
+             self.tag_filter_combo.setCurrentIndex(0)
+             self.tag_filter_combo.blockSignals(False)
+
+        self.update_calendar_visuals()
+        self.load_history()
+        self.refresh_tag_filter()
 
 
 
@@ -562,8 +723,98 @@ class MainWindow(QMainWindow):
         self.open_chat_tab(initial_contexts=contexts)
 
     def on_history_item_clicked(self, item):
-        record = item.data(Qt.ItemDataRole.UserRole)
-        self.open_recording_tab(record['id'])
+        data = item.data(Qt.ItemDataRole.UserRole)
+        type_ = data.get('type', 'recording')
+        
+        if type_ == 'recording':
+            self.open_recording_tab(data['id'])
+        else:
+            self.open_summary_tab(data)
+
+    def open_summary_tab(self, summary_data):
+        # Check if already open
+        for i in range(self.central_tabs.count()):
+            widget = self.central_tabs.widget(i)
+            if isinstance(widget, SummaryViewerWidget):
+                # Compare content or ID to identify duplicate?
+                # For summaries, we might use date/week_start + type as ID
+                w_data = widget.summary_data
+                if w_data.get('type') == summary_data.get('type'):
+                    if w_data.get('type') == 'daily' and w_data.get('date') == summary_data.get('date'):
+                        self.central_tabs.setCurrentIndex(i)
+                        return
+                    if w_data.get('type') == 'weekly' and w_data.get('week_start') == summary_data.get('week_start'):
+                        self.central_tabs.setCurrentIndex(i)
+                        return
+
+        viewer = SummaryViewerWidget(summary_data)
+        viewer.regenerate_requested.connect(self.regenerate_summary)
+        # viewer.close_requested.connect(...) # If we added a close signal
+        
+        type_ = summary_data.get('type')
+        title = f"📅 {summary_data.get('date')}" if type_ == 'daily' else f"📅 Week ending {summary_data.get('week_start')}"
+        
+        index = self.central_tabs.addTab(viewer, title)
+        self.central_tabs.setCurrentIndex(index)
+
+    def regenerate_summary(self, summary_data):
+        from src.summary_generator import SummaryGenerator
+        from PyQt6.QtWidgets import QProgressDialog
+        
+        date = summary_data.get('date')
+        if not date:
+            return
+
+        # Create progress dialog
+        progress = QProgressDialog(f"Regenerating summary for {date}...", "Cancel", 0, 0, self)
+        progress.setWindowModality(Qt.WindowModality.WindowModal)
+        progress.show()
+        
+        # Instantiate Generator
+        self.regen_worker = SummaryGenerator(
+            generate_daily=True,
+            generate_weekly=False,
+            generate_recordings=True, # Ensure recordings are checked/generated
+            specific_dates=[date],
+            exclude_today=False # We want to allow today regeneration
+        )
+        
+        self.regen_worker.progress.connect(lambda c, t: progress.setValue(c)) # Indeterminate mostly
+        self.regen_worker.finished.connect(lambda: self.on_regeneration_finished(progress, summary_data))
+        self.regen_worker.error.connect(lambda e: self.on_regeneration_error(progress, e))
+        
+        progress.canceled.connect(self.regen_worker.cancel)
+        self.regen_worker.start()
+
+    def on_regeneration_finished(self, progress, summary_data):
+        progress.close()
+        QMessageBox.information(self, "Success", "Summary regenerated successfully.")
+        
+        # Reload the tab content
+        # We need to fetch the fresh summary from DB
+        date = summary_data.get('date')
+        new_summary_data = self.db.get_daily_summary_details(date)
+        
+        if new_summary_data:
+            # maintain type info
+            new_summary_data['type'] = 'daily'
+            
+            # Update the summary_data in the viewer
+            # Find the viewer
+            for i in range(self.central_tabs.count()):
+                widget = self.central_tabs.widget(i)
+                if isinstance(widget, SummaryViewerWidget):
+                    w_data = widget.summary_data
+                    if w_data.get('type') == 'daily' and w_data.get('date') == date:
+                        widget.update_content(new_summary_data)
+                        break
+                    
+        # Refresh sidebar
+        self.load_history()
+
+    def on_regeneration_error(self, progress, error_msg):
+        progress.close()
+        QMessageBox.critical(self, "Error", f"Failed to regenerate summary: {error_msg}")
 
 
 
@@ -632,15 +883,129 @@ class MainWindow(QMainWindow):
                     break
 
     def on_calendar_date_changed(self):
-        self.current_date_filter = self.calendar.selectedDate().toString("yyyy-MM-dd")
+        date = self.calendar.selectedDate()
+        modifiers = QApplication.keyboardModifiers()
+        
+        if modifiers & Qt.KeyboardModifier.ControlModifier:
+            # Ctrl-click: select specific day ONLY
+            self.current_date_filter = date.toString("yyyy-MM-dd")
+            self.current_week_monday = None
+        else:
+            # Normal click: progressive filter [Monday, SelectedDay]
+            day_of_week = date.dayOfWeek()
+            self.current_week_monday = date.addDays(-(day_of_week - 1))
+            self.current_date_filter = date.toString("yyyy-MM-dd")
+            
+        self.update_calendar_visuals()
+        self.load_history()
+        self.refresh_tag_filter()
+        self.sync_week_details_tab()
+
+    def sync_week_details_tab(self):
+        """Push current sidebar selection and tags to the Week Details tab if open."""
+        tag = self.tag_filter_combo.currentText()
+        tags_filter = tag if tag != "All" else None
+        
+        for i in range(self.central_tabs.count()):
+            widget = self.central_tabs.widget(i)
+            if isinstance(widget, CalendarWidget):
+                widget.set_selection(self.current_week_monday, self.current_date_filter, tags_filter)
+                break
+
+    def prev_week_sidebar(self):
+        """Move to previous week, showing full week by default (selecting Sunday)."""
+        if not self.current_week_monday:
+            dt = self.calendar.selectedDate()
+            self.current_week_monday = dt.addDays(-(dt.dayOfWeek() - 1))
+            
+        self.current_week_monday = self.current_week_monday.addDays(-7)
+        # Select Sunday of that week to show full range
+        sunday = self.current_week_monday.addDays(6)
+        self.current_date_filter = sunday.toString("yyyy-MM-dd")
+        
+        # Update calendar view
+        self.calendar.setSelectedDate(sunday)
+        self.update_calendar_visuals()
+        self.load_history()
+        self.refresh_tag_filter()
+
+    def next_week_sidebar(self):
+        """Move to next week, showing full week by default (selecting Sunday)."""
+        if not self.current_week_monday:
+            dt = self.calendar.selectedDate()
+            self.current_week_monday = dt.addDays(-(dt.dayOfWeek() - 1))
+            
+        self.current_week_monday = self.current_week_monday.addDays(7)
+        # Select Sunday of that week to show full range
+        sunday = self.current_week_monday.addDays(6)
+        self.current_date_filter = sunday.toString("yyyy-MM-dd")
+        
+        # Update calendar view
+        self.calendar.setSelectedDate(sunday)
+        self.update_calendar_visuals()
         self.load_history()
         self.refresh_tag_filter()
         
+    def update_calendar_visuals(self):
+        """Highlight full week context and active progressive range."""
+        reset_fmt = QTextCharFormat()
+        
+        week_fmt = QTextCharFormat()
+        week_fmt.setBackground(QColor("#E3F2FD"))
+        
+        selected_fmt = QTextCharFormat()
+        selected_fmt.setBackground(QColor("#2196F3"))
+        selected_fmt.setForeground(QColor("white"))
+
+        if hasattr(self, '_last_highlighted_dates'):
+            for d in self._last_highlighted_dates:
+                self.calendar.setDateTextFormat(d, reset_fmt)
+        
+        highlighted = []
+        
+        # 1. Full Week Highlight (Context)
+        if self.current_week_monday:
+            mon = self.current_week_monday
+            for i in range(7):
+                d = mon.addDays(i)
+                self.calendar.setDateTextFormat(d, week_fmt)
+                highlighted.append(d)
+                
+            # 2. Active Range Highlight (Overwrites if in progressive or specific mode)
+            if self.current_date_filter:
+                end_date = QDate.fromString(self.current_date_filter, "yyyy-MM-dd")
+                
+                if mon and end_date >= mon and end_date <= mon.addDays(6):
+                    # Progressive: Mon to end_date
+                    curr = mon
+                    while curr <= end_date:
+                        self.calendar.setDateTextFormat(curr, selected_fmt)
+                        if curr not in highlighted: highlighted.append(curr)
+                        curr = curr.addDays(1)
+                else:
+                    # Specific Day Only (Ctrl+Click Case where week context might be different or missing)
+                    self.calendar.setDateTextFormat(end_date, selected_fmt)
+                    if end_date not in highlighted: highlighted.append(end_date)
+            else:
+                # Nav buttons case: No final day filter, show full week as selected?
+                # The user said "avanzar/retroceder semana que mueva entrre semanas sin dia en concreto"
+                # Let's highlight full week in Dark Blue when using buttons.
+                for i in range(7):
+                    d = mon.addDays(i)
+                    self.calendar.setDateTextFormat(d, selected_fmt)
+                    if d not in highlighted: highlighted.append(d)
+        elif self.current_date_filter:
+            # Specific Day Fallback
+            d = QDate.fromString(self.current_date_filter, "yyyy-MM-dd")
+            self.calendar.setDateTextFormat(d, selected_fmt)
+            highlighted.append(d)
+        
+        self._last_highlighted_dates = highlighted
+
     def reset_date_filter(self):
         self.current_date_filter = None
-        # Maybe reset calendar selection visually? 
-        # QCalendarWidget always has a selected date, so we can't really "deselect" it easily.
-        # But our logic will ignore it.
+        self.current_week_monday = None
+        self.update_calendar_visuals()
         self.load_history()
         self.refresh_tag_filter()
 
@@ -767,6 +1132,7 @@ class MainWindow(QMainWindow):
             layout.addWidget(QLabel("No hay colecciones aún. Añade tags a tus grabaciones."))
         else:
             list_widget = QListWidget()
+            list_widget.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
             # list_widget.setStyleSheet(LIST_WIDGET_STYLE)
             for tag in tags:
                 item = QListWidgetItem(f"🏷️ {tag}")

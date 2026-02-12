@@ -16,6 +16,7 @@ import sys
 import os
 import unittest
 from unittest.mock import MagicMock, patch
+import wave
 from PyQt6.QtWidgets import QApplication
 from PyQt6.QtCore import Qt
 
@@ -49,18 +50,42 @@ class TestRecordingFlow(unittest.TestCase):
         self.mock_db = self.mock_db_cls.return_value
         self.mock_db.fetch_all.return_value = []
         self.mock_db.save.return_value = 123 # Mock ID
+        self.mock_db.get_all_tags.return_value = []
+        
+        # Patch DBManager for recording_in_progress_widget (for TagsLineEdit)
+        self.db_patcher2 = patch('src.ui.recording_in_progress_widget.DBManager')
+        self.mock_db2 = self.db_patcher2.start().return_value
+        self.mock_db2.get_all_tags.return_value = []
         
         # Patch RAGEngine
         # Since MainWindow imports it inside __init__, we need to patch where it comes from
         self.rag_patcher = patch('src.rag_engine.RAGEngine')
         self.rag_patcher.start()
+        
+        # Patch DBManager for recording_widget (for TagsLineEdit)
+        self.db_patcher3 = patch('src.ui.recording_widget.DBManager')
+        self.mock_db3 = self.db_patcher3.start().return_value
+        self.mock_db3.get_all_tags.return_value = []
+        self.mock_db3.fetch_all.return_value = []
 
         self.window = MainWindow()
 
+        # Create a dummy WAV file
+        self.dummy_wav_path = "/tmp/test_audio.wav"
+        with wave.open(self.dummy_wav_path, 'wb') as wf:
+            wf.setnchannels(1)
+            wf.setsampwidth(2)
+            wf.setframerate(44100)
+            wf.writeframes(b'\x00' * 1024)
+
     def tearDown(self):
+        if os.path.exists(self.dummy_wav_path):
+            os.remove(self.dummy_wav_path)
         self.window.close()
         self.recorder_patcher.stop()
         self.db_patcher.stop()
+        self.db_patcher2.stop()
+        self.db_patcher3.stop()
         self.rag_patcher.stop()
 
     def test_new_recording_flow(self):

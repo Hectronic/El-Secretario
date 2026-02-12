@@ -12,62 +12,74 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-import google.generativeai as genai
-from PyQt6.QtCore import QThread, pyqtSignal
-from typing import Optional
+from PyQt6.QtCore import QThread, pyqtSignal, QSettings
+from src.ai_provider import get_ai_provider
 
 class AIAssistant(QThread):
     finished = pyqtSignal(str, str) # type (summary/clean), result
     error = pyqtSignal(str)
 
     def __init__(self, api_key: str, task_type: str, text: str, model_name: str = "gemini-3-flash-preview"):
+        """Initialize the AI Assistant.
+        
+        Note: api_key parameter is kept for backward compatibility but the actual
+        provider configuration is read from QSettings.
+        """
         super().__init__()
-        self.api_key = api_key
         self.task_type = task_type # "summary", "clean", or "weekly_summary"
         self.text = text
-        self.model_name = model_name
+        # api_key and model_name are kept for backward compatibility
+        # but the actual configuration comes from QSettings
+        self._legacy_api_key = api_key
+        self._legacy_model_name = model_name
 
     def run(self) -> None:
         try:
-            if not self.api_key:
-                raise ValueError("Gemini API Key is missing.")
+            settings = QSettings("Hectronic", "Secretario")
+            provider = get_ai_provider(settings)
 
-            genai.configure(api_key=self.api_key)
-            model = genai.GenerativeModel(self.model_name)
+            # Default prompts (used if not customized in settings)
+            default_prompts = {
+                "summary": """Please provide a concise and structured summary of the following transcription.
+Highlight key points, decisions made, and action items if any.
 
-            if self.task_type == "summary":
-                prompt = f"""
-                Please provide a concise and structured summary of the following transcription.
-                Highlight key points, decisions made, and action items if any.
-                
-                Transcription:
-                {self.text}
-                """
-            elif self.task_type == "clean":
-                prompt = f"""
-                Please clean up the following transcription.
-                - Fix grammatical errors and punctuation.
-                - Remove filler words (uh, um, like).
-                - Improve readability while maintaining the original meaning and tone.
-                - Do NOT summarize, keep the full content.
-                
-                Transcription:
-                {self.text}
-                """
-            elif self.task_type == "weekly_summary":
-                prompt = f"""
-                Please provide a comprehensive summary of the following recordings from this week.
-                Group the summary by topic or day if relevant.
-                Highlight key achievements, decisions, and action items.
-                
-                Recordings Content:
-                {self.text}
-                """
-            else:
-                raise ValueError("Invalid task type.")
+Transcription:
+{text}""",
+                "clean": """Please clean up the following transcription.
+- Fix grammatical errors and punctuation.
+- Remove filler words (uh, um, like).
+- Improve readability while maintaining the original meaning and tone.
+- Do NOT summarize, keep the full content.
 
-            response = model.generate_content(prompt)
-            result = response.text
+Transcription:
+{text}""",
+                "daily_summary": """Please provide a concise summary of all recordings from this day.
+Highlight key points, decisions made, and action items if any.
+Keep it brief but comprehensive.
+
+Day's recordings:
+{text}""",
+                "weekly_summary": """Please provide a comprehensive summary of the following recordings from this week.
+Group the summary by topic or day if relevant.
+Highlight key achievements, decisions, and action items.
+
+Recordings Content:
+{text}"""
+            }
+
+            # Load prompt from settings or use default
+            prompt_template = settings.value(
+                f"prompt_{self.task_type}", 
+                default_prompts.get(self.task_type, "")
+            )
+            
+            if not prompt_template:
+                raise ValueError(f"Invalid task type: {self.task_type}")
+            
+            # Replace {text} placeholder with actual content
+            prompt = prompt_template.replace("{text}", self.text)
+
+            result = provider.generate_content(prompt)
             
             self.finished.emit(self.task_type, result)
 

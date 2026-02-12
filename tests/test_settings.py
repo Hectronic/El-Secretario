@@ -9,6 +9,7 @@ def clean_settings():
     settings = QSettings("Hectronic", "Secretario")
     old_hf = settings.value("hf_token")
     old_gemini = settings.value("gemini_key")
+    old_theme = settings.value("app_theme")
     
     yield settings
     
@@ -18,6 +19,9 @@ def clean_settings():
     
     if old_gemini: settings.setValue("gemini_key", old_gemini)
     else: settings.remove("gemini_key")
+    
+    if old_theme: settings.setValue("app_theme", old_theme)
+    else: settings.remove("app_theme")
 
 def test_settings_load(qtbot, clean_settings):
     """Test that settings are loaded correctly into the widget."""
@@ -27,19 +31,20 @@ def test_settings_load(qtbot, clean_settings):
     widget = SettingsWidget()
     qtbot.addWidget(widget)
     
-    assert widget.token_input.text() == "test_hf_token_123"
-    assert widget.gemini_key_input.text() == "test_gemini_key_456"
+    # Access through general_panel
+    assert widget.general_panel.token_input.text() == "test_hf_token_123"
+    assert widget.general_panel.gemini_key_input.text() == "test_gemini_key_456"
 
 def test_settings_save(qtbot, clean_settings):
     """Test that saving works."""
     widget = SettingsWidget()
     qtbot.addWidget(widget)
     
-    widget.token_input.setText("new_hf_token")
-    widget.gemini_key_input.setText("new_gemini_key")
+    widget.general_panel.token_input.setText("new_hf_token")
+    widget.general_panel.gemini_key_input.setText("new_gemini_key")
     
     # Test setting theme
-    widget.theme_combo.setCurrentText("Light")
+    widget.general_panel.theme_combo.setCurrentText("Light")
     
     widget.save_settings()
     
@@ -54,9 +59,8 @@ def test_settings_show_copy_buttons(qtbot, clean_settings):
     widget = SettingsWidget()
     qtbot.addWidget(widget)
     
-    # helper to get buttons from container
-    # container is first child of helper return, but we stored it in self.hf_container
-    layout = widget.hf_container.layout()
+    # Access through general_panel
+    layout = widget.general_panel.hf_container.layout()
     # layout items: 0: line_edit, 1: show_btn, 2: copy_btn
     
     line_edit = layout.itemAt(0).widget()
@@ -85,3 +89,36 @@ def test_settings_show_copy_buttons(qtbot, clean_settings):
     
     qtbot.mouseClick(copy_btn, Qt.MouseButton.LeftButton)
     assert clipboard.text() == "secret_token"
+
+
+def test_prompts_panel_defaults(qtbot, clean_settings):
+    """Test that prompts panel loads default prompts."""
+    # Clear any saved prompts
+    clean_settings.remove("prompt_summary")
+    clean_settings.remove("prompt_clean")
+    clean_settings.remove("prompt_weekly_summary")
+    
+    widget = SettingsWidget()
+    qtbot.addWidget(widget)
+    
+    # Check that default prompts are loaded
+    assert "{text}" in widget.prompts_panel.prompt_editors["summary"].toPlainText()
+    assert "{text}" in widget.prompts_panel.prompt_editors["clean"].toPlainText()
+    assert "{text}" in widget.prompts_panel.prompt_editors["weekly_summary"].toPlainText()
+
+
+def test_prompts_panel_save(qtbot, clean_settings):
+    """Test saving custom prompts."""
+    widget = SettingsWidget()
+    qtbot.addWidget(widget)
+    
+    # Set a custom prompt
+    custom_prompt = "Custom summary prompt: {text}"
+    widget.prompts_panel.prompt_editors["summary"].setPlainText(custom_prompt)
+    
+    widget.save_settings()
+    
+    assert clean_settings.value("prompt_summary") == custom_prompt
+    
+    # Clean up
+    clean_settings.remove("prompt_summary")
