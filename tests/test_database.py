@@ -72,5 +72,17 @@ class TestDBManager(unittest.TestCase):
         sessions = self.db.fetch_chat_sessions()
         self.assertEqual(len(sessions), 0)
 
+    def test_daily_summaries_by_range(self):
+        self.db.save_daily_summary("2026-02-09", "Summary 1")
+        self.db.save_daily_summary("2026-02-10", "Summary 2")
+        self.db.save_daily_summary("2026-02-11", "Summary 3")
+        
+        # Range: 9 to 10
+        summaries = self.db.fetch_daily_summaries_by_range("2026-02-09", "2026-02-10")
+        self.assertEqual(len(summaries), 2)
+        # Should be descending order by date
+        self.assertEqual(summaries[0]['date'], "2026-02-10")
+        self.assertEqual(summaries[1]['date'], "2026-02-09")
+
 if __name__ == '__main__':
     unittest.main()

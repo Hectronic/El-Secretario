@@ -16,6 +16,7 @@ import sys
 import os
 import unittest
 from unittest.mock import MagicMock, patch
+import wave
 from PyQt6.QtWidgets import QApplication
 from PyQt6.QtCore import Qt
 
@@ -69,7 +70,17 @@ class TestRecordingFlow(unittest.TestCase):
 
         self.window = MainWindow()
 
+        # Create a dummy WAV file
+        self.dummy_wav_path = "/tmp/test_audio.wav"
+        with wave.open(self.dummy_wav_path, 'wb') as wf:
+            wf.setnchannels(1)
+            wf.setsampwidth(2)
+            wf.setframerate(44100)
+            wf.writeframes(b'\x00' * 1024)
+
     def tearDown(self):
+        if os.path.exists(self.dummy_wav_path):
+            os.remove(self.dummy_wav_path)
         self.window.close()
         self.recorder_patcher.stop()
         self.db_patcher.stop()

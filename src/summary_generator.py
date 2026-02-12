@@ -112,7 +112,8 @@ class SummaryGenerator(QThread):
                 all_dates = self.db.get_dates_with_content()
                 for date in all_dates:
                     # Check exclusions
-                    if self.exclude_today and date == datetime.now().strftime("%Y-%m-%d"):
+                    # If we are only generating daily summaries and exclude_today is on, skip today
+                    if self.exclude_today and date == datetime.now().strftime("%Y-%m-%d") and not self.generate_recordings:
                         continue
                     dates_to_process.add(date)
             
@@ -224,7 +225,10 @@ Transcription:
                 # if we just generated a recording summary, the old daily summary is stale.
                 # So we should regenerate if processed_rec_for_day is True OR day_has_pending_daily.
                 
-                if self.generate_daily and (day_has_pending_daily or processed_rec_for_day) and day_generated_summaries:
+                is_today = (date == datetime.now().strftime("%Y-%m-%d"))
+                skip_daily_today = (self.exclude_today and is_today)
+                
+                if self.generate_daily and (day_has_pending_daily or processed_rec_for_day) and day_generated_summaries and not skip_daily_today:
                     full_text = "\n\n".join(day_generated_summaries)
                     prompt = daily_prompt_template.replace("{text}", full_text)
                     summary = provider.generate_content(prompt)
@@ -234,14 +238,14 @@ Transcription:
                     self.item_completed.emit("daily", date, summary)
 
             # 3. Process Weeks (Newest -> Oldest)
-            for week_start in weeks_to_process:
+            for week_date in weeks_to_process:
                 if self._cancelled:
                     break
                     
                 current_step += 1
                 self.progress.emit(current_step, total_steps)
                 
-                week_dates = self._get_week_dates(week_start)
+                week_dates = self._get_week_dates(week_date)
                 tags_list = self.tags_filter.split(',') if self.tags_filter else None
                 recordings = self.db.fetch_by_dates(week_dates, tags_list)
                 
@@ -255,9 +259,9 @@ Transcription:
                 prompt = weekly_prompt_template.replace("{text}", full_text)
                 summary = provider.generate_content(prompt)
                 
-                self.db.save_weekly_summary(week_start, summary, self.tags_filter)
+                self.db.save_weekly_summary(week_date, summary, self.tags_filter)
                 weekly_count += 1
-                self.item_completed.emit("weekly", week_start, summary)
+                self.item_completed.emit("weekly", week_date, summary)
                 
             self.finished.emit(recordings_count, daily_count, weekly_count)
             
@@ -272,12 +276,12 @@ Transcription:
             full_text += rec.get('transcription', '') or ""
         return full_text
         
-    def _get_week_dates(self, week_start: str) -> List[str]:
-        """Get list of date strings for a week starting from week_start (Monday)."""
+    def _get_week_dates(self, week_end: str) -> List[str]:
+        """Get list of date strings for a week ending on week_end (Sunday)."""
         from datetime import datetime, timedelta
         
-        start = datetime.strptime(week_start, "%Y-%m-%d")
-        return [(start + timedelta(days=i)).strftime("%Y-%m-%d") for i in range(7)]
+        end = datetime.strptime(week_end, "%Y-%m-%d")
+        return [(end - timedelta(days=6-i)).strftime("%Y-%m-%d") for i in range(7)]
 
 
 def get_pending_summary_counts(tags_filter: Optional[str] = None) -> Tuple[int, int]:

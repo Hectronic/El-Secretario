@@ -196,10 +196,7 @@ class RecordingWidget(QWidget):
         original_layout.addWidget(self.text_display)
         self.tabs.addTab(original_widget, "Original")
         
-        self.cleaned_display = QTextEdit()
-        self.cleaned_display.setReadOnly(True)
-        self.cleaned_display.setPlaceholderText("Cleaned text will appear here...")
-        self.tabs.addTab(self.cleaned_display, "Cleaned")
+
         
         self.summary_display = QTextEdit()
         self.summary_display.setReadOnly(True)
@@ -210,10 +207,7 @@ class RecordingWidget(QWidget):
         
         # AI Actions
         ai_layout = QHBoxLayout()
-        self.clean_btn = QPushButton("Clean Text (AI)")
-        self.clean_btn.clicked.connect(lambda: self.run_ai_task("clean"))
-        self.clean_btn.setEnabled(False)
-        ai_layout.addWidget(self.clean_btn)
+
         
         self.summarize_btn = QPushButton("Summarize (AI)")
         self.summarize_btn.clicked.connect(lambda: self.run_ai_task("summary"))
@@ -259,7 +253,7 @@ class RecordingWidget(QWidget):
         if record:
             self.current_record_id = record['id']
             self.text_display.setText(record['transcription'])
-            self.cleaned_display.setText(record['cleaned_text'] if record['cleaned_text'] else "")
+
             self.summary_display.setText(record['summary'] if record['summary'] else "")
             self.title_input.setText(record['title'] if record['title'] else "")
             self.title_input.setEnabled(True)
@@ -273,7 +267,7 @@ class RecordingWidget(QWidget):
             self.duration_label.setText(f"{record['duration']:.1f}s")
             
             has_text = bool(record['transcription'])
-            self.clean_btn.setEnabled(has_text)
+
             self.summarize_btn.setEnabled(has_text)
             self.rename_speakers_btn.setEnabled(has_text)
             
@@ -438,6 +432,7 @@ class RecordingWidget(QWidget):
             QMessageBox.warning(self, "Error", error_msg)
             return
             
+        if task_type == "clean": return
         self.status_label.setText(f"Running {task_type}...")
         # api_key parameter kept for backward compatibility
         self.ai_thread = AIAssistant("", task_type, text)
@@ -450,11 +445,10 @@ class RecordingWidget(QWidget):
         if task_type == "summary":
             self.summary_display.setText(result)
             self.db.update_ai_content(self.current_record_id, summary=result)
-            self.tabs.setCurrentIndex(2)
-        else:
-            self.cleaned_display.setText(result)
-            self.db.update_ai_content(self.current_record_id, cleaned_text=result)
             self.tabs.setCurrentIndex(1)
+            # Cleaned tab index would affect this logic, but since it's removed, the "Summary" tab index shifts.
+            # Original tab is index 0. Summary tab is now index 1.
+
 
     def on_ai_error(self, err):
         self.status_label.setText("AI Task Failed.")

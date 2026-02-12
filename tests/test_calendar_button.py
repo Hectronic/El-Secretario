@@ -53,14 +53,15 @@ class TestCalendarButton(unittest.TestCase):
         self.db_patcher.stop()
         self.recorder_patcher.stop()
 
-    def test_open_calendar_tab(self):
+    @patch('src.ui.main_window.QMessageBox')
+    def test_open_calendar_tab(self, mock_msg):
         # 1. Click the button
         self.window.open_calendar_btn.click()
         
         # 2. Verify tab is open
         current_widget = self.window.central_tabs.currentWidget()
         self.assertIsInstance(current_widget, CalendarWidget)
-        self.assertEqual(self.window.central_tabs.tabText(self.window.central_tabs.currentIndex()), "Calendar")
+        self.assertEqual(self.window.central_tabs.tabText(self.window.central_tabs.currentIndex()), "Week Details")
         
         # 3. Click again, should not open duplicate
         count_before = self.window.central_tabs.count()

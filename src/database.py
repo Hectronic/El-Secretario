@@ -147,6 +147,11 @@ class DBManager:
                 # Ensures they appear after recordings for the day when sorted by time (if applicable)
                 # or just meets user requirement.
                 cursor.execute("UPDATE daily_summaries SET generated_at = date || ' 23:59:59' WHERE generated_at NOT LIKE '%23:59:59'")
+                
+                # Migration: Update existing weekly summaries from Monday to Sunday
+                # strftime('%w', week_start) returns '1' for Monday.
+                cursor.execute("UPDATE weekly_summaries SET week_start = date(week_start, '+6 days') WHERE strftime('%w', week_start) = '1'")
+                
                 cursor.execute("UPDATE weekly_summaries SET generated_at = week_start || ' 23:59:59' WHERE generated_at NOT LIKE '%23:59:59'")
 
                 conn.commit()
@@ -689,12 +694,12 @@ class DBManager:
             row = cursor.fetchone()
             return dict(row) if row else None
 
-    def save_weekly_summary(self, week_start: str, summary: str, tags_filter: Optional[str] = None) -> int:
+    def save_weekly_summary(self, week_date: str, summary: str, tags_filter: Optional[str] = None) -> int:
         """
         Save or update a weekly summary.
         
         Args:
-            week_start: Monday of the week in 'YYYY-MM-DD' format.
+            week_date: Sunday of the week in 'YYYY-MM-DD' format.
             summary: The summary text.
             tags_filter: Comma-separated tags used for filtering (None = no filter).
             
@@ -703,8 +708,8 @@ class DBManager:
         """
         with self.get_connection() as conn:
             cursor = conn.cursor()
-            # Set time to 23:59:59 of the week start date
-            now = f"{week_start} 23:59:59"
+            # Set time to 23:59:59 of the week date
+            now = f"{week_date} 23:59:59"
             # Use empty string instead of NULL for tags_filter to make UNIQUE constraint work
             tags_value = tags_filter if tags_filter else ''
             
@@ -714,16 +719,16 @@ class DBManager:
                 ON CONFLICT(week_start, tags_filter) DO UPDATE SET
                     summary = excluded.summary,
                     updated_at = excluded.updated_at
-            ''', (week_start, summary, tags_value, now, now))
+            ''', (week_date, summary, tags_value, now, now))
             conn.commit()
             return cursor.lastrowid
 
-    def get_weekly_summary(self, week_start: str, tags_filter: Optional[str] = None) -> Optional[str]:
+    def get_weekly_summary(self, week_date: str, tags_filter: Optional[str] = None) -> Optional[str]:
         """
         Get a weekly summary.
         
         Args:
-            week_start: Monday of the week in 'YYYY-MM-DD' format.
+            week_date: Sunday of the week in 'YYYY-MM-DD' format.
             tags_filter: Tags filter to match (None = no filter).
             
         Returns:
@@ -734,7 +739,7 @@ class DBManager:
             tags_value = tags_filter if tags_filter else ''
             cursor.execute(
                 'SELECT summary FROM weekly_summaries WHERE week_start = ? AND tags_filter = ?',
-                (week_start, tags_value)
+                (week_date, tags_value)
             )
             row = cursor.fetchone()
             return row['summary'] if row else None
@@ -805,23 +810,22 @@ class DBManager:
 
     def get_weeks_with_content(self) -> List[str]:
         """
-        Get all week start dates (Mondays) that have at least one recording.
+        Get all week end dates (Sundays) that have at least one recording.
         
         Returns:
-            List of Monday date strings in 'YYYY-MM-DD' format.
+            List of Sunday date strings in 'YYYY-MM-DD' format.
         """
         with self.get_connection() as conn:
             cursor = conn.cursor()
-            # SQLite: strftime('%w', date) returns day of week (0=Sunday, 1=Monday)
-            # To get Monday: date - (day_of_week - 1) days, but handle Sunday specially
+            # SQLite: date(..., 'weekday 0') returns the next Sunday (or same day if Sunday)
             cursor.execute('''
                 SELECT DISTINCT 
-                    date(created_at, 'weekday 1', '-7 days') as week_monday
+                    date(created_at, 'weekday 0') as week_sunday
                 FROM records
                 WHERE transcription IS NOT NULL AND transcription != ''
-                ORDER BY week_monday DESC
+                ORDER BY week_sunday DESC
             ''')
-            return [row['week_monday'] for row in cursor.fetchall()]
+            return [row['week_sunday'] for row in cursor.fetchall()]
 
     def get_dates_without_summary(self, tags_filter: Optional[str] = None, exclude_today: bool = False) -> List[str]:
         """
@@ -856,6 +860,19 @@ class DBManager:
             cursor.execute(query, params)
             return [row['record_date'] for row in cursor.fetchall()]
 
+    def fetch_daily_summaries_by_range(self, start_date: str, end_date: str, tags_filter: Optional[str] = None) -> List[Dict[str, Any]]:
+        """
+        Fetch daily summaries within a date range.
+        """
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            tags_value = tags_filter if tags_filter else ''
+            cursor.execute(
+                'SELECT * FROM daily_summaries WHERE date >= ? AND date <= ? AND tags_filter = ? ORDER BY date DESC',
+                (start_date, end_date, tags_value)
+            )
+            return [dict(row) for row in cursor.fetchall()]
+
     def fetch_daily_summaries(self, limit: Optional[int] = None) -> List[Dict[str, Any]]:
         """
         Fetch all daily summaries ordered by date descending.
@@ -873,7 +890,7 @@ class DBManager:
 
     def fetch_weekly_summaries(self, limit: Optional[int] = None) -> List[Dict[str, Any]]:
         """
-        Fetch all weekly summaries ordered by week_start descending.
+        Fetch all weekly summaries ordered by week date descending.
         """
         with self.get_connection() as conn:
             cursor = conn.cursor()
@@ -895,7 +912,7 @@ class DBManager:
             exclude_current_week: If True, exclude the current week.
             
         Returns:
-            List of Monday date strings in 'YYYY-MM-DD' format.
+            List of Sunday date strings in 'YYYY-MM-DD' format.
         """
         with self.get_connection() as conn:
             cursor = conn.cursor()
@@ -903,23 +920,23 @@ class DBManager:
             
             query = '''
                 SELECT DISTINCT 
-                    date(created_at, 'weekday 1', '-7 days') as week_monday
+                    date(created_at, 'weekday 0') as week_sunday
                 FROM records
                 WHERE transcription IS NOT NULL AND transcription != ''
-                AND date(created_at, 'weekday 1', '-7 days') NOT IN (
+                AND date(created_at, 'weekday 0') NOT IN (
                     SELECT week_start FROM weekly_summaries WHERE tags_filter = ?
                 )
             '''
             params = [tags_value]
             
             if exclude_current_week:
-                # Calculate current week's monday
-                query += " AND date(created_at, 'weekday 1', '-7 days') != date('now', 'weekday 1', '-7 days')"
+                # Calculate current week's sunday
+                query += " AND date(created_at, 'weekday 0') != date('now', 'weekday 0')"
                 
-            query += " ORDER BY week_monday DESC"
+            query += " ORDER BY week_sunday DESC"
             
             cursor.execute(query, params)
-            return [row['week_monday'] for row in cursor.fetchall()]
+            return [row['week_sunday'] for row in cursor.fetchall()]
 
     def get_dates_with_summary(self, tags_filter: Optional[str] = None) -> List[str]:
         """
@@ -948,7 +965,7 @@ class DBManager:
             tags_filter: Tags filter to check against (None = no filter).
             
         Returns:
-            List of Monday date strings in 'YYYY-MM-DD' format.
+            List of Sunday date strings in 'YYYY-MM-DD' format.
         """
         with self.get_connection() as conn:
             cursor = conn.cursor()

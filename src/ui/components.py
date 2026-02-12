@@ -206,9 +206,9 @@ class SummaryListItemWidget(QWidget):
             subtitle = date_str
             # Icon or color distinction could be added here
         else:
-            week_start = self.summary_data.get('week_start')
+            week_date = self.summary_data.get('week_start')
             title = f"Week Summary"
-            subtitle = f"Week of {week_start}"
+            subtitle = f"Week ending {week_date}"
             
         self.title_label = QLabel(title)
         self.title_label.setStyleSheet("font-weight: bold; font-size: 14px; color: #4CAF50;") # Green for summaries

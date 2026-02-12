@@ -88,7 +88,18 @@ class TranscriberThread(QThread):
 
             # Load Whisper model
             self.status_update.emit("Loading model...")
-            model = WhisperModel(self.model_size, device=self.device, compute_type=self.compute_type)
+            try:
+                model = WhisperModel(self.model_size, device=self.device, compute_type=self.compute_type)
+            except RuntimeError as e:
+                if "out of memory" in str(e) and self.device == "cuda":
+                    logging.warning("CUDA Out of Memory during model load. Fallback to CPU.")
+                    self.status_update.emit("CUDA OOM detected. Falling back to CPU...")
+                    self.device = "cpu"
+                    self.compute_type = "int8"
+                    self.force_cpu = True
+                    model = WhisperModel(self.model_size, device=self.device, compute_type=self.compute_type)
+                else:
+                    raise e
             
             self.status_update.emit("Transcribing...")
             segments, info = model.transcribe(self.audio_path, beam_size=5, language=self.language)
