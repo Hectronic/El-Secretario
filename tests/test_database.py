@@ -16,6 +16,7 @@
 import unittest
 import os
 import sqlite3
+from datetime import date
 from src.database import DBManager
 
 class TestDBManager(unittest.TestCase):
@@ -83,6 +84,96 @@ class TestDBManager(unittest.TestCase):
         # Should be descending order by date
         self.assertEqual(summaries[0]['date'], "2026-02-10")
         self.assertEqual(summaries[1]['date'], "2026-02-09")
+
+    def test_get_tasks_by_date_with_multi_tag_filter_matches_any_tag(self):
+        today = date.today().isoformat()
+        # Same day, different record tags
+        rec1 = self.db.save("a.wav", "Tx A", 10.0, "A")
+        rec2 = self.db.save("b.wav", "Tx B", 10.0, "B")
+        self.db.update_tags(rec1, "work, home")
+        self.db.update_tags(rec2, "personal")
+
+        self.db.save_task(rec1, "Task A1", "work, home")
+        self.db.save_task(rec2, "Task B1", "personal")
+
+        # Multi-tag filter should behave as OR (match ANY tag), not exact full string.
+        tasks = self.db.get_tasks_by_date(today, "work,home")
+        contents = [t["content"] for t in tasks]
+
+        self.assertIn("Task A1", contents)
+        self.assertNotIn("Task B1", contents)
+
+        # Spaces in filter should not change behavior.
+        tasks_with_spaces = self.db.get_tasks_by_date(today, "work, home")
+        contents_with_spaces = [t["content"] for t in tasks_with_spaces]
+        self.assertIn("Task A1", contents_with_spaces)
+
+    def test_legacy_tasks_schema_is_migrated_on_startup(self):
+        legacy_db = "test_legacy_db.sqlite"
+        try:
+            with sqlite3.connect(legacy_db) as conn:
+                c = conn.cursor()
+                c.execute('''
+                    CREATE TABLE records (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                        filename TEXT,
+                        duration REAL,
+                        transcription TEXT,
+                        title TEXT,
+                        tags TEXT,
+                        summary TEXT,
+                        cleaned_text TEXT,
+                        is_favorite INTEGER DEFAULT 0,
+                        is_diarized INTEGER DEFAULT 0,
+                        transcription_model TEXT,
+                        processing_attempts INTEGER DEFAULT 0,
+                        last_error TEXT
+                    )
+                ''')
+                c.execute('''
+                    CREATE TABLE tasks (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        record_id INTEGER NOT NULL,
+                        content TEXT NOT NULL,
+                        tags TEXT,
+                        is_completed INTEGER DEFAULT 0,
+                        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+                    )
+                ''')
+                c.execute(
+                    "INSERT INTO records (created_at, filename, duration, transcription, title) VALUES (?, ?, ?, ?, ?)",
+                    ("2026-02-10 10:00:00", "x.wav", 1.0, "tx", "Rec A"),
+                )
+                c.execute(
+                    "INSERT INTO tasks (record_id, content, tags, is_completed, created_at) VALUES (?, ?, ?, ?, ?)",
+                    (1, "Legacy task", "x", 0, "2026-02-10 11:00:00"),
+                )
+                conn.commit()
+
+            migrated = DBManager(legacy_db)
+            _ = migrated.fetch_all()
+
+            with sqlite3.connect(legacy_db) as conn:
+                c = conn.cursor()
+                c.execute("PRAGMA table_info(tasks)")
+                cols = {row[1]: row for row in c.fetchall()}
+                self.assertIn("day_date", cols)
+                self.assertIn("week_start", cols)
+                self.assertIn("notes", cols)
+                self.assertIn("custom_order", cols)
+                self.assertEqual(cols["record_id"][3], 0)  # not null flag must be off
+
+                c.execute("SELECT record_id, day_date, week_start, content FROM tasks LIMIT 1")
+                row = c.fetchone()
+                self.assertIsNotNone(row)
+                self.assertEqual(row[0], 1)
+                self.assertEqual(row[1], "2026-02-10")
+                self.assertEqual(row[2], "2026-02-15")
+                self.assertEqual(row[3], "Legacy task")
+        finally:
+            if os.path.exists(legacy_db):
+                os.remove(legacy_db)
 
 if __name__ == '__main__':
     unittest.main()

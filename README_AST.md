@@ -10,7 +10,7 @@ El Secretario ye una ferramienta intelixente de trescripción y organización d'
 
 - **Grabación ya Importación d'Audio**: Graba audio direutamente na aplicación o importa archivos esistentes.
 - **Trescripción y Diarización**: Trescribe audio automáticamente ya identifica distintos falantes (diarización) usando Whisper d'OpenAI y pyannote.audio.
-- **Gueta Intelixente (RAG)**: Usa Xeneración Aumentada por Recuperación (RAG) pa charrar coles tos grabaciones y alcontrar información específica.
+- **Gueta Intelixente (RAG)**: Usa Xeneración Aumentada por Recuperación (RAG) pa charrar coles tos grabaciones y alcontrar información específica. Soporta Google Gemini y **Ollama** pa execución llocal.
 - **Cuadernos y Coleiciones**: Organiza les tos grabaciones en cuadernos y coleiciones. Accede a elles direutamente dende la barra llateral.
 - **Vista de Calendariu**: Esplora les tos grabaciones per fecha.
 - **Ferramientes Unificaes**: Llimpieza d'almacenamientu, procesamientu per llotes y esportación/importación de datos nuna sola pestaña.
@@ -51,8 +51,13 @@ Pa utilizar dafechu les funciones d'El Secretario, deberás configurar los token
     -   Crea un token en: [https://huggingface.co/settings/tokens](https://huggingface.co/settings/tokens)
     -   Asegúrate de tener aceptao les condiciones d'usuariu pal modelu `pyannote/speaker-diarization-3.1`.
 
-2.  **Clave API de Gemini**: Requerida pa les funciones del Asistente d'IA (chat).
+2.  **Clave API de Gemini**: Requerida por defeutu pa les funciones del Asistente d'IA (chat).
     -   Llogra la to clave API en: [https://aistudio.google.com/app/apikey](https://aistudio.google.com/app/apikey)
+
+3.  **Ollama**: (Opcional) Alternativa pa les funciones del Asistente d'IA si prefieres executar modelos llocalmente.
+    -   Instala [Ollama](https://ollama.com/) nel to sistema.
+    -   Asegúrate de que'l servidor d'Ollama tea funcionante antes d'entamar l'aplicación.
+    -   Pues seleicionar el to modelu llocal preferíu (ex. `llama3`, `mistral`) na configuración de l'aplicación.
 
 ## Usu
 

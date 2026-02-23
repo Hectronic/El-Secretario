@@ -19,7 +19,7 @@ from PyQt6.QtWidgets import (QMainWindow, QWidget, QVBoxLayout,
                              QHBoxLayout, QListWidget, QPushButton, 
                              QLabel, QMessageBox, QListWidgetItem, QComboBox,
                              QTabWidget, QSplitter, QApplication, QStyle, QLineEdit, QTabBar,
-                             QCalendarWidget, QCheckBox, QFileDialog, QMenu)
+                             QCalendarWidget, QCheckBox, QFileDialog, QMenu, QProgressBar)
 from PyQt6.QtCore import Qt, QSettings, QUrl, QDate, QTimer
 from PyQt6.QtGui import QAction, QIcon, QDesktopServices, QTextCharFormat, QColor, QCursor
 
@@ -43,8 +43,12 @@ from src.ui.summary_viewer import SummaryViewerWidget
 from src.notebook_database import NotebookDBManager
 from src.ui.notebooks_list_widget import NotebooksListWidget
 from src.ui.notebook_widget import NotebookWidget
+from src.ui.note_widget import NoteWidget
 from src.ui.maintenance_widget import MaintenanceWidget
 from src.ui.tools_widget import ToolsWidget
+from src.ui.summary_task_queue import SummaryTaskQueueManager
+from src.ui.queue_management_widget import QueueManagementWidget
+from src.ui.tasks_list_widget import TasksListWidget
 
 class MainWindow(QMainWindow):
     def __init__(self):
@@ -62,21 +66,222 @@ class MainWindow(QMainWindow):
         # but RecordingWidget handles its own UI updates.
         
         self.search_thread = None
+        self.regen_worker = None
+        self.summary_task_queue = SummaryTaskQueueManager(self)
+        self.tasks_sidebar_limit = 20
+        self._pending_history_reload = False
+        self._pending_tag_reload = False
+        self._sidebar_refresh_timer = QTimer(self)
+        self._sidebar_refresh_timer.setSingleShot(True)
+        self._sidebar_refresh_timer.timeout.connect(self._apply_pending_sidebar_reload)
         
         apply_theme()
         
         self.init_ui()
         self.load_history()
         self.refresh_tag_filter()
-        self.load_history()
-        self.refresh_tag_filter()
         self.load_chat_sessions()
-        self.load_collections()
+        self.refresh_tasks_sidebar()
         self.load_notebooks()
+        self._setup_task_status_bar()
+        self._connect_task_queue_signals()
         
         # Show Welcome Tab
         self.show_welcome_screen()
         logging.info("MainWindow initialized.")
+
+    def _setup_task_status_bar(self):
+        status = self.statusBar()
+        self.task_status_label = QLabel("Summary queue idle.")
+        self.task_status_label.setStyleSheet("padding-right: 8px;")
+        
+        self.open_queue_btn = QPushButton("📋 View Queue")
+        self.open_queue_btn.setFlat(True)
+        self.open_queue_btn.setStyleSheet("color: #2196F3; text-decoration: underline; font-weight: bold;")
+        self.open_queue_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.open_queue_btn.clicked.connect(self.open_queue_manager_tab)
+        
+        self.task_queue_progress = QProgressBar()
+        self.task_queue_progress.setFixedWidth(180)
+        self.task_queue_progress.setTextVisible(False)
+        self.task_queue_progress.setRange(0, 1)
+        self.task_queue_progress.setValue(0)
+        
+        status.addPermanentWidget(self.task_status_label, 1)
+        status.addPermanentWidget(self.open_queue_btn)
+        status.addPermanentWidget(self.task_queue_progress)
+
+    def open_queue_manager_tab(self):
+        """Open the task queue management tab."""
+        # Check if already open
+        for i in range(self.central_tabs.count()):
+            widget = self.central_tabs.widget(i)
+            if isinstance(widget, QueueManagementWidget):
+                self.central_tabs.setCurrentIndex(i)
+                return
+
+        queue_widget = QueueManagementWidget(self.summary_task_queue)
+        index = self.central_tabs.addTab(queue_widget, "📋 Task Queue")
+        self.central_tabs.setCurrentIndex(index)
+
+    def _connect_task_queue_signals(self):
+        self.summary_task_queue.task_enqueued.connect(self._on_summary_task_enqueued)
+        self.summary_task_queue.task_started.connect(self._on_summary_task_started)
+        self.summary_task_queue.task_finished.connect(self._on_summary_task_finished)
+        self.summary_task_queue.task_failed.connect(self._on_summary_task_failed)
+        self.summary_task_queue.task_skipped.connect(self._on_summary_task_skipped)
+        self.summary_task_queue.queue_changed.connect(self._on_summary_queue_changed)
+        self.summary_task_queue.task_progress.connect(self.handle_progress)
+        self.summary_task_queue.task_status_update.connect(self.handle_status_message)
+
+    def _format_task_name(self, task):
+        t_type = task.get("type")
+        if t_type == "summary":
+            return f"Recording: {task.get('title', 'Unknown')}"
+        if t_type == "task_extraction":
+            return f"Tasks: {task.get('title', 'Unknown')}"
+        if t_type == "transcription":
+            return f"Transcribing: {task.get('title', 'Unknown')}"
+        if t_type == "weekly_summary":
+            return f"Week: {task.get('date', 'Unknown')}"
+        
+        date = task.get("date", "unknown date")
+        tags_filter = task.get("tags_filter")
+        if tags_filter:
+            return f"Day: {date} [{tags_filter}]"
+        return f"Day: {date}"
+
+    def _on_summary_task_enqueued(self, task, position):
+        self.task_status_label.setText(
+            f"Queued summary: {self._format_task_name(task)} (#{position} in queue)"
+        )
+
+    def _on_summary_task_started(self, task, remaining_pending):
+        self.regen_worker = self.summary_task_queue.current_worker
+        self.task_status_label.setText(
+            f"Running: {self._format_task_name(task)} ({self.summary_task_queue.pending_count} pending)"
+        )
+
+    def _on_summary_task_finished(self, task):
+        try:
+            self.regen_worker = self.summary_task_queue.current_worker
+            t_type = task.get("type")
+            
+            if t_type == "summary":
+                # Update specific recording widget if open
+                record_id = task.get("record_id")
+                for i in range(self.central_tabs.count()):
+                    widget = self.central_tabs.widget(i)
+                    try:
+                        if isinstance(widget, RecordingWidget) and widget.current_record_id == record_id:
+                            widget.on_ai_finished("summary", task.get("result", ""))
+                    except (RuntimeError, AttributeError):
+                        continue # Widget might have been deleted
+                self.request_sidebar_reload(include_history=True)
+                
+            elif t_type == "task_extraction":
+                # Update specific recording widget if open
+                record_id = task.get("record_id")
+                for i in range(self.central_tabs.count()):
+                    widget = self.central_tabs.widget(i)
+                    try:
+                        if isinstance(widget, RecordingWidget) and widget.current_record_id == record_id:
+                            widget.on_ai_finished("task_extraction", "")
+                    except (RuntimeError, AttributeError):
+                        continue
+                # Also update CalendarWidget if open to show new tasks in daily view
+                for i in range(self.central_tabs.count()):
+                    widget = self.central_tabs.widget(i)
+                    if isinstance(widget, SummaryViewerWidget):
+                        widget._load_daily_tasks()
+                
+            elif t_type == "daily_summary":
+                date = task.get("date")
+                tags_filter = task.get("tags_filter")
+                if date:
+                    self._refresh_daily_summary_viewers(date, tags_filter)
+                    self.request_sidebar_reload(include_history=True)
+                    
+            elif t_type == "weekly_summary":
+                self.request_sidebar_reload(include_history=True)
+                # Find and update CalendarWidget if open
+                for i in range(self.central_tabs.count()):
+                    widget = self.central_tabs.widget(i)
+                    try:
+                        if isinstance(widget, CalendarWidget):
+                            widget.update_summary_view()
+                    except (RuntimeError, AttributeError):
+                        continue
+
+            self.task_status_label.setText(
+                f"Finished: {self._format_task_name(task)}"
+            )
+        except Exception as e:
+            import logging
+            logging.error(f"Error in _on_summary_task_finished: {e}", exc_info=True)
+
+    def _on_summary_task_failed(self, task, error_msg):
+        try:
+            self.regen_worker = self.summary_task_queue.current_worker
+            self.task_status_label.setText(
+                f"Regeneration failed for {self._format_task_name(task)}: {error_msg}"
+            )
+        except Exception:
+            pass
+
+    def _on_summary_task_skipped(self, task, reason):
+        self.task_status_label.setText(
+            f"Skipped regeneration for {self._format_task_name(task)}: {reason}"
+        )
+
+    def _on_summary_queue_changed(self, pending_count, is_running):
+        self.refresh_tasks_sidebar()
+        if is_running:
+            self.task_queue_progress.setRange(0, 0)
+            self.task_queue_progress.setVisible(True)
+        else:
+            self.task_queue_progress.setRange(0, 1)
+            self.task_queue_progress.setValue(0 if pending_count == 0 else 1)
+            if pending_count == 0:
+                self.task_status_label.setText("Summary queue idle.")
+
+    def handle_status_message(self, message):
+        # If the queue is running, don't overwrite its status with generic messages
+        if not self.summary_task_queue.is_running:
+            self.task_status_label.setText(message)
+
+    def handle_progress(self, value):
+        # If the queue is running, don't let individual widgets interfere with the progress bar
+        if self.summary_task_queue.is_running:
+            return
+
+        if value == -1: # Indeterminate
+            self.task_queue_progress.setRange(0, 0)
+            self.task_queue_progress.setVisible(True)
+        elif value == -2: # Hide
+            self.task_queue_progress.setRange(0, 1)
+            self.task_queue_progress.setValue(0)
+        else:
+            self.task_queue_progress.setRange(0, 100)
+            self.task_queue_progress.setValue(value)
+            self.task_queue_progress.setVisible(True)
+
+    def _refresh_daily_summary_viewers(self, date, tags_filter):
+        for i in range(self.central_tabs.count()):
+            widget = self.central_tabs.widget(i)
+            if not isinstance(widget, SummaryViewerWidget):
+                continue
+            w_data = widget.summary_data
+            if w_data.get("type") != "daily":
+                continue
+            same_date = w_data.get("date") == date
+            same_tags = (w_data.get("tags_filter") or "") == (tags_filter or "")
+            if not (same_date and same_tags):
+                continue
+            new_summary_data = self.db.get_daily_summary_details(date, tags_filter or None)
+            if new_summary_data:
+                new_summary_data["type"] = "daily"
+                widget.update_content(new_summary_data)
 
     def init_ui(self):
         central_widget = QWidget()
@@ -103,14 +308,23 @@ class MainWindow(QMainWindow):
         # Week Details Button
         self.open_calendar_btn = QPushButton("Week Details")
         self.open_calendar_btn.clicked.connect(self.open_calendar_tab)
+        self.open_calendar_btn.setProperty("class", "calendar-primary-btn")
+        self.open_calendar_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.open_calendar_btn.setMinimumHeight(36)
         left_layout.addWidget(self.open_calendar_btn)
         
         # Calendar Navigation
         nav_layout = QHBoxLayout()
         self.prev_week_btn = QPushButton("<< Prev Week")
         self.prev_week_btn.clicked.connect(self.prev_week_sidebar)
+        self.prev_week_btn.setProperty("class", "calendar-nav-btn")
+        self.prev_week_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.prev_week_btn.setMinimumHeight(34)
         self.next_week_btn = QPushButton("Next Week >>")
         self.next_week_btn.clicked.connect(self.next_week_sidebar)
+        self.next_week_btn.setProperty("class", "calendar-nav-btn")
+        self.next_week_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.next_week_btn.setMinimumHeight(34)
         nav_layout.addWidget(self.prev_week_btn)
         nav_layout.addWidget(self.next_week_btn)
         left_layout.addLayout(nav_layout)
@@ -118,6 +332,9 @@ class MainWindow(QMainWindow):
         # Reset Date Filter Button
         self.reset_date_btn = QPushButton("Show All Dates")
         self.reset_date_btn.clicked.connect(self.reset_date_filter)
+        self.reset_date_btn.setProperty("class", "calendar-nav-btn")
+        self.reset_date_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.reset_date_btn.setMinimumHeight(34)
         left_layout.addWidget(self.reset_date_btn)
         
         # Initialize date filter state
@@ -175,10 +392,11 @@ class MainWindow(QMainWindow):
         self.central_tabs = QTabWidget()
         self.central_tabs.setTabsClosable(True)
         self.central_tabs.tabCloseRequested.connect(self.close_tab)
+        self.central_tabs.currentChanged.connect(lambda _: self.refresh_tasks_sidebar())
         self.central_tabs.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.central_tabs.customContextMenuRequested.connect(self.show_tab_context_menu)
         self.splitter.addWidget(self.central_tabs)
-        # --- Right Panel: Chat History & Collections & Notebooks ---
+        # --- Right Panel: Tasks, Chat History & Notebooks ---
         right_panel = QWidget()
         right_layout = QVBoxLayout(right_panel)
         right_panel.setMinimumWidth(300)
@@ -210,38 +428,58 @@ class MainWindow(QMainWindow):
             
             return container
 
-        # 1. Chat History Section
+        # 1. Tasks Section
+        self.tasks_sidebar_list = QListWidget()
+        self.tasks_sidebar_list.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+
+        self.open_tasks_btn = QPushButton("View all")
+        self.open_tasks_btn.setProperty("class", "calendar-nav-btn")
+        self.open_tasks_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.open_tasks_btn.setMinimumHeight(34)
+        self.open_tasks_btn.clicked.connect(lambda: self.open_tasks_tab(create_new=False))
+
+        self.create_task_btn = QPushButton("Create new")
+        self.create_task_btn.setProperty("class", "calendar-nav-btn")
+        self.create_task_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.create_task_btn.setMinimumHeight(34)
+        self.create_task_btn.clicked.connect(lambda: self.open_tasks_tab(create_new=True))
+
+        tasks_buttons = QWidget()
+        tasks_buttons_layout = QHBoxLayout(tasks_buttons)
+        tasks_buttons_layout.setContentsMargins(0, 0, 0, 0)
+        tasks_buttons_layout.setSpacing(8)
+        tasks_buttons_layout.addWidget(self.open_tasks_btn)
+        tasks_buttons_layout.addWidget(self.create_task_btn)
+
+        tasks_section = create_section("✅ Tasks", self.tasks_sidebar_list, tasks_buttons)
+        right_layout.addWidget(tasks_section, stretch=1)
+
+        # 2. Chat History Section
         self.sessions_list = QListWidget()
         self.sessions_list.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.sessions_list.itemClicked.connect(self.on_chat_session_clicked)
         
         self.delete_chat_session_btn = QPushButton("Delete Chat")
-        self.delete_chat_session_btn.setStyleSheet("color: #f44336;") # Keep red color for delete
+        self.delete_chat_session_btn.setProperty("class", "calendar-nav-btn")
+        self.delete_chat_session_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.delete_chat_session_btn.setMinimumHeight(34)
         self.delete_chat_session_btn.clicked.connect(self.delete_selected_chat_session)
         
         chat_section = create_section("💬 Chat History", self.sessions_list, self.delete_chat_session_btn)
         right_layout.addWidget(chat_section, stretch=1)
-        
-        # 2. Collections Section
-        self.collections_list = QListWidget()
-        self.collections_list.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        self.collections_list.itemClicked.connect(self.on_collection_clicked)
-        
-        self.open_collections_btn = QPushButton("Ver todas las colecciones")
-        self.open_collections_btn.clicked.connect(self.open_collections_list)
-        
-        col_section = create_section("🏷️ Collections", self.collections_list, self.open_collections_btn)
-        right_layout.addWidget(col_section, stretch=1)
         
         # 3. Libretas (Notebooks) Section
         self.notebooks_list = QListWidget()
         self.notebooks_list.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.notebooks_list.itemClicked.connect(self.on_notebook_clicked)
         
-        self.open_notebooks_btn = QPushButton("Ver todas las libretas")
+        self.open_notebooks_btn = QPushButton("View all notebooks")
+        self.open_notebooks_btn.setProperty("class", "calendar-nav-btn")
+        self.open_notebooks_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.open_notebooks_btn.setMinimumHeight(34)
         self.open_notebooks_btn.clicked.connect(self.open_notebooks_list)
         
-        nb_section = create_section("📓 Libretas", self.notebooks_list, self.open_notebooks_btn)
+        nb_section = create_section("📓 Notebooks", self.notebooks_list, self.open_notebooks_btn)
         right_layout.addWidget(nb_section, stretch=1)
         
         self.splitter.addWidget(right_panel)
@@ -270,17 +508,41 @@ class MainWindow(QMainWindow):
     def show_welcome_screen(self):
         self.welcome_widget = WelcomeWidget(self.db)
         self.welcome_widget.new_recording_requested.connect(self.start_new_recording)
+        self.welcome_widget.new_note_requested.connect(lambda: self.open_note_tab(None))
         self.welcome_widget.search_triggered.connect(self.perform_welcome_search)
-        self.welcome_widget.result_clicked.connect(self.open_recording_tab)
+        self.welcome_widget.result_clicked.connect(self.open_item_tab)
         self.welcome_widget.new_chat_requested.connect(lambda: self.open_chat_tab(None))
         self.welcome_widget.import_audio_requested.connect(self.import_audio_file)
         self.welcome_widget.notebooks_requested.connect(self.open_notebooks_list)
         self.welcome_widget.tools_requested.connect(lambda: self.open_tools_tab())
         self.welcome_widget.settings_requested.connect(self.open_settings_tab)
+        self.welcome_widget.generate_daily_summary_requested.connect(self.generate_today_daily_summary)
+        self.welcome_widget.status_message_requested.connect(self.handle_status_message)
         
         # Add as first tab, not closable
         self.central_tabs.addTab(self.welcome_widget, "Welcome")
         self.central_tabs.tabBar().setTabButton(0, QTabBar.ButtonPosition.RightSide, None) # Remove close button
+
+    def open_item_tab(self, record_id):
+        """Open a tab for a record, deciding between recording and note."""
+        record = self.db.fetch_record(record_id)
+        if not record:
+            return
+            
+        type_ = record.get('type', 'recording')
+        if type_ == 'note':
+            self.open_note_tab(record_id)
+        else:
+            self.open_recording_tab(record_id)
+
+    def generate_today_daily_summary(self):
+        """Queue generation/update of today's daily summary."""
+        from datetime import date
+        today_str = date.today().isoformat()
+        self.summary_task_queue.enqueue_daily_summary({
+            "date": today_str,
+            "tags_filter": ""
+        })
 
     def start_new_recording(self, config):
         """Start a new recording with the given configuration."""
@@ -315,8 +577,10 @@ class MainWindow(QMainWindow):
                 return widget
 
         # Create new tab for existing recording
-        rec_widget = RecordingWidget(self.rag, recorder=self.recorder, record_id=record_id)
+        rec_widget = RecordingWidget(self.rag, recorder=self.recorder, record_id=record_id, task_queue=self.summary_task_queue)
         rec_widget.recording_saved.connect(self.load_history)
+        rec_widget.status_changed.connect(self.handle_status_message)
+        rec_widget.progress_changed.connect(self.handle_progress)
         rec_widget.close_requested.connect(lambda: self.close_tab(self.central_tabs.indexOf(rec_widget)))
         
         # If config is provided, set the widget's transcription settings
@@ -325,14 +589,42 @@ class MainWindow(QMainWindow):
         
         title = "New Recording"
         if record_id:
-            records = self.db.fetch_all()
-            record = next((r for r in records if r['id'] == record_id), None)
+            record = self.db.fetch_record(record_id)
+            if not isinstance(record, dict):
+                records = self.db.fetch_all()
+                record = next((r for r in records if r['id'] == record_id), None)
             if record:
                 title = record['title'] if record['title'] else f"Recording {record['id']}"
         
         index = self.central_tabs.addTab(rec_widget, title)
         self.central_tabs.setCurrentIndex(index)
         return rec_widget
+
+    def open_note_tab(self, record_id=None):
+        """Open a note tab for a new or existing note."""
+        # Check if already open
+        if record_id:
+            for i in range(self.central_tabs.count()):
+                widget = self.central_tabs.widget(i)
+                if isinstance(widget, NoteWidget) and widget.current_record_id == record_id:
+                    self.central_tabs.setCurrentIndex(i)
+                    return widget
+
+        note_widget = NoteWidget(self.rag, record_id=record_id, task_queue=self.summary_task_queue)
+        note_widget.note_saved.connect(self.load_history)
+        note_widget.status_changed.connect(self.handle_status_message)
+        note_widget.progress_changed.connect(self.handle_progress)
+        note_widget.close_requested.connect(lambda: self.close_tab(self.central_tabs.indexOf(note_widget)))
+        
+        title = "New Note"
+        if record_id:
+            record = self.db.fetch_record(record_id)
+            if record:
+                title = record['title'] if record['title'] else f"Note {record['id']}"
+        
+        index = self.central_tabs.addTab(note_widget, title)
+        self.central_tabs.setCurrentIndex(index)
+        return note_widget
 
     def on_recording_finished(self, file_path, config, widget):
         """Handle recording finished - save to DB and start transcription with config."""
@@ -355,7 +647,7 @@ class MainWindow(QMainWindow):
                 self.db.update_tags(record_id, tags)
             
             # Refresh sidebar to show new recording with title
-            self.load_history()
+            self.request_sidebar_reload(include_tags=True, include_history=True)
             
             # Open standard recording tab with config
             rec_widget = self.open_recording_tab(record_id, config)
@@ -409,14 +701,35 @@ class MainWindow(QMainWindow):
                 widget.show_tab(tab_index)
                 return
 
-        tools_widget = ToolsWidget(self.db, self.notebook_db)
+        tools_widget = ToolsWidget(self.db, self.notebook_db, task_queue=self.summary_task_queue)
         
         index = self.central_tabs.addTab(tools_widget, "⚙️ Tools")
         self.central_tabs.setCurrentIndex(index)
         tools_widget.show_tab(tab_index)
 
+    def open_tasks_tab(self, create_new=False):
+        """Open a dedicated tab with incomplete tasks."""
+        for i in range(self.central_tabs.count()):
+            widget = self.central_tabs.widget(i)
+            if isinstance(widget, TasksListWidget):
+                self.central_tabs.setCurrentIndex(i)
+                widget.refresh()
+                if create_new:
+                    widget.open_create_dialog()
+                return
+
+        tasks_widget = TasksListWidget(self.db, limit=None)
+        tasks_widget.open_recording_requested.connect(self.open_recording_tab)
+        tasks_widget.tasks_changed.connect(self.refresh_tasks_sidebar)
+        index = self.central_tabs.addTab(tasks_widget, "✅ Tasks")
+        self.central_tabs.setCurrentIndex(index)
+        if create_new:
+            tasks_widget.open_create_dialog()
+
     def close_tab(self, index):
         widget = self.central_tabs.widget(index)
+        if widget is None:
+            return
         if isinstance(widget, WelcomeWidget):
              # Maybe don't allow closing welcome widget?
              return 
@@ -426,6 +739,11 @@ class MainWindow(QMainWindow):
              # But if we close it forcefully, we might lose unsaved title/tags if not saved.
              # Ideally call a method on widget to check.
              pass
+        if hasattr(widget, "cleanup"):
+            try:
+                widget.cleanup()
+            except Exception:
+                pass
              
         self.central_tabs.removeTab(index)
         widget.deleteLater()
@@ -500,7 +818,8 @@ class MainWindow(QMainWindow):
         # 2. Combine with Summaries
         all_items = []
         for r in records:
-            r['type'] = 'recording'
+            if 'type' not in r or not r['type']:
+                r['type'] = 'recording'
             r['sort_date'] = r['created_at']
             all_items.append(r)
             
@@ -538,6 +857,7 @@ class MainWindow(QMainWindow):
                     all_items.append({
                         'type': 'daily',
                         'date': self.current_date_filter,
+                        'tags_filter': tags_filter if tags_filter else '',
                         'summary': summary_text,
                         'sort_date': self.current_date_filter + " 23:59:59"
                     })
@@ -561,7 +881,7 @@ class MainWindow(QMainWindow):
         for item_data in all_items:
             item = QListWidgetItem(self.history_list)
             
-            if item_data['type'] == 'recording':
+            if item_data['type'] in ['recording', 'note']:
                 widget = RecordingListItemWidget(item_data)
                 widget.favorite_toggled.connect(lambda checked, r_id=item_data['id']: self.on_favorite_toggled(r_id, checked))
                 widget.delete_requested.connect(lambda r_id=item_data['id']: self.delete_recording(r_id))
@@ -586,8 +906,24 @@ class MainWindow(QMainWindow):
 
     def refresh_sidebar(self):
         """Manually refresh the history list and tags."""
-        self.load_history()
-        self.refresh_tag_filter()
+        self.request_sidebar_reload(include_tags=True, include_history=True)
+
+    def request_sidebar_reload(self, include_tags=False, include_history=True, delay_ms=120):
+        self._pending_history_reload = self._pending_history_reload or include_history
+        self._pending_tag_reload = self._pending_tag_reload or include_tags
+        self._sidebar_refresh_timer.start(delay_ms)
+
+    def _apply_pending_sidebar_reload(self):
+        refresh_tags = self._pending_tag_reload
+        refresh_history = self._pending_history_reload or refresh_tags
+        self._pending_history_reload = False
+        self._pending_tag_reload = False
+
+        if refresh_tags:
+            self.refresh_tag_filter()
+        if refresh_history:
+            self.load_history()
+        self.refresh_tasks_sidebar()
 
     def refresh_tag_filter(self):
         current_tag = self.tag_filter_combo.currentText()
@@ -614,12 +950,11 @@ class MainWindow(QMainWindow):
         else:
             self.tag_filter_combo.setCurrentIndex(0)
         self.tag_filter_combo.blockSignals(False)
-        self.load_collections() # Also refresh collections list
+        self.load_collections()
 
     def load_collections(self):
-        self.collections_list.clear()
-        tags = self.db.get_all_tags()
-        self.collections_list.addItems(tags)
+        # Collections sidebar section was removed.
+        return
 
     def load_notebooks(self):
         """Load notebooks into the sidebar list."""
@@ -668,7 +1003,7 @@ class MainWindow(QMainWindow):
                 return
 
         # Pass rag_engine (self) to the CalendarWidget
-        tab = CalendarWidget(self)
+        tab = CalendarWidget(self, task_queue=self.summary_task_queue)
         tab.start_chat_requested.connect(self.open_chat_tab_with_filters)
         tab.selection_changed.connect(self.on_tab_selection_sync)
         
@@ -680,7 +1015,7 @@ class MainWindow(QMainWindow):
         self.central_tabs.setCurrentIndex(index)
 
     def on_tag_filter_changed(self, tag):
-        self.load_history()
+        self.request_sidebar_reload(include_history=True)
         self.sync_week_details_tab()
 
     def on_tab_selection_sync(self, monday, date_str, tag=None):
@@ -708,8 +1043,7 @@ class MainWindow(QMainWindow):
              self.tag_filter_combo.blockSignals(False)
 
         self.update_calendar_visuals()
-        self.load_history()
-        self.refresh_tag_filter()
+        self.request_sidebar_reload(include_tags=True, include_history=True)
 
 
 
@@ -728,6 +1062,8 @@ class MainWindow(QMainWindow):
         
         if type_ == 'recording':
             self.open_recording_tab(data['id'])
+        elif type_ == 'note':
+            self.open_note_tab(data['id'])
         else:
             self.open_summary_tab(data)
 
@@ -740,15 +1076,21 @@ class MainWindow(QMainWindow):
                 # For summaries, we might use date/week_start + type as ID
                 w_data = widget.summary_data
                 if w_data.get('type') == summary_data.get('type'):
-                    if w_data.get('type') == 'daily' and w_data.get('date') == summary_data.get('date'):
+                    if (
+                        w_data.get('type') == 'daily'
+                        and w_data.get('date') == summary_data.get('date')
+                        and (w_data.get('tags_filter') or '') == (summary_data.get('tags_filter') or '')
+                    ):
                         self.central_tabs.setCurrentIndex(i)
                         return
                     if w_data.get('type') == 'weekly' and w_data.get('week_start') == summary_data.get('week_start'):
                         self.central_tabs.setCurrentIndex(i)
                         return
 
-        viewer = SummaryViewerWidget(summary_data)
+        viewer = SummaryViewerWidget(summary_data, db=self.db, task_queue=self.summary_task_queue)
         viewer.regenerate_requested.connect(self.regenerate_summary)
+        viewer.open_recording_requested.connect(self.open_recording_tab)
+        viewer.start_chat_requested.connect(self.open_chat_tab_with_filters)
         # viewer.close_requested.connect(...) # If we added a close signal
         
         type_ = summary_data.get('type')
@@ -758,63 +1100,10 @@ class MainWindow(QMainWindow):
         self.central_tabs.setCurrentIndex(index)
 
     def regenerate_summary(self, summary_data):
-        from src.summary_generator import SummaryGenerator
-        from PyQt6.QtWidgets import QProgressDialog
-        
         date = summary_data.get('date')
         if not date:
             return
-
-        # Create progress dialog
-        progress = QProgressDialog(f"Regenerating summary for {date}...", "Cancel", 0, 0, self)
-        progress.setWindowModality(Qt.WindowModality.WindowModal)
-        progress.show()
-        
-        # Instantiate Generator
-        self.regen_worker = SummaryGenerator(
-            generate_daily=True,
-            generate_weekly=False,
-            generate_recordings=True, # Ensure recordings are checked/generated
-            specific_dates=[date],
-            exclude_today=False # We want to allow today regeneration
-        )
-        
-        self.regen_worker.progress.connect(lambda c, t: progress.setValue(c)) # Indeterminate mostly
-        self.regen_worker.finished.connect(lambda: self.on_regeneration_finished(progress, summary_data))
-        self.regen_worker.error.connect(lambda e: self.on_regeneration_error(progress, e))
-        
-        progress.canceled.connect(self.regen_worker.cancel)
-        self.regen_worker.start()
-
-    def on_regeneration_finished(self, progress, summary_data):
-        progress.close()
-        QMessageBox.information(self, "Success", "Summary regenerated successfully.")
-        
-        # Reload the tab content
-        # We need to fetch the fresh summary from DB
-        date = summary_data.get('date')
-        new_summary_data = self.db.get_daily_summary_details(date)
-        
-        if new_summary_data:
-            # maintain type info
-            new_summary_data['type'] = 'daily'
-            
-            # Update the summary_data in the viewer
-            # Find the viewer
-            for i in range(self.central_tabs.count()):
-                widget = self.central_tabs.widget(i)
-                if isinstance(widget, SummaryViewerWidget):
-                    w_data = widget.summary_data
-                    if w_data.get('type') == 'daily' and w_data.get('date') == date:
-                        widget.update_content(new_summary_data)
-                        break
-                    
-        # Refresh sidebar
-        self.load_history()
-
-    def on_regeneration_error(self, progress, error_msg):
-        progress.close()
-        QMessageBox.critical(self, "Error", f"Failed to regenerate summary: {error_msg}")
+        self.summary_task_queue.enqueue_daily_summary(summary_data)
 
 
 
@@ -826,9 +1115,10 @@ class MainWindow(QMainWindow):
         if not query:
             return
             
+        if self.search_thread and self.search_thread.isRunning():
+            return
         QApplication.setOverrideCursor(QCursor(Qt.CursorShape.WaitCursor))
         
-        # Reuse SearchThread
         # Reuse SearchThread
         self.search_thread = SearchThread(self.rag, query)
         self.search_thread.finished.connect(lambda results: self.on_search_finished_new_tab(results, query))
@@ -837,6 +1127,7 @@ class MainWindow(QMainWindow):
 
     def on_search_finished_new_tab(self, results, query):
         QApplication.restoreOverrideCursor()
+        self.search_thread = None
         
         # Create Search Results Widget
         search_widget = SearchResultsWidget(query)
@@ -849,6 +1140,7 @@ class MainWindow(QMainWindow):
 
     def on_search_error(self, error_message):
         QApplication.restoreOverrideCursor()
+        self.search_thread = None
         QMessageBox.critical(self, "Search Error", f"An error occurred during search: {error_message}")
 
     def load_chat_sessions(self):
@@ -858,6 +1150,59 @@ class MainWindow(QMainWindow):
             item = QListWidgetItem(f"{s['name']} ({s['created_at'][:16]})")
             item.setData(Qt.ItemDataRole.UserRole, s)
             self.sessions_list.addItem(item)
+
+    def refresh_tasks_sidebar(self):
+        if not hasattr(self, "tasks_sidebar_list"):
+            return
+
+        self.tasks_sidebar_list.blockSignals(True)
+        self.tasks_sidebar_list.clear()
+        tasks = self.db.get_recent_incomplete_tasks(limit=self.tasks_sidebar_limit)
+        if not tasks:
+            self.tasks_sidebar_list.addItem("No incomplete tasks.")
+            self.tasks_sidebar_list.blockSignals(False)
+            return
+
+        for task in tasks:
+            title = (task.get("record_title") or "").strip() or f"Recording {task.get('record_id')}"
+            content = (task.get("content") or "").strip()
+            if len(content) > 80:
+                content = content[:77].rstrip() + "..."
+            
+            item = QListWidgetItem(f"[{title}] {content}")
+            item.setFlags(item.flags() | Qt.ItemFlag.ItemIsUserCheckable)
+            item.setCheckState(Qt.CheckState.Unchecked)
+            item.setData(Qt.ItemDataRole.UserRole, task)
+            self.tasks_sidebar_list.addItem(item)
+        
+        # Connect signal if not already connected (though it's safer to check)
+        try:
+            self.tasks_sidebar_list.itemChanged.disconnect(self.on_task_sidebar_item_changed)
+        except:
+            pass
+        self.tasks_sidebar_list.itemChanged.connect(self.on_task_sidebar_item_changed)
+        self.tasks_sidebar_list.blockSignals(False)
+
+    def on_task_sidebar_item_changed(self, item):
+        task = item.data(Qt.ItemDataRole.UserRole)
+        if not task:
+            return
+            
+        is_completed = item.checkState() == Qt.CheckState.Checked
+        self.db.toggle_task_completion(task['id'], is_completed)
+        
+        # Apply visual feedback (strikethrough)
+        font = item.font()
+        font.setStrikeOut(is_completed)
+        item.setFont(font)
+        if is_completed:
+            item.setForeground(Qt.GlobalColor.gray)
+        else:
+            # Revert to default color (theme dependent)
+            item.setForeground(QApplication.palette().text())
+        
+        # We DON'T refresh immediately here, so the user can see it's checked.
+        # It will disappear on next regular refresh.
 
     def on_chat_session_clicked(self, item):
         session = item.data(Qt.ItemDataRole.UserRole)
@@ -897,8 +1242,7 @@ class MainWindow(QMainWindow):
             self.current_date_filter = date.toString("yyyy-MM-dd")
             
         self.update_calendar_visuals()
-        self.load_history()
-        self.refresh_tag_filter()
+        self.request_sidebar_reload(include_tags=True, include_history=True)
         self.sync_week_details_tab()
 
     def sync_week_details_tab(self):
@@ -926,8 +1270,7 @@ class MainWindow(QMainWindow):
         # Update calendar view
         self.calendar.setSelectedDate(sunday)
         self.update_calendar_visuals()
-        self.load_history()
-        self.refresh_tag_filter()
+        self.request_sidebar_reload(include_tags=True, include_history=True)
 
     def next_week_sidebar(self):
         """Move to next week, showing full week by default (selecting Sunday)."""
@@ -943,8 +1286,7 @@ class MainWindow(QMainWindow):
         # Update calendar view
         self.calendar.setSelectedDate(sunday)
         self.update_calendar_visuals()
-        self.load_history()
-        self.refresh_tag_filter()
+        self.request_sidebar_reload(include_tags=True, include_history=True)
         
     def update_calendar_visuals(self):
         """Highlight full week context and active progressive range."""
@@ -1006,8 +1348,7 @@ class MainWindow(QMainWindow):
         self.current_date_filter = None
         self.current_week_monday = None
         self.update_calendar_visuals()
-        self.load_history()
-        self.refresh_tag_filter()
+        self.request_sidebar_reload(include_tags=True, include_history=True)
 
     def filter_history_list(self, text):
         for i in range(self.history_list.count()):
@@ -1184,3 +1525,47 @@ class MainWindow(QMainWindow):
 
     # open_maintenance_tab removed - now handled by open_tools_tab
 
+    def closeEvent(self, event):
+        self._sidebar_refresh_timer.stop()
+        self._pending_history_reload = False
+        self._pending_tag_reload = False
+
+        # Stop background workers before Qt starts tearing down widgets.
+        if self.search_thread and self.search_thread.isRunning():
+            try:
+                self.search_thread.requestInterruption()
+                self.search_thread.quit()
+                self.search_thread.wait(3000)
+            except Exception:
+                pass
+        self.search_thread = None
+
+        if self.summary_task_queue:
+            self.summary_task_queue.cancel_all()
+        self.regen_worker = None
+
+        # Close tabs from right to left and allow each widget to cleanup resources.
+        for i in range(self.central_tabs.count() - 1, -1, -1):
+            widget = self.central_tabs.widget(i)
+            if widget and hasattr(widget, "cleanup"):
+                try:
+                    widget.cleanup()
+                except Exception:
+                    pass
+
+        if self.recorder and self.recorder.is_recording:
+            try:
+                self.recorder.stop()
+            except Exception:
+                pass
+
+        try:
+            import gc
+            gc.collect()
+            import torch
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+        except Exception:
+            pass
+
+        super().closeEvent(event)

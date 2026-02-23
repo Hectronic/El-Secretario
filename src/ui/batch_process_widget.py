@@ -28,6 +28,7 @@ class BatchProcessWidget(QWidget):
         self.db = DBManager()
         self.queue = []
         self.current_thread = None
+        self.thread = None
         self.is_processing = False
         self.total_files = 0
         self.processed_count = 0
@@ -228,7 +229,10 @@ class BatchProcessWidget(QWidget):
     def cleanup_thread(self):
         if self.thread:
             try:
-                self.thread.wait()
+                if self.thread.isRunning():
+                    self.thread.requestInterruption()
+                    self.thread.quit()
+                    self.thread.wait(3000)
                 self.thread.deleteLater()
             except:
                 pass
@@ -336,3 +340,11 @@ class BatchProcessWidget(QWidget):
         self.progress_bar.setValue(100)
         self.log("All done.")
         QMessageBox.information(self, "Done", "Batch processing completed.")
+
+    def cleanup(self):
+        self.is_processing = False
+        self.cleanup_thread()
+
+    def closeEvent(self, event):
+        self.cleanup()
+        super().closeEvent(event)

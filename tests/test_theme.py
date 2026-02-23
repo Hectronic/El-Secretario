@@ -46,5 +46,12 @@ class TestTheme(unittest.TestCase):
         sheet = app.styleSheet()
         self.assertTrue("background-color" in sheet)
 
+    def test_apply_theme_snes(self):
+        """Test applying SNES theme updates the global stylesheet."""
+        apply_theme("SNES")
+        sheet = app.styleSheet()
+        self.assertIn("background-color: #D1D1D1", sheet)
+        self.assertIn("border: 2px solid #7B59AB", sheet)
+
 if __name__ == '__main__':
     unittest.main()

@@ -12,7 +12,7 @@ Read this in [Español](README_ES.md) | [Asturianu](README_AST.md)
 
 - **Audio Recording & Import**: Record audio directly within the app or import existing files.
 - **Transcription & Diarization**: Automatically transcribe audio and identify different speakers (diarization) using OpenAI's Whisper and pyannote.audio.
-- **Intelligent Search (RAG)**: Use Retrieval-Augmented Generation (RAG) to chat with your recordings and find specific information.
+- **Intelligent Search (RAG)**: Use Retrieval-Augmented Generation (RAG) to chat with your recordings and find specific information. Supports Google Gemini and **Ollama** for local execution.
 - **Notebooks & Collections**: Organize your recordings into notebooks and collections. Access them directly from the sidebar.
 - **Calendar View**: Browse your recordings by date.
 - **Unified Tools**: Storage cleanup, batch processing, and data export/import in one convenient tab.
@@ -53,8 +53,13 @@ To fully utilize the features of El Secretario, you will need to configure the A
     -   Create a token at: [https://huggingface.co/settings/tokens](https://huggingface.co/settings/tokens)
     -   Ensure you have accepted the user conditions for the `pyannote/speaker-diarization-3.1` model.
 
-2.  **Gemini API Key**: Required for the AI Assistant (chat) features.
+2.  **Gemini API Key**: Required for the AI Assistant (chat) features by default.
     -   Get your API key at: [https://aistudio.google.com/app/apikey](https://aistudio.google.com/app/apikey)
+
+3.  **Ollama**: (Optional) Alternative for AI Assistant features if you prefer to run models locally.
+    -   Install [Ollama](https://ollama.com/) on your system.
+    -   Ensure the Ollama server is running before starting the app.
+    -   You can select your preferred local model (e.g., `llama3`, `mistral`) in the application settings.
 
 ## Usage
 

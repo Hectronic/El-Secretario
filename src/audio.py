@@ -98,36 +98,39 @@ class Recorder(QObject):
         if not self.is_recording:
             return None
 
-        # Handle case where stream failed to initialize
-        if self.stream is not None:
-            self.stream.stop()
-            self.stream.close()
-            self.stream = None
-        
-        self.is_recording = False
-        self.is_paused = False
-        
-        # Concatenate all recorded chunks
-        if not self.recording:
-            logging.warning("Recording stopped but no data was recorded.")
-            return None
+        try:
+            # Handle case where stream failed to initialize
+            if self.stream is not None:
+                self.stream.stop()
+                self.stream.close()
+                self.stream = None
             
-        full_recording = np.concatenate(self.recording, axis=0)
-        
-        # Ensure recordings directory exists
-        recordings_dir = os.path.join(os.getcwd(), "recordings")
-        os.makedirs(recordings_dir, exist_ok=True)
-        
-        # Generate filename
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        filename = f"rec_{timestamp}.wav"
-        filepath = os.path.join(recordings_dir, filename)
-        
-        # Save to file
-        sf.write(filepath, full_recording, self.fs)
-        logging.info(f"Recording saved to {filepath}")
-        
-        return filepath
+            self.is_recording = False
+            self.is_paused = False
+            
+            # Concatenate all recorded chunks
+            if not self.recording:
+                logging.warning("Recording stopped but no data was recorded.")
+                return None
+                
+            full_recording = np.concatenate(self.recording, axis=0)
+            
+            # Ensure recordings directory exists
+            recordings_dir = os.path.join(os.getcwd(), "recordings")
+            os.makedirs(recordings_dir, exist_ok=True)
+            
+            # Generate filename
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            filename = f"rec_{timestamp}.wav"
+            filepath = os.path.join(recordings_dir, filename)
+            
+            # Save to file
+            sf.write(filepath, full_recording, self.fs)
+            logging.info(f"Recording saved to {filepath}")
+            return filepath
+        finally:
+            # Release audio buffer memory aggressively after stop (success or failure).
+            self.recording.clear()
 
     @staticmethod
     def get_input_devices():

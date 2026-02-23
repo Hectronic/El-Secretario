@@ -51,7 +51,10 @@ class TestCalendarUI(unittest.TestCase):
         # Patch RAGEngine
         self.rag = MagicMock()
         
-        self.widget = CalendarWidget(self.rag)
+        # Mock task queue
+        self.mock_queue = MagicMock()
+        
+        self.widget = CalendarWidget(self.rag, task_queue=self.mock_queue)
 
     def tearDown(self):
         self.widget.deleteLater()
@@ -116,13 +119,9 @@ class TestCalendarUI(unittest.TestCase):
         self.assertEqual(self.widget.current_anchor_date.toString("yyyy-MM-dd"), "2026-01-07")
         self.assertEqual(len(self.widget.selected_dates), 3)
 
-    @patch('src.ui.calendar_widget.AIAssistant')
     @patch('src.ui.calendar_widget.QProgressDialog')
     @patch('src.ui.calendar_widget.QMessageBox')
-    def test_generate_summary(self, mock_msg, mock_progress, mock_ai_cls):
-        # Setup mock AI
-        mock_ai = mock_ai_cls.return_value
-        
+    def test_generate_summary(self, mock_msg, mock_progress):
         # Setup selection
         monday = QDate(2026, 1, 5)
         self.widget.set_selection(monday)
@@ -134,13 +133,13 @@ class TestCalendarUI(unittest.TestCase):
         # Click Generate
         self.widget.on_generate_summary_clicked()
         
-        mock_ai.start.assert_called_once()
+        # Verify it was enqueued
+        self.mock_queue.enqueue_weekly_summary.assert_called_once()
         
-        # Mock get_weekly_summary to return result when called during update_summary_view
+        # Simulate result manually to test UI update
         self.mock_db.get_weekly_summary.return_value = "Summary Result"
-        self.widget.on_summary_finished("weekly_summary", "Summary Result")
+        self.widget.update_summary_view()
         
-        self.mock_db.save_weekly_summary.assert_called_with("2026-01-11", "Summary Result", None)
         self.assertEqual(self.widget.summary_text.toPlainText().strip(), "Summary Result")
 
     @patch('src.ui.calendar_widget.QMessageBox')

@@ -106,6 +106,9 @@ class TranscriberThread(QThread):
             
             whisper_segments = []
             for segment in segments:
+                if self.isInterruptionRequested():
+                    self.status_update.emit("Cancelled.")
+                    return
                 whisper_segments.append(segment)
                 if self.total_duration > 0:
                     prog = int((segment.end / self.total_duration) * 100)
@@ -124,6 +127,9 @@ class TranscriberThread(QThread):
                 # Bump progress to 80% to show we are moving to next phase
                 self.progress.emit(80)
                 try:
+                    if self.isInterruptionRequested():
+                        self.status_update.emit("Cancelled.")
+                        return
                     pipeline = Pipeline.from_pretrained("pyannote/speaker-diarization-3.1", use_auth_token=self.hf_token)
                     if pipeline:
                         # Move pipeline to GPU if CUDA available and not forced to CPU
@@ -144,6 +150,9 @@ class TranscriberThread(QThread):
                 self.progress.emit(90)
                 
             for segment in whisper_segments:
+                if self.isInterruptionRequested():
+                    self.status_update.emit("Cancelled.")
+                    return
                 speaker_label = ""
                 if diarization:
                     # Find speaker who spoke the most during this segment
@@ -201,6 +210,10 @@ class TranscriberThread(QThread):
             
             gc.collect()
             if torch.cuda.is_available():
+                try:
+                    torch.cuda.synchronize()
+                except Exception:
+                    pass
                 torch.cuda.empty_cache()
 
 class SearchThread(QThread):

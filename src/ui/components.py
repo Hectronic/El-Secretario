@@ -123,7 +123,7 @@ class RecordingListItemWidget(QWidget):
     def init_ui(self):
         layout = QHBoxLayout(self)
         layout.setContentsMargins(5, 5, 5, 5)
-        layout.setSpacing(5)
+        layout.setSpacing(8)
         
         # Info Section - wrap in a widget to control size properly
         info_widget = QWidget()
@@ -141,8 +141,12 @@ class RecordingListItemWidget(QWidget):
         info_layout.addWidget(self.title_label)
         
         date_str = self.record.get('created_at')
-        duration = self.record.get('duration', 0)
-        details = f"{date_str} • {duration:.1f}s"
+        type_ = self.record.get('type', 'recording')
+        if type_ == 'note':
+            details = f"📝 {date_str}"
+        else:
+            duration = self.record.get('duration', 0)
+            details = f"{date_str} • {duration:.1f}s"
         self.details_label = QLabel(details)
         self.details_label.setObjectName("record_details")
         self.details_label.setStyleSheet("font-size: 12px;")
@@ -152,25 +156,31 @@ class RecordingListItemWidget(QWidget):
         layout.addWidget(info_widget, 1)
         
         # Buttons - fixed size, no stretch, always visible
+        btn_size = 26
         self.fav_btn = QPushButton()
         self.fav_btn.setCheckable(True)
-        self.fav_btn.setFixedSize(30, 30)
-        self.fav_btn.setStyleSheet("QPushButton { border: none; }")
+        self.fav_btn.setFixedSize(btn_size, btn_size)
+        self.fav_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.fav_btn.setProperty("class", "record-fav-btn")
         # We can use unicode star or icon if available. Let's use unicode for now to avoid asset dependency issues.
         # ★ (U+2605) filled, ☆ (U+2606) empty
         self.update_fav_icon(bool(self.record.get('is_favorite', 0)))
         self.fav_btn.toggled.connect(self.on_fav_toggled)
-        layout.addWidget(self.fav_btn, 0)  # stretch factor 0 = don't stretch
+        self.fav_btn.style().unpolish(self.fav_btn)
+        self.fav_btn.style().polish(self.fav_btn)
+        layout.addWidget(self.fav_btn, 0, Qt.AlignmentFlag.AlignVCenter)  # stretch factor 0 = don't stretch
         
         self.del_btn = QPushButton("🗑") # Trash bin unicode
-        self.del_btn.setFixedSize(30, 30)
-        self.del_btn.setStyleSheet("QPushButton { border: none; color: #f44336; } QPushButton:hover { background-color: #3a3a3a; border-radius: 15px; }")
+        self.del_btn.setFixedSize(btn_size, btn_size)
+        self.del_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.del_btn.setProperty("class", "record-del-btn")
+        self.del_btn.style().unpolish(self.del_btn)
+        self.del_btn.style().polish(self.del_btn)
         self.del_btn.clicked.connect(self.delete_requested.emit)
-        layout.addWidget(self.del_btn, 0)  # stretch factor 0 = don't stretch
+        layout.addWidget(self.del_btn, 0, Qt.AlignmentFlag.AlignVCenter)  # stretch factor 0 = don't stretch
         
     def update_fav_icon(self, is_fav):
         self.fav_btn.setText("★" if is_fav else "☆")
-        self.fav_btn.setStyleSheet(f"QPushButton {{ border: none; color: {'#FFC107' if is_fav else 'gray'}; font-size: 20px; }}")
         self.fav_btn.setChecked(is_fav)
         
     def on_fav_toggled(self, checked):
@@ -222,3 +232,113 @@ class SummaryListItemWidget(QWidget):
         
         # We could add delete button specifically for summaries if needed
         # For now, keep it simple.
+
+
+class TaskRowWidget(QWidget):
+    """Custom widget for a task row, used in summary view and tasks board."""
+    status_changed = pyqtSignal(int, bool) # task_id, is_completed
+
+    def __init__(self, task, parent=None):
+        super().__init__(parent)
+        self.task_id = task.get("id")
+        self.is_completed = bool(task.get("is_completed"))
+        self.init_ui(task)
+
+    def init_ui(self, task):
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(5, 5, 5, 5)
+        layout.setSpacing(10)
+
+        # Status Button (Checkmark)
+        self.status_btn = QPushButton()
+        self.status_btn.setFixedSize(24, 24)
+        self.status_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.status_btn.clicked.connect(self._toggle_status)
+        self._update_status_icon()
+        layout.addWidget(self.status_btn)
+
+        # Content and Source
+        text_layout = QVBoxLayout()
+        text_layout.setSpacing(2)
+
+        content = (task.get("content") or "").strip()
+        self.content_label = QLabel(content)
+        self.content_label.setWordWrap(True)
+        self.content_label.setStyleSheet("font-size: 14px; font-weight: 500;")
+        text_layout.addWidget(self.content_label)
+
+        # Source Metadata
+        record_title = task.get("record_title")
+        source_type_val = task.get("record_type") or task.get("source_type") or "recording"
+        source_type = "Note" if source_type_val == "note" else "Recording"
+        
+        # Add date if available (important for general tasks board)
+        date_str = task.get("day_date") or (task.get("created_at") or "")[:10]
+        date_part = f" • {date_str}" if date_str else ""
+        
+        source_text = f"Source: {source_type} - {record_title}{date_part}" if record_title else f"Source: {source_type}{date_part}"
+        
+        self.source_label = QLabel(source_text)
+        self.source_label.setStyleSheet("font-size: 11px; color: #888;")
+        text_layout.addWidget(self.source_label)
+
+        layout.addLayout(text_layout, 1)
+
+        # Apply initial visual state
+        self._apply_visual_state()
+
+    def _toggle_status(self):
+        self.is_completed = not self.is_completed
+        self._update_status_icon()
+        self._apply_visual_state()
+        self.status_changed.emit(self.task_id, self.is_completed)
+
+    def _update_status_icon(self):
+        if self.is_completed:
+            self.status_btn.setText("✔")
+            self.status_btn.setStyleSheet("""
+                QPushButton {
+                    background-color: #4CAF50;
+                    color: white;
+                    border: none;
+                    border-radius: 12px;
+                    font-weight: bold;
+                }
+                QPushButton:hover {
+                    background-color: #45a049;
+                }
+            """)
+        else:
+            self.status_btn.setText("")
+            self.status_btn.setStyleSheet("""
+                QPushButton {
+                    background-color: transparent;
+                    border: 2px solid #555;
+                    border-radius: 12px;
+                }
+                QPushButton:hover {
+                    border-color: #2196F3;
+                }
+            """)
+
+    def _apply_visual_state(self):
+        font = self.content_label.font()
+        font.setStrikeOut(self.is_completed)
+        self.content_label.setFont(font)
+        
+        if self.is_completed:
+            self.content_label.setStyleSheet("font-size: 14px; font-weight: 500; color: #888;")
+        else:
+            self.content_label.setStyleSheet("font-size: 14px; font-weight: 500;")
+        
+        # Use property for styling if needed in stylesheets
+        self.setProperty("completed", self.is_completed)
+        self.style().unpolish(self)
+        self.style().polish(self)
+
+    def set_completed(self, is_completed):
+        """Programmatically set the completion status."""
+        if self.is_completed != is_completed:
+            self.is_completed = is_completed
+            self._update_status_icon()
+            self._apply_visual_state()

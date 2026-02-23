@@ -176,6 +176,7 @@ class NotebookWidget(QWidget):
         
         # Connect recorder amplitude signal
         self.recorder.amplitude_changed.connect(self.update_vu_meter)
+        self._amplitude_connected = True
         
         # Entries List
         self.entries_list = QListWidget()
@@ -296,10 +297,13 @@ class NotebookWidget(QWidget):
         compute_type = settings.value("compute_type", "int8")
         if compute_type == "auto":
             compute_type = None
-        
+
+        self._cleanup_transcriber_thread()
         self.transcriber_thread = TranscriberThread(file_path, model_size="base", compute_type=compute_type, force_cpu=force_cpu)
         self.transcriber_thread.finished.connect(lambda res: self.on_transcription_finished(entry_id, res))
         self.transcriber_thread.error.connect(lambda err: self.on_transcription_error(entry_id, err))
+        self.transcriber_thread.finished.connect(self._clear_transcriber_thread_ref)
+        self.transcriber_thread.error.connect(self._clear_transcriber_thread_ref)
         self.transcriber_thread.start()
 
     def on_transcription_finished(self, entry_id, result):
@@ -362,6 +366,46 @@ class NotebookWidget(QWidget):
                 except Exception as e:
                     print(f"Error deleting file: {e}")
             self.load_entries()
+
+    def _clear_transcriber_thread_ref(self, *args):
+        thread = self.transcriber_thread
+        self.transcriber_thread = None
+        if thread:
+            thread.deleteLater()
+
+    def _cleanup_transcriber_thread(self):
+        if self.transcriber_thread and self.transcriber_thread.isRunning():
+            try:
+                self.transcriber_thread.requestInterruption()
+                self.transcriber_thread.quit()
+                self.transcriber_thread.wait(3000)
+            except Exception:
+                pass
+        if self.transcriber_thread:
+            try:
+                self.transcriber_thread.deleteLater()
+            except Exception:
+                pass
+        self.transcriber_thread = None
+
+    def cleanup(self):
+        self.recording_timer.stop()
+        if self.recorder.is_recording:
+            try:
+                self.recorder.stop()
+            except Exception:
+                pass
+        if self._amplitude_connected:
+            try:
+                self.recorder.amplitude_changed.disconnect(self.update_vu_meter)
+            except Exception:
+                pass
+            self._amplitude_connected = False
+        self._cleanup_transcriber_thread()
+
+    def closeEvent(self, event):
+        self.cleanup()
+        super().closeEvent(event)
 
 class NoteDetailDialog(QDialog):
     def __init__(self, entry, parent=None):

@@ -7,11 +7,41 @@
 from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QLabel, QPushButton, 
                              QProgressBar, QHBoxLayout, QMessageBox, QFrame)
 from PyQt6.QtCore import Qt, QTimer
+from PyQt6.QtGui import QPalette
 import os
 
 
 class MaintenanceWidget(QWidget):
     """Widget for storage cleanup and statistics."""
+
+    def _is_dark_theme(self):
+        return self.palette().color(QPalette.ColorRole.Window).lightness() < 128
+
+    def _secondary_text_color(self):
+        return "#aaaaaa" if self._is_dark_theme() else "#666666"
+
+    def _frame_style(self):
+        if self._is_dark_theme():
+            border = "#444"
+            bg = "#2b2b2b"
+            text = "#eeeeee"
+        else:
+            border = "#cccccc"
+            bg = "#ffffff"
+            text = "#333333"
+        return f"""
+            QFrame {{
+                border: 1px solid {border};
+                border-radius: 5px;
+                background-color: {bg};
+            }}
+            QLabel {{
+                border: none;
+                color: {text};
+                font-size: 16px;
+                padding: 5px;
+            }}
+        """
 
     def __init__(self, db, notebook_db=None, parent=None):
         super().__init__(parent)
@@ -34,19 +64,7 @@ class MaintenanceWidget(QWidget):
 
         # Stats Section
         stats_frame = QFrame()
-        stats_frame.setStyleSheet("""
-            QFrame {
-                border: 1px solid #444;
-                border-radius: 5px;
-                background-color: #2b2b2b;
-            }
-            QLabel {
-                border: none;
-                color: #eee;
-                font-size: 16px;
-                padding: 5px;
-            }
-        """)
+        stats_frame.setStyleSheet(self._frame_style())
         stats_layout = QVBoxLayout(stats_frame)
         
         self.total_lbl = QLabel("Total Recordings: -")
@@ -67,7 +85,7 @@ class MaintenanceWidget(QWidget):
         # Info Text
         info = QLabel("You can delete audio files for recordings that have already been diarized (processed). The text and metadata will be preserved, but you won't be able to listen to the audio anymore.")
         info.setWordWrap(True)
-        info.setStyleSheet("color: #aaa; font-size: 14px;")
+        info.setStyleSheet(f"color: {self._secondary_text_color()}; font-size: 14px;")
         layout.addWidget(info)
 
         # Progress Bar

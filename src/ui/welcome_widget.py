@@ -12,8 +12,8 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-from PyQt6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLabel, QSpacerItem, QSizePolicy, QLineEdit, QListWidget, QListWidgetItem, QComboBox, QCheckBox, QGroupBox, QFormLayout, QProgressBar
-from PyQt6.QtCore import Qt, pyqtSignal, QTimer
+from PyQt6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLabel, QSpacerItem, QSizePolicy, QLineEdit, QListWidget, QListWidgetItem, QComboBox, QCheckBox, QGroupBox, QFormLayout, QProgressBar, QTextBrowser
+from PyQt6.QtCore import Qt, pyqtSignal, QTimer, QSettings
 from PyQt6.QtGui import QPixmap
 from src.ui.styles import LIST_WIDGET_STYLE
 from src.ui.styles import LIST_WIDGET_STYLE
@@ -29,12 +29,15 @@ class WelcomeWidget(QWidget):
     search_triggered = pyqtSignal(str)
     result_clicked = pyqtSignal(int)
     new_chat_requested = pyqtSignal()
+    new_note_requested = pyqtSignal()
     batch_process_requested = pyqtSignal()  # Kept for compatibility
     import_audio_requested = pyqtSignal(dict)  # Also include config for import
     notebooks_requested = pyqtSignal()
     maintenance_requested = pyqtSignal()  # Kept for compatibility
     tools_requested = pyqtSignal()  # Unified tools signal
     settings_requested = pyqtSignal() # New settings signal
+    generate_daily_summary_requested = pyqtSignal()
+    status_message_requested = pyqtSignal(str)
 
     def __init__(self, db, parent=None):
         super().__init__(parent)
@@ -43,10 +46,42 @@ class WelcomeWidget(QWidget):
         self.test_stream = None
         self.test_timer = QTimer()
         self.test_timer.timeout.connect(self.update_test_vu)
+        self.settings = QSettings("Hectronic", "Secretario")
         self.current_amplitude = 0.0
         self.init_ui()
         self.load_favorites()
         self.load_today()
+        self._load_saved_config()
+        self._connect_config_signals()
+
+    def _load_saved_config(self):
+        saved_mic = self.settings.value("rec_config/mic", None)
+        if saved_mic:
+            index = self.mic_combo.findData(saved_mic)
+            if index >= 0:
+                self.mic_combo.setCurrentIndex(index)
+        
+        saved_model = self.settings.value("rec_config/model", "base")
+        self.model_combo.setCurrentText(saved_model)
+        
+        saved_lang = self.settings.value("rec_config/language", "Auto")
+        self.lang_combo.setCurrentText(saved_lang)
+        
+        saved_diar = self.settings.value("rec_config/diarization", False, type=bool)
+        self.diarization_check.setChecked(saved_diar)
+        
+    def _connect_config_signals(self):
+        self.mic_combo.currentIndexChanged.connect(self._save_config)
+        self.model_combo.currentIndexChanged.connect(self._save_config)
+        self.lang_combo.currentIndexChanged.connect(self._save_config)
+        self.diarization_check.toggled.connect(self._save_config)
+
+    def _save_config(self):
+        self.settings.setValue("rec_config/mic", self.mic_combo.currentData())
+        self.settings.setValue("rec_config/model", self.model_combo.currentText())
+        self.settings.setValue("rec_config/language", self.lang_combo.currentText())
+        self.settings.setValue("rec_config/diarization", self.diarization_check.isChecked())
+        self.status_message_requested.emit("Recording configuration saved.")
 
     def init_ui(self):
         layout = QVBoxLayout(self)
@@ -93,7 +128,7 @@ class WelcomeWidget(QWidget):
 
         # Recording Configuration and Record Button Row
         rec_config_row = QHBoxLayout()
-        rec_config_row.setSpacing(30)
+        rec_config_row.setSpacing(0)
         rec_config_row.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
         # Recording Configuration Group
@@ -186,8 +221,13 @@ class WelcomeWidget(QWidget):
         # Large Round Record Button
         self.rec_btn = self.create_round_button("REC", "#f44336", self.on_new_recording, size=140)
         rec_config_row.addWidget(self.rec_btn)
+        rec_config_row.addSpacing(30)
         
         rec_config_row.addWidget(config_group)
+
+        # New Note Button (Squircle)
+        self.new_note_top_btn = self.create_squircle_button("NOTE", "#2196F3", self.new_note_requested.emit, size=140)
+        rec_config_row.addWidget(self.new_note_top_btn)
 
         layout.addLayout(rec_config_row)
 
@@ -254,10 +294,12 @@ class WelcomeWidget(QWidget):
         self.today_list.itemClicked.connect(self.on_today_clicked)
         today_container.addWidget(self.today_list)
         
-        # Stats for today
-        self.today_stats = QLabel("")
-        self.today_stats.setStyleSheet("font-size: 12px; color: #888;")
-        today_container.addWidget(self.today_stats)
+        # We don't add addStretch here so it uses the same visual spacing as Favorites
+        
+        self.generate_daily_summary_btn = QPushButton("Generate Daily Summary")
+        self.generate_daily_summary_btn.setProperty("class", "calendar-nav-btn")
+        self.generate_daily_summary_btn.clicked.connect(self.generate_daily_summary_requested.emit)
+        today_container.addWidget(self.generate_daily_summary_btn)
         
         lists_layout.addLayout(today_container)
         
@@ -466,6 +508,40 @@ class WelcomeWidget(QWidget):
         btn.clicked.connect(callback)
         return btn
 
+    def create_squircle_button(self, text, color, callback, size=120):
+        from PyQt6.QtGui import QColor
+        btn = QPushButton(text)
+        btn.setFixedSize(size, size)
+        border_radius = int(size * 0.25)
+        
+        bg = QColor(color)
+        hover_bg = bg.lighter(115).name()
+        pressed_bg = bg.darker(110).name()
+
+        btn.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {color};
+                color: white;
+                font-size: 20px;
+                font-weight: bold;
+                border-top-right-radius: {border_radius}px;
+                border-bottom-right-radius: {border_radius}px;
+                border-top-left-radius: 0px;
+                border-bottom-left-radius: 0px;
+                border: 4px solid rgba(255, 255, 255, 0.2);
+            }}
+            QPushButton:hover {{
+                background-color: {hover_bg};
+                border: 4px solid rgba(255, 255, 255, 0.6);
+            }}
+            QPushButton:pressed {{
+                background-color: {pressed_bg};
+                border: 4px solid rgba(255, 255, 255, 0.9);
+            }}
+        """)
+        btn.clicked.connect(callback)
+        return btn
+
     def on_search_triggered(self):
         text = self.search_input.text().strip()
         if text:
@@ -530,32 +606,27 @@ class WelcomeWidget(QWidget):
         today_str = date.today().isoformat()
         records = self.db.fetch_by_date_range(today_str, today_str)
         
-        total_duration = 0.0
         for rec in records:
-            title = rec['title'] if rec['title'] else rec['filename']
-            duration = rec['duration'] or 0.0
-            total_duration += duration
+            if rec.get('type') == 'note':
+                title = rec['title'] if rec['title'] else "Untitled Note"
+                item_text = f"📝 {title}"
+            else:
+                title = rec['title'] if rec['title'] else rec['created_at']
+                dur = rec.get('duration', 0)
+                item_text = f"🎤 {title} ({dur:.1f}s)"
             
-            # Format duration nicely
-            mins = int(duration // 60)
-            secs = int(duration % 60)
-            duration_str = f"{mins}m {secs}s" if mins > 0 else f"{secs}s"
-            
-            item = QListWidgetItem(f"{title} ({duration_str})")
+            item = QListWidgetItem(item_text)
             item.setData(Qt.ItemDataRole.UserRole, rec['id'])
             self.today_list.addItem(item)
-        
-        # Update stats
-        count = len(records)
-        total_mins = int(total_duration // 60)
-        if count == 0:
-            self.today_stats.setText("No recordings today")
-        else:
-            self.today_stats.setText(f"{count} recording(s) • Total: {total_mins} min")
 
     def on_today_clicked(self, item):
         record_id = int(item.data(Qt.ItemDataRole.UserRole))
         self.result_clicked.emit(record_id)
 
+    def save_settings(self):
+        """Save current settings to QSettings."""
+        self.settings.setValue("whisper_model", self.model_combo.currentText())
+        self.settings.setValue("whisper_language", self.lang_combo.currentText())
+        self.settings.sync() # Ensure settings are written to disk
 
-
+# End of assumed class content

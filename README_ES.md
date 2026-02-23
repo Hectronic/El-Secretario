@@ -10,7 +10,7 @@ El Secretario es una herramienta inteligente de transcripción y organización d
 
 - **Grabación e Importación de Audio**: Graba audio directamente en la aplicación o importa archivos existentes.
 - **Transcripción y Diarización**: Transcribe audio automáticamente e identifica diferentes hablantes (diarización) utilizando Whisper de OpenAI y pyannote.audio.
-- **Búsqueda Inteligente (RAG)**: Utiliza Generación Aumentada por Recuperación (RAG) para chatear con tus grabaciones y encontrar información específica.
+- **Búsqueda Inteligente (RAG)**: Utiliza Generación Aumentada por Recuperación (RAG) para chatear con tus grabaciones y encontrar información específica. Soporta Google Gemini y **Ollama** para ejecución local.
 - **Libretas y Colecciones**: Organiza tus grabaciones en libretas y colecciones. Accede a ellas directamente desde la barra lateral.
 - **Vista de Calendario**: Explora tus grabaciones por fecha.
 - **Herramientas Unificadas**: Limpieza de almacenamiento, procesamiento por lotes y exportación/importación de datos en una sola pestaña.
@@ -51,8 +51,13 @@ Para utilizar plenamente las funciones de El Secretario, deberás configurar los
     -   Crea un token en: [https://huggingface.co/settings/tokens](https://huggingface.co/settings/tokens)
     -   Asegúrate de haber aceptado las condiciones de usuario para el modelo `pyannote/speaker-diarization-3.1`.
 
-2.  **Clave API de Gemini**: Requerida para las funciones del Asistente de IA (chat).
+2.  **Clave API de Gemini**: Requerida por defecto para las funciones del Asistente de IA (chat).
     -   Obtén tu clave API en: [https://aistudio.google.com/app/apikey](https://aistudio.google.com/app/apikey)
+
+3.  **Ollama**: (Opcional) Alternativa para las funciones del Asistente de IA si prefieres ejecutar modelos localmente.
+    -   Instala [Ollama](https://ollama.com/) en tu sistema.
+    -   Asegúrate de que el servidor de Ollama esté funcionando antes de iniciar la aplicación.
+    -   Puedes seleccionar tu modelo local preferido (ej. `llama3`, `mistral`) en la configuración de la aplicación.
 
 ## Uso
 
