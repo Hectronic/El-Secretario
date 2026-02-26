@@ -56,12 +56,21 @@ class WelcomeWidget(QWidget):
 
     def _load_saved_config(self):
         saved_mic = self.settings.value("rec_config/mic", None)
-        if saved_mic:
+        if saved_mic is None:
+            # Try global default from settings
+            saved_mic_name = self.settings.value("default_mic_name", "")
+            if saved_mic_name:
+                index = self.mic_combo.findText(saved_mic_name)
+                if index >= 0:
+                    self.mic_combo.setCurrentIndex(index)
+        elif saved_mic:
             index = self.mic_combo.findData(saved_mic)
             if index >= 0:
                 self.mic_combo.setCurrentIndex(index)
         
-        saved_model = self.settings.value("rec_config/model", "base")
+        saved_model = self.settings.value("rec_config/model", None)
+        if saved_model is None:
+            saved_model = self.settings.value("whisper_model", "large-v3")
         self.model_combo.setCurrentText(saved_model)
         
         saved_lang = self.settings.value("rec_config/language", "Auto")
@@ -104,10 +113,6 @@ class WelcomeWidget(QWidget):
         title.setStyleSheet("font-size: 32px; font-weight: bold; color: #2196F3;")
         layout.addWidget(title, alignment=Qt.AlignmentFlag.AlignCenter)
 
-        subtitle = QLabel("What would you like to do today?")
-        subtitle.setStyleSheet("font-size: 18px; color: gray;")
-        layout.addWidget(subtitle, alignment=Qt.AlignmentFlag.AlignCenter)
-
         # Search Bar
         self.search_input = QLineEdit()
         self.search_input.setPlaceholderText("Search your notes...")
@@ -126,31 +131,57 @@ class WelcomeWidget(QWidget):
         self.search_input.returnPressed.connect(self.on_search_triggered)
         layout.addWidget(self.search_input, alignment=Qt.AlignmentFlag.AlignCenter)
 
-        # Recording Configuration and Record Button Row
+        # === Recording Configuration Section ===
         rec_config_row = QHBoxLayout()
         rec_config_row.setSpacing(0)
-        rec_config_row.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        rec_config_row.setContentsMargins(40, 10, 40, 10)
 
-        # Recording Configuration Group
-        config_group = QGroupBox("Recording Configuration")
-        config_group.setMinimumWidth(500)
-        config_group.setStyleSheet("""
-            QGroupBox {
-                font-size: 14px;
-                font-weight: bold;
+        rec_config_row.addStretch()
+
+        # REC Button Container (bordered, rounded left side)
+        rec_container = QWidget()
+        rec_container.setObjectName("rec_container")
+        rec_container.setFixedSize(110, 130)
+        rec_container.setStyleSheet("""
+            #rec_container {
                 border: 2px solid #555;
-                border-radius: 10px;
-                margin-top: 10px;
-                padding-top: 10px;
-            }
-            QGroupBox::title {
-                subcontrol-origin: margin;
-                left: 10px;
-                padding: 0 5px;
+                border-top-left-radius: 10px;
+                border-bottom-left-radius: 10px;
+                border-top-right-radius: 0px;
+                border-bottom-right-radius: 0px;
+                border-right: none;
+                background-color: transparent;
             }
         """)
+        rec_container_layout = QVBoxLayout(rec_container)
+        rec_container_layout.setContentsMargins(0, 0, 0, 0)
+        rec_container_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.rec_btn = self.create_round_button("REC", "#f44336", self.on_new_recording, size=85)
+        rec_container_layout.addWidget(self.rec_btn, 0, Qt.AlignmentFlag.AlignCenter)
+        rec_config_row.addWidget(rec_container)
+
+        # Config area (Modern card style with title inside)
+        config_group = QGroupBox()
+        config_group.setObjectName("config_group")
+        config_group.setFixedWidth(450)
+        config_group.setFixedHeight(130)
+        config_group.setStyleSheet("""
+            QGroupBox#config_group {
+                border: 2px solid #555;
+                border-radius: 0px;
+                border-left: none;
+                border-right: none;
+                padding-top: 5px;
+            }
+        """)
+        
+        inner_config_layout = QVBoxLayout(config_group)
+        inner_config_layout.setContentsMargins(5, 10, 5, 10)
+        inner_config_layout.setSpacing(0)
+
         config_layout = QFormLayout()
-        config_layout.setSpacing(10)
+        config_layout.setContentsMargins(15, 5, 15, 5)
+        config_layout.setSpacing(12)
 
         # Mic Selector with Test Button
         mic_row = QHBoxLayout()
@@ -175,7 +206,7 @@ class WelcomeWidget(QWidget):
         self.test_mic_btn.clicked.connect(self.toggle_mic_test)
         mic_row.addWidget(self.test_mic_btn)
         
-        config_layout.addRow("Audio Source:", mic_row)
+        config_layout.addRow("Microphone:", mic_row)
         
         # VU Meter for testing (hidden initially)
         self.test_vu_meter = QProgressBar()
@@ -200,34 +231,38 @@ class WelcomeWidget(QWidget):
         self.test_status_label.hide()
         config_layout.addRow("", self.test_status_label)
 
-        # Model Selector
+        # Model, Language, and Diarization Row
+        options_row = QHBoxLayout()
+        options_row.setSpacing(10)
+        
         self.model_combo = QComboBox()
         self.model_combo.addItems(["tiny", "base", "small", "medium", "large-v3"])
         self.model_combo.setCurrentText("base")
-        config_layout.addRow("Model:", self.model_combo)
+        self.model_combo.setMinimumWidth(80)
+        options_row.addWidget(QLabel("Model:"))
+        options_row.addWidget(self.model_combo, 1)
 
-        # Language Selector
         self.lang_combo = QComboBox()
         self.lang_combo.addItems(["Auto", "Spanish", "English"])
-        config_layout.addRow("Language:", self.lang_combo)
+        self.lang_combo.setMinimumWidth(80)
+        options_row.addWidget(QLabel("Lang:"))
+        options_row.addWidget(self.lang_combo, 1)
 
-        # Diarization Checkbox
-        self.diarization_check = QCheckBox("Enable speaker diarization")
+        options_row.addSpacing(15)
+        self.diarization_check = QCheckBox("Diarization")
         self.diarization_check.setToolTip("Enable speaker diarization (Requires HF Token)")
-        config_layout.addRow("", self.diarization_check)
-
-        config_group.setLayout(config_layout)
-
-        # Large Round Record Button
-        self.rec_btn = self.create_round_button("REC", "#f44336", self.on_new_recording, size=140)
-        rec_config_row.addWidget(self.rec_btn)
-        rec_config_row.addSpacing(30)
+        options_row.addWidget(self.diarization_check)
         
+        config_layout.addRow(options_row)
+
+        inner_config_layout.addLayout(config_layout)
         rec_config_row.addWidget(config_group)
 
-        # New Note Button (Squircle)
-        self.new_note_top_btn = self.create_squircle_button("NOTE", "#2196F3", self.new_note_requested.emit, size=140)
+        # NOTE Button (right side, rounded right corners)
+        self.new_note_top_btn = self.create_squircle_button("NOTE", "#2196F3", self.new_note_requested.emit, width=110, height=130)
         rec_config_row.addWidget(self.new_note_top_btn)
+
+        rec_config_row.addStretch()
 
         layout.addLayout(rec_config_row)
 
@@ -508,11 +543,11 @@ class WelcomeWidget(QWidget):
         btn.clicked.connect(callback)
         return btn
 
-    def create_squircle_button(self, text, color, callback, size=120):
+    def create_squircle_button(self, text, color, callback, width=100, height=90):
         from PyQt6.QtGui import QColor
         btn = QPushButton(text)
-        btn.setFixedSize(size, size)
-        border_radius = int(size * 0.25)
+        btn.setFixedSize(width, height)
+        border_radius = int(height * 0.25)
         
         bg = QColor(color)
         hover_bg = bg.lighter(115).name()
@@ -528,15 +563,18 @@ class WelcomeWidget(QWidget):
                 border-bottom-right-radius: {border_radius}px;
                 border-top-left-radius: 0px;
                 border-bottom-left-radius: 0px;
-                border: 4px solid rgba(255, 255, 255, 0.2);
+                border: 2px solid #555;
+                border-left: none;
             }}
             QPushButton:hover {{
                 background-color: {hover_bg};
-                border: 4px solid rgba(255, 255, 255, 0.6);
+                border: 2px solid #777;
+                border-left: none;
             }}
             QPushButton:pressed {{
                 background-color: {pressed_bg};
-                border: 4px solid rgba(255, 255, 255, 0.9);
+                border: 2px solid #999;
+                border-left: none;
             }}
         """)
         btn.clicked.connect(callback)

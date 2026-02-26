@@ -133,6 +133,7 @@ class Recorder(QObject):
             self.recording.clear()
 
     @staticmethod
+    @staticmethod
     def get_input_devices():
         """Return a list of input devices."""
         devices = sd.query_devices()
