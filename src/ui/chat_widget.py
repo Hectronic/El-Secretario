@@ -371,11 +371,15 @@ class ChatWidget(QWidget):
             self.append_to_chat("System", f"Error: {error_msg}")
             return
 
+        if self.chat_thread and self.chat_thread.isRunning():
+            return
         self.set_busy(True)
         # api_key parameter kept for backward compatibility
         self.chat_thread = ChatThread("", query, context_text, self.chat_history)
         self.chat_thread.finished.connect(self.on_chat_finished)
         self.chat_thread.error.connect(self.on_chat_error)
+        self.chat_thread.finished.connect(self._clear_chat_thread_ref)
+        self.chat_thread.error.connect(self._clear_chat_thread_ref)
         self.chat_thread.start()
 
     def on_chat_finished(self, response):
@@ -427,3 +431,29 @@ class ChatWidget(QWidget):
             QApplication.setOverrideCursor(QCursor(Qt.CursorShape.WaitCursor))
         else:
             QApplication.restoreOverrideCursor()
+
+    def _clear_chat_thread_ref(self, *args):
+        thread = self.chat_thread
+        self.chat_thread = None
+        if thread:
+            thread.deleteLater()
+
+    def cleanup(self):
+        if self.chat_thread and self.chat_thread.isRunning():
+            try:
+                self.chat_thread.requestInterruption()
+                self.chat_thread.quit()
+                self.chat_thread.wait(3000)
+            except Exception:
+                pass
+        if self.chat_thread:
+            try:
+                self.chat_thread.deleteLater()
+            except Exception:
+                pass
+        self.chat_thread = None
+        QApplication.restoreOverrideCursor()
+
+    def closeEvent(self, event):
+        self.cleanup()
+        super().closeEvent(event)

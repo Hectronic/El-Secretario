@@ -34,10 +34,15 @@ class TestDiarizationToggle(unittest.TestCase):
     def setUp(self):
         self.db_patcher = patch('src.ui.recording_widget.DBManager')
         self.mock_db = self.db_patcher.start().return_value
-        self.mock_db.fetch_all.return_value = [
-            {'id': 1, 'filename': 'test.wav', 'transcription': 'test', 'is_diarized': 0, 'transcription_model': 'base', 'title': 'Test', 'tags': '', 'cleaned_text': '', 'summary': '', 'created_at': '2023-01-01', 'duration': 10.0}
-        ]
+        record = {'id': 1, 'filename': 'test.wav', 'transcription': 'test', 'is_diarized': 0, 'transcription_model': 'base', 'title': 'Test', 'tags': '', 'cleaned_text': '', 'summary': '', 'created_at': '2023-01-01', 'duration': 10.0}
+        self.mock_db.fetch_all.return_value = [record]
+        self.mock_db.fetch_record.return_value = record
         self.mock_db.get_all_tags.return_value = []
+
+        self.media_player_patcher = patch('src.ui.recording_widget.QMediaPlayer')
+        self.audio_output_patcher = patch('src.ui.recording_widget.QAudioOutput')
+        self.media_player_patcher.start()
+        self.audio_output_patcher.start()
         
         self.recorder_patcher = patch('src.ui.recording_widget.Recorder')
         self.recorder_patcher.start()
@@ -45,10 +50,15 @@ class TestDiarizationToggle(unittest.TestCase):
         self.rag_patcher = patch('src.rag_engine.RAGEngine')
         self.mock_rag = self.rag_patcher.start().return_value
 
-        self.widget = RecordingWidget(self.mock_rag, record_id=1)
+        self.mock_queue = MagicMock()
+        self.widget = RecordingWidget(self.mock_rag, record_id=1, task_queue=self.mock_queue)
 
     def tearDown(self):
+        self.widget.close()
+        self.widget.deleteLater()
         self.db_patcher.stop()
+        self.media_player_patcher.stop()
+        self.audio_output_patcher.stop()
         self.recorder_patcher.stop()
         self.rag_patcher.stop()
 

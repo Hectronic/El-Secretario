@@ -29,9 +29,10 @@ class CalendarWidget(QWidget):
     start_chat_requested = pyqtSignal(str, list) # Emits (date_str_or_list, tags_list)
     selection_changed = pyqtSignal(QDate, str, str)   # Emits (monday, date_str, tags) to sync back to sidebar
 
-    def __init__(self, rag_engine, parent=None):
+    def __init__(self, rag_engine, task_queue=None, parent=None):
         super().__init__(parent)
         self.rag = rag_engine
+        self.summary_task_queue = task_queue
         self.db = DBManager()
         self.selected_recordings = [] # List of dicts
         self.selected_dates = set() # Set of QDate objects
@@ -359,7 +360,15 @@ class CalendarWidget(QWidget):
         date = list(self.selected_dates)[0]
         date_str = date.toString("yyyy-MM-dd")
         tags = self.get_selected_tags()
+        tags_filter = self.get_tags_filter_str()
         
+        if self.summary_task_queue:
+            self.summary_task_queue.enqueue_daily_summary({
+                "date": date_str,
+                "tags_filter": tags_filter
+            })
+            return
+
         recordings = self.db.fetch_by_dates([date_str], tags)
         if not recordings:
             QMessageBox.warning(self, "No Recordings", "No recordings found.")
@@ -388,7 +397,7 @@ class CalendarWidget(QWidget):
             
         self.pending_daily_key = (date_str, self.get_tags_filter_str())
         self.worker = AIAssistant("", "daily_summary", full_text)
-        self.worker.finished.connect(self.on_summary_finished)
+        self.worker.task_completed.connect(self.on_summary_finished)
         self.worker.error.connect(self.on_summary_error)
         self.worker.start()
 
@@ -397,6 +406,7 @@ class CalendarWidget(QWidget):
             QMessageBox.warning(self, "No Week Selected", "No week context.")
             return
             
+        week_sunday = self.current_week_monday.addDays(6).toString("yyyy-MM-dd")
         week_dates = [self.current_week_monday.addDays(i).toString("yyyy-MM-dd") for i in range(7)]
         tags = self.get_selected_tags()
         recordings_for_summary = self.db.fetch_by_dates(week_dates, tags)
@@ -414,6 +424,11 @@ class CalendarWidget(QWidget):
             QMessageBox.warning(self, "No Content", "No transcription content.")
             return
 
+        if self.summary_task_queue:
+            tags_filter = self.get_tags_filter_str() or ""
+            self.summary_task_queue.enqueue_weekly_summary(week_sunday, full_text, tags_filter)
+            return
+
         self.progress = QProgressDialog("Generating Weekly Summary...", "Cancel", 0, 0, self)
         self.progress.setWindowModality(Qt.WindowModality.WindowModal)
         self.progress.show()
@@ -428,7 +443,7 @@ class CalendarWidget(QWidget):
 
         self.pending_summary_key = self.get_summary_key()
         self.worker = AIAssistant("", "weekly_summary", full_text)
-        self.worker.finished.connect(self.on_summary_finished)
+        self.worker.task_completed.connect(self.on_summary_finished)
         self.worker.error.connect(self.on_summary_error)
         self.worker.start()
 

@@ -19,9 +19,18 @@ from typing import List, Dict, Any, Optional
 
 class RAGEngine:
     def __init__(self, persist_directory: str = "chroma_db"):
+        import logging
         self.persist_directory = persist_directory
-        # Initialize ChromaDB client
-        self.client = chromadb.PersistentClient(path=persist_directory)
+        os.makedirs(self.persist_directory, exist_ok=True)
+        # Initialize ChromaDB client. Fall back to in-memory client when
+        # persistence is unavailable in the current environment.
+        try:
+            self.client = chromadb.PersistentClient(path=persist_directory)
+            self.is_persistent = True
+        except Exception as e:
+            logging.warning(f"Persistent Chroma init failed, using in-memory fallback: {e}")
+            self.client = chromadb.Client()
+            self.is_persistent = False
         
         # Use default embedding function (all-MiniLM-L6-v2)
         self.embedding_fn = embedding_functions.DefaultEmbeddingFunction()

@@ -51,6 +51,10 @@ class TestRecordingFlow(unittest.TestCase):
         self.mock_db.fetch_all.return_value = []
         self.mock_db.save.return_value = 123 # Mock ID
         self.mock_db.get_all_tags.return_value = []
+        self.mock_db.fetch_record.return_value = {
+            'id': 123, 'title': 'Test', 'transcription': 'test', 'tags': 'test',
+            'summary': '', 'created_at': '2023-01-01', 'file_path': 'foo.wav', 'filename': 'foo.wav', 'type': 'recording', 'is_diarized': False, 'duration': 0.0
+        }
         
         # Patch DBManager for recording_in_progress_widget (for TagsLineEdit)
         self.db_patcher2 = patch('src.ui.recording_in_progress_widget.DBManager')
@@ -67,6 +71,28 @@ class TestRecordingFlow(unittest.TestCase):
         self.mock_db3 = self.db_patcher3.start().return_value
         self.mock_db3.get_all_tags.return_value = []
         self.mock_db3.fetch_all.return_value = []
+        self.mock_db3.fetch_record.return_value = {
+            'id': 123, 'title': 'Test', 'transcription': 'test', 'tags': 'test',
+            'summary': '', 'created_at': '2023-01-01', 'file_path': 'foo.wav', 'filename': 'foo.wav', 'type': 'recording', 'is_diarized': False, 'duration': 0.0
+        }
+        self.mock_db3.get_tasks_by_record.return_value = []
+
+        # Avoid real multimedia backend usage in headless CI.
+        self.media_player_patcher = patch('src.ui.recording_widget.QMediaPlayer')
+        self.audio_output_patcher = patch('src.ui.recording_widget.QAudioOutput')
+        self.media_player_patcher.start()
+        self.audio_output_patcher.start()
+
+        # Keep this test focused on UI flow, not on actual transcription execution.
+        self.start_transcription_patcher = patch.object(
+            RecordingWidget,
+            'start_transcription_with_config',
+            autospec=True
+        )
+        self.mock_start_transcription = self.start_transcription_patcher.start()
+
+        self.msgbox_patcher = patch('src.ui.main_window.QMessageBox.critical')
+        self.mock_msgbox = self.msgbox_patcher.start()
 
         self.window = MainWindow()
 
@@ -86,7 +112,11 @@ class TestRecordingFlow(unittest.TestCase):
         self.db_patcher.stop()
         self.db_patcher2.stop()
         self.db_patcher3.stop()
+        self.media_player_patcher.stop()
+        self.audio_output_patcher.stop()
+        self.start_transcription_patcher.stop()
         self.rag_patcher.stop()
+        self.msgbox_patcher.stop()
 
     def test_new_recording_flow(self):
         # 1. Open New Recording Tab
@@ -105,6 +135,9 @@ class TestRecordingFlow(unittest.TestCase):
         # We can click the button or call the method directly
         current_widget.finish_recording()
         
+        if self.mock_msgbox.called:
+            print("MessageBox was called:", self.mock_msgbox.call_args)
+        
         # Verify Recorder stopped
         self.mock_recorder.stop.assert_called()
         
@@ -122,6 +155,10 @@ class TestRecordingFlow(unittest.TestCase):
         
         # Let's check if DB save was called
         self.mock_db.save.assert_called()
+        self.assertTrue(self.mock_start_transcription.called)
+        
+        if self.mock_msgbox.called:
+            print("MessageBox was called:", self.mock_msgbox.call_args)
 
 if __name__ == '__main__':
     unittest.main()

@@ -18,11 +18,13 @@ from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QFormLayout, QLineEdit,
                              QHBoxLayout, QApplication, QTabWidget, QTextEdit, QScrollArea)
 from PyQt6.QtCore import QSettings, QStringListModel, Qt, QDate, QTimer
 from src.ui.styles import apply_theme
+from src.audio import Recorder
 
 # Default prompts for AI tasks
 DEFAULT_PROMPTS = {
     "summary": """Please provide a concise and structured summary of the following transcription.
 Highlight key points, decisions made, and action items if any.
+Maintain the original language of the transcription.
 
 Transcription:
 {text}""",
@@ -31,15 +33,37 @@ Transcription:
 - Remove filler words (uh, um, like).
 - Improve readability while maintaining the original meaning and tone.
 - Do NOT summarize, keep the full content.
+- Maintain the original language of the transcription.
 
 Transcription:
 {text}""",
-    "weekly_summary": """Please provide a comprehensive summary of the following recordings from this week.
-Group the summary by topic or day if relevant.
-Highlight key achievements, decisions, and action items.
+    "daily_summary": """As an expert assistant, provide a concise and structured daily summary based on the following recording summaries from today.
+Group key information by topic, highlight important decisions, and list any pending action items.
+The summary MUST be written in {language}.
+
+Meeting Summaries:
+{text}""",
+    "weekly_summary": """As an expert assistant, provide a comprehensive and professional weekly summary based on the following recording content from this week.
+Organize the summary by topic or day, highlighting key achievements, strategic decisions, and future action items.
+The summary MUST be written in {language}.
 
 Recordings Content:
-{text}"""
+{text}""",
+    "task_extraction": """Extract actionable tasks and to-do items from the transcription provided below.
+
+Rules:
+- Format: A simple JSON array of strings.
+- Example: ["Task 1", "Task 2"]
+- If no tasks are found, return [].
+- Language: {language}
+- Output ONLY the JSON array. Do not include markdown code blocks or any other text.
+
+Transcription:
+<transcription>
+{text}
+</transcription>
+
+JSON:"""
 }
 
 
@@ -148,32 +172,18 @@ class GeneralSettingsPanel(QWidget):
         lbl_theme = QLabel("Interface Theme:")
         lbl_theme.setStyleSheet("font-weight: bold;")
         self.theme_combo = QComboBox()
-        self.theme_combo.addItems(["System", "Light", "Dark"])
+        self.theme_combo.addItems(["System", "Light", "Dark", "SNES"])
         self.theme_combo.setCurrentText(self.settings.value("app_theme", "System"))
         form_layout.addRow(lbl_theme, self.theme_combo)
-        
-        # Force CPU Setting
-        lbl_force_cpu = QLabel("Force CPU:")
-        lbl_force_cpu.setStyleSheet("font-weight: bold;")
-        self.force_cpu_check = QCheckBox("Disable GPU acceleration")
-        self.force_cpu_check.setToolTip("Force transcription and diarization to use CPU even if GPU is available")
-        self.force_cpu_check.setChecked(self.settings.value("force_cpu", False, type=bool))
-        form_layout.addRow(lbl_force_cpu, self.force_cpu_check)
-        
-        # Compute Type Setting
-        lbl_compute = QLabel("Compute Type:")
-        lbl_compute.setStyleSheet("font-weight: bold;")
-        self.compute_combo = QComboBox()
-        self.compute_combo.addItems(["auto", "int8", "int8_float16", "float16", "float32"])
-        self.compute_combo.setCurrentText(self.settings.value("compute_type", "int8"))
-        self.compute_combo.setToolTip(
-            "int8: Best for GPUs with limited VRAM (6-8GB), fastest\n"
-            "int8_float16: Hybrid precision, good balance\n"
-            "float16: Better quality, needs more VRAM\n"
-            "float32: Highest quality, needs most VRAM\n"
-            "auto: Let the app decide based on your GPU"
-        )
-        form_layout.addRow(lbl_compute, self.compute_combo)
+
+        # System Language Setting
+        lbl_lang = QLabel("System Language:")
+        lbl_lang.setStyleSheet("font-weight: bold;")
+        self.lang_input = QLineEdit()
+        self.lang_input.setPlaceholderText("e.g. Spanish, English, ES, EN")
+        self.lang_input.setText(self.settings.value("system_language", "Spanish"))
+        self.lang_input.setToolTip("The language the AI will use for daily and weekly summaries.")
+        form_layout.addRow(lbl_lang, self.lang_input)
         
         layout.addLayout(form_layout)
         
@@ -298,9 +308,108 @@ class GeneralSettingsPanel(QWidget):
         
         selected_theme = self.theme_combo.currentText()
         self.settings.setValue("app_theme", selected_theme)
+        self.settings.setValue("system_language", self.lang_input.text().strip() or "Spanish")
+        apply_theme(selected_theme)
+
+
+class AudioSettingsPanel(QWidget):
+    """Panel for audio and transcription settings."""
+    
+    def __init__(self, settings, parent=None):
+        super().__init__(parent)
+        self.settings = settings
+        self._setup_ui()
+        
+    def _setup_ui(self):
+        layout = QVBoxLayout(self)
+        layout.setAlignment(Qt.AlignmentFlag.AlignTop)
+        layout.setContentsMargins(20, 20, 20, 20)
+        layout.setSpacing(15)
+        
+        form_layout = QFormLayout()
+        form_layout.setSpacing(15)
+        
+        # --- Recording Section ---
+        rec_label = QLabel("🎤 Recording Settings")
+        rec_label.setStyleSheet("font-size: 18px; font-weight: bold; color: #607D8B; margin-top: 10px;")
+        form_layout.addRow(rec_label)
+        
+        # Default Microphone
+        lbl_mic = QLabel("Default Microphone:")
+        lbl_mic.setStyleSheet("font-weight: bold;")
+        self.mic_combo = QComboBox()
+        self._populate_mics()
+        
+        # Select saved mic
+        saved_mic_name = self.settings.value("default_mic_name", "")
+        if saved_mic_name:
+            index = self.mic_combo.findText(saved_mic_name)
+            if index >= 0:
+                self.mic_combo.setCurrentIndex(index)
+        
+        form_layout.addRow(lbl_mic, self.mic_combo)
+        
+        # --- Transcription Section ---
+        trans_label = QLabel("📝 Transcription Engine")
+        trans_label.setStyleSheet("font-size: 18px; font-weight: bold; color: #607D8B; margin-top: 20px;")
+        form_layout.addRow(trans_label)
+        
+        # Default Whisper Model
+        lbl_whisper = QLabel("Default Whisper Model:")
+        lbl_whisper.setStyleSheet("font-weight: bold;")
+        self.whisper_combo = QComboBox()
+        self.whisper_combo.addItems(["tiny", "base", "small", "medium", "large-v3"])
+        self.whisper_combo.setCurrentText(self.settings.value("whisper_model", "base"))
+        form_layout.addRow(lbl_whisper, self.whisper_combo)
+        
+        # Force CPU Setting
+        lbl_force_cpu = QLabel("Force CPU:")
+        lbl_force_cpu.setStyleSheet("font-weight: bold;")
+        self.force_cpu_check = QCheckBox("Disable GPU acceleration")
+        self.force_cpu_check.setToolTip("Force transcription and diarization to use CPU even if GPU is available")
+        self.force_cpu_check.setChecked(self.settings.value("force_cpu", False, type=bool))
+        form_layout.addRow(lbl_force_cpu, self.force_cpu_check)
+        
+        # Compute Type Setting
+        lbl_compute = QLabel("Compute Type:")
+        lbl_compute.setStyleSheet("font-weight: bold;")
+        self.compute_combo = QComboBox()
+        self.compute_combo.addItems(["auto", "int8", "int8_float16", "float16", "float32"])
+        self.compute_combo.setCurrentText(self.settings.value("compute_type", "int8"))
+        self.compute_combo.setToolTip(
+            "int8: Best for GPUs with limited VRAM (6-8GB), fastest\n"
+            "int8_float16: Hybrid precision, good balance\n"
+            "float16: Better quality, needs more VRAM\n"
+            "float32: Highest quality, needs most VRAM\n"
+            "auto: Let the app decide based on your GPU"
+        )
+        form_layout.addRow(lbl_compute, self.compute_combo)
+        
+        layout.addLayout(form_layout)
+        
+        info_label = QLabel("These settings affect how audio is captured and processed by the Whisper model.")
+        info_label.setStyleSheet("color: gray; font-size: 13px; margin-top: 10px;")
+        layout.addWidget(info_label)
+        
+        layout.addStretch()
+
+    def _populate_mics(self):
+        """Populate microphone list."""
+        self.mic_combo.clear()
+        self.mic_combo.addItem("System Default", "")
+        try:
+            devices = Recorder.get_input_devices()
+            for idx, name in devices:
+                self.mic_combo.addItem(name, name) # Store name as data to be more portable
+        except Exception:
+            pass
+
+    def save(self):
+        """Save audio settings."""
+        self.settings.setValue("default_mic_name", self.mic_combo.currentData())
+        self.settings.setValue("whisper_model", self.whisper_combo.currentText())
         self.settings.setValue("force_cpu", self.force_cpu_check.isChecked())
         self.settings.setValue("compute_type", self.compute_combo.currentText())
-        apply_theme(selected_theme)
 
 
 class PromptsSettingsPanel(QWidget):
@@ -328,7 +437,9 @@ class PromptsSettingsPanel(QWidget):
         prompt_configs = [
             ("summary", "📝 Summary Prompt", "Used when generating a summary of a transcription."),
             ("clean", "🧹 Clean Prompt", "Used when cleaning up a transcription."),
+            ("daily_summary", "📅 Daily Summary Prompt", "Used when generating a daily summary from recording summaries."),
             ("weekly_summary", "📅 Weekly Summary Prompt", "Used when generating a weekly summary."),
+            ("task_extraction", "✅ Task Extraction Prompt", "Used to extract a JSON list of tasks from a transcription."),
         ]
         
         for prompt_key, title, description in prompt_configs:
@@ -418,6 +529,14 @@ class SettingsWidget(QWidget):
         scroll_general.setFrameShape(QScrollArea.Shape.NoFrame)
         self.tab_widget.addTab(scroll_general, "🔧 General")
         
+        # Audio Settings Panel
+        self.audio_panel = AudioSettingsPanel(self.settings)
+        scroll_audio = QScrollArea()
+        scroll_audio.setWidget(self.audio_panel)
+        scroll_audio.setWidgetResizable(True)
+        scroll_audio.setFrameShape(QScrollArea.Shape.NoFrame)
+        self.tab_widget.addTab(scroll_audio, "🔊 Audio")
+        
         # Prompts Settings Panel
         self.prompts_panel = PromptsSettingsPanel(self.settings)
         scroll_prompts = QScrollArea()
@@ -454,6 +573,7 @@ class SettingsWidget(QWidget):
     def save_settings(self):
         """Save all settings from both panels."""
         self.general_panel.save()
+        self.audio_panel.save()
         self.prompts_panel.save()
         
         self.status_label.setText("✅ Settings saved successfully!")

@@ -17,11 +17,13 @@ Unified Tools Widget combining Maintenance and Batch Processing functionality.
 """
 
 from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QTabWidget, QLabel)
+from PyQt6.QtGui import QPalette
 from PyQt6.QtCore import Qt
 
 from src.ui.maintenance_widget import MaintenanceWidget
 from src.ui.batch_process_widget import BatchProcessWidget
 from src.ui.summary_batch_widget import SummaryBatchWidget
+from src.ui.task_batch_widget import TaskBatchWidget
 
 
 class ToolsWidget(QWidget):
@@ -33,12 +35,21 @@ class ToolsWidget(QWidget):
     # Tab indices for external access
     TAB_STORAGE = 0
     TAB_PROCESSING = 1
-    TAB_DATA = 2
+    TAB_SUMMARIES = 2
+    TAB_TASKS = 3
+    TAB_DATA = 4
 
-    def __init__(self, db, notebook_db=None, parent=None):
+    def _is_dark_theme(self):
+        return self.palette().color(QPalette.ColorRole.Window).lightness() < 128
+
+    def _secondary_text_color(self):
+        return "#aaaaaa" if self._is_dark_theme() else "#666666"
+
+    def __init__(self, db, notebook_db=None, task_queue=None, parent=None):
         super().__init__(parent)
         self.db = db
         self.notebook_db = notebook_db
+        self.task_queue = task_queue
         
         self.init_ui()
 
@@ -54,30 +65,6 @@ class ToolsWidget(QWidget):
 
         # Create tab widget for sub-sections
         self.tabs = QTabWidget()
-        self.tabs.setStyleSheet("""
-            QTabWidget::pane {
-                border: 1px solid #444;
-                border-radius: 5px;
-                background-color: #2b2b2b;
-            }
-            QTabBar::tab {
-                background-color: #3a3a3a;
-                color: #aaa;
-                padding: 10px 20px;
-                margin-right: 2px;
-                border-top-left-radius: 5px;
-                border-top-right-radius: 5px;
-                font-size: 14px;
-                font-weight: bold;
-            }
-            QTabBar::tab:selected {
-                background-color: #2b2b2b;
-                color: #fff;
-            }
-            QTabBar::tab:hover {
-                background-color: #4a4a4a;
-            }
-        """)
 
         # Storage Tab (from MaintenanceWidget - cleanup functionality)
         self.storage_widget = self._create_storage_tab()
@@ -87,9 +74,13 @@ class ToolsWidget(QWidget):
         self.processing_widget = BatchProcessWidget()
         self.tabs.addTab(self.processing_widget, "⏳ Processing")
 
-        # Summary Tab (New)
+        # Summary Tab
         self.summary_widget = SummaryBatchWidget()
         self.tabs.addTab(self.summary_widget, "📝 Summaries")
+
+        # Tasks Tab (New)
+        self.tasks_batch_widget = TaskBatchWidget(task_queue=self.task_queue)
+        self.tabs.addTab(self.tasks_batch_widget, "✅ Tasks")
 
         # Data Tab (from MaintenanceWidget - export/import)
         self.data_widget = self._create_data_tab()
@@ -130,7 +121,7 @@ class ToolsWidget(QWidget):
             "Import will detect and skip duplicates."
         )
         info.setWordWrap(True)
-        info.setStyleSheet("color: #aaa; font-size: 14px;")
+        info.setStyleSheet(f"color: {self._secondary_text_color()}; font-size: 14px;")
         layout.addWidget(info)
 
         # Status Label

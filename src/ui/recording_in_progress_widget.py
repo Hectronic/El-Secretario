@@ -28,6 +28,7 @@ class RecordingInProgressWidget(QWidget):
         super().__init__(parent)
         self.recorder = recorder or Recorder()
         self.recorder.amplitude_changed.connect(self.update_vu_meter)
+        self._amplitude_connected = True
         self.config = config or {}
         self.recording_started = False
         self.db = DBManager()  # For tags autocomplete
@@ -182,9 +183,11 @@ class RecordingInProgressWidget(QWidget):
         self.timer.stop()
         if not self.recording_started:
             # If recording never started, just cancel
+            self.cleanup()
             self.cancelled.emit()
             return
         file_path = self.recorder.stop()
+        self.cleanup()
         if file_path:
             # Build final config with user inputs
             final_config = {
@@ -205,6 +208,7 @@ class RecordingInProgressWidget(QWidget):
                 self.recorder.stop()
             except Exception:
                 pass  # Ignore errors when cancelling
+        self.cleanup()
         self.cancelled.emit()
 
     def update_timer(self):
@@ -218,3 +222,15 @@ class RecordingInProgressWidget(QWidget):
         if value > 100: value = 100
         self.vu_meter.setValue(value)
 
+    def cleanup(self):
+        self.timer.stop()
+        if self._amplitude_connected:
+            try:
+                self.recorder.amplitude_changed.disconnect(self.update_vu_meter)
+            except Exception:
+                pass
+            self._amplitude_connected = False
+
+    def closeEvent(self, event):
+        self.cleanup()
+        super().closeEvent(event)

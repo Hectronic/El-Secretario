@@ -20,8 +20,10 @@ allowing the application to switch between them via configuration.
 """
 
 from abc import ABC, abstractmethod
-from typing import List, Dict, Optional
+from typing import List, Dict, Callable, Optional
 import logging
+import time
+import re
 
 # Available Gemini models
 GEMINI_MODELS = [
@@ -30,6 +32,10 @@ GEMINI_MODELS = [
 ]
 
 DEFAULT_OLLAMA_HOST = "http://localhost:11434"
+NON_OLLAMA_MAX_RETRIES = 5
+NON_OLLAMA_BASE_BACKOFF_SECONDS = 1.0
+NON_OLLAMA_PRE_REQUEST_DELAY_SECONDS = 0.35
+NON_OLLAMA_MAX_BACKOFF_SECONDS = 16.0
 
 
 class AIProvider(ABC):
@@ -78,8 +84,12 @@ class GeminiProvider(AIProvider):
         self.model = genai.GenerativeModel(model_name)
     
     def generate_content(self, prompt: str) -> str:
-        response = self.model.generate_content(prompt)
-        return response.text
+        try:
+            response = self.model.generate_content(prompt)
+            return response.text if response and hasattr(response, 'text') else ""
+        except Exception as e:
+            logging.error(f"Gemini error: {e}")
+            raise RuntimeError(str(e))
     
     def chat(self, history: List[Dict[str, str]], prompt: str, context: str = "") -> str:
         # Construct prompt with context and history
@@ -123,8 +133,12 @@ class OllamaProvider(AIProvider):
             raise ConnectionError(f"Failed to connect to Ollama at {host}: {e}")
     
     def generate_content(self, prompt: str) -> str:
-        response = self.client.generate(model=self.model_name, prompt=prompt)
-        return response['response']
+        try:
+            response = self.client.generate(model=self.model_name, prompt=prompt)
+            return response.get('response', '')
+        except Exception as e:
+            logging.error(f"Ollama error: {e}")
+            raise RuntimeError(str(e))
     
     def chat(self, history: List[Dict[str, str]], prompt: str, context: str = "") -> str:
         # Build messages list for Ollama chat format
@@ -245,3 +259,94 @@ def validate_ai_provider_config(settings) -> tuple[bool, str]:
         if not api_key:
             return False, "Gemini API Key missing. Go to Settings to add it."
         return True, ""
+
+
+def _get_provider_type(settings) -> str:
+    value = settings.value("ai_provider", "gemini")
+    return str(value or "gemini").strip().lower()
+
+
+def _extract_retry_delay_seconds(error: Exception | str) -> float | None:
+    """
+    Try to extract a provider-suggested retry delay from an error message.
+    Supports patterns such as "Please retry in 18.65s" and "retry_delay { seconds: 18 }".
+    """
+    text = str(error or "")
+    if not text:
+        return None
+
+    direct_match = re.search(r"retry in\s+([0-9]+(?:\.[0-9]+)?)s", text, flags=re.IGNORECASE)
+    if direct_match:
+        try:
+            return max(0.0, float(direct_match.group(1)))
+        except Exception:
+            return None
+
+    seconds_match = re.search(r"retry_delay\s*\{[^}]*seconds:\s*([0-9]+)", text, flags=re.IGNORECASE | re.DOTALL)
+    if seconds_match:
+        try:
+            return max(0.0, float(seconds_match.group(1)))
+        except Exception:
+            return None
+
+    return None
+
+
+def generate_content_with_retry(
+    provider: AIProvider,
+    settings,
+    prompt: str,
+    operation_name: str = "AI generation",
+    max_retries: int = NON_OLLAMA_MAX_RETRIES,
+    base_backoff_seconds: float = NON_OLLAMA_BASE_BACKOFF_SECONDS,
+    on_retry: Optional[Callable[[float, int, int, str], None]] = None,
+) -> str:
+    """
+    Generate content with resilience for non-local providers.
+
+    For Ollama: single attempt (local, usually no rate limits).
+    For non-Ollama providers: add a small pre-delay and retry with exponential backoff.
+    """
+    provider_type = _get_provider_type(settings)
+    is_ollama = provider_type == "ollama"
+    total_attempts = 1 if is_ollama else max(1, int(max_retries))
+
+    if not is_ollama:
+        time.sleep(NON_OLLAMA_PRE_REQUEST_DELAY_SECONDS)
+
+    last_error = None
+
+    for attempt in range(1, total_attempts + 1):
+        try:
+            result = provider.generate_content(prompt)
+            text = str(result or "").strip()
+            if text:
+                return text
+            last_error = RuntimeError("Empty response from AI provider.")
+        except Exception as exc:
+            last_error = exc
+
+        if attempt >= total_attempts:
+            break
+
+        api_suggested_delay = _extract_retry_delay_seconds(last_error)
+        if api_suggested_delay is not None:
+            delay = api_suggested_delay
+        else:
+            delay = min(base_backoff_seconds * (2 ** (attempt - 1)), NON_OLLAMA_MAX_BACKOFF_SECONDS)
+        logging.warning(
+            "%s failed (attempt %s/%s). Retrying in %.1fs. Error: %s",
+            operation_name,
+            attempt,
+            total_attempts,
+            delay,
+            last_error,
+        )
+        if on_retry:
+            try:
+                on_retry(delay, attempt, total_attempts, str(last_error))
+            except Exception:
+                pass
+        time.sleep(delay)
+
+    raise RuntimeError(f"{operation_name} failed after {total_attempts} attempts: {last_error}")

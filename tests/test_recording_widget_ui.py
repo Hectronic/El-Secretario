@@ -23,6 +23,11 @@ class TestRecordingWidgetUI(unittest.TestCase):
         self.mock_db = self.db_patcher.start().return_value
         self.mock_db.fetch_all.return_value = []
         self.mock_db.get_all_tags.return_value = []
+
+        self.media_player_patcher = patch('src.ui.recording_widget.QMediaPlayer')
+        self.audio_output_patcher = patch('src.ui.recording_widget.QAudioOutput')
+        self.media_player_patcher.start()
+        self.audio_output_patcher.start()
         
         self.recorder_patcher = patch('src.ui.recording_widget.Recorder')
         self.recorder_patcher.start()
@@ -34,17 +39,21 @@ class TestRecordingWidgetUI(unittest.TestCase):
         self.widget = RecordingWidget(MagicMock())
 
     def tearDown(self):
+        self.widget.close()
         self.widget.deleteLater()
         self.db_patcher.stop()
+        self.media_player_patcher.stop()
+        self.audio_output_patcher.stop()
         self.recorder_patcher.stop()
         self.rag_patcher.stop()
 
     def test_clean_tab_removed(self):
         # Verify that "Cleaned" tab is NOT present
-        # Tabs are: Original (0), Summary (1)
-        self.assertEqual(self.widget.tabs.count(), 2)
+        # Tabs are: Original (0), Summary (1), Tasks (2)
+        self.assertEqual(self.widget.tabs.count(), 3)
         self.assertEqual(self.widget.tabs.tabText(0), "Original")
         self.assertEqual(self.widget.tabs.tabText(1), "Summary")
+        self.assertEqual(self.widget.tabs.tabText(2), "Tasks")
 
     def test_clean_button_removed(self):
         # Verify clean_btn attribute does not exist
@@ -71,6 +80,8 @@ class TestRecordingWidgetUI(unittest.TestCase):
             'duration': 10.0
         }
         self.mock_db.fetch_all.return_value = [record]
+        self.mock_db.fetch_record.return_value = record
+        self.mock_db.get_tasks_by_record.return_value = []
         
         # This calls load_record internally
         self.widget.load_record(1)
@@ -80,7 +91,7 @@ class TestRecordingWidgetUI(unittest.TestCase):
         self.assertEqual(self.widget.summary_display.toPlainText(), 'Summary')
         
         # Check that we didn't crash and tabs are still correct
-        self.assertEqual(self.widget.tabs.count(), 2)
+        self.assertEqual(self.widget.tabs.count(), 3)
 
 if __name__ == '__main__':
     unittest.main()

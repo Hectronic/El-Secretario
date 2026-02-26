@@ -1,0 +1,190 @@
+============================= test session starts ==============================
+platform linux -- Python 3.12.3, pytest-9.0.2, pluggy-1.6.0 -- /home/developer/repos/hector/El-Secretario/venv/bin/python3
+cachedir: .pytest_cache
+PyQt6 6.10.2 -- Qt runtime 6.10.2 -- Qt compiled 6.10.0
+rootdir: /home/developer/repos/hector/El-Secretario
+configfile: pytest.ini
+plugins: qt-4.5.0, anyio-4.12.1
+collecting ... collected 106 items
+
+tests/test_ai_provider_retry.py::TestAIProviderRetry::test_non_ollama_retries_with_backoff_until_success PASSED
+tests/test_ai_provider_retry.py::TestAIProviderRetry::test_non_ollama_uses_api_retry_delay_when_present PASSED
+tests/test_ai_provider_retry.py::TestAIProviderRetry::test_ollama_single_attempt_without_delay PASSED
+tests/test_batch_process.py::TestBatchProcess::test_load_pending PASSED
+tests/test_batch_process.py::TestBatchProcess::test_on_file_error_keeps_item PASSED
+tests/test_batch_process.py::TestBatchProcess::test_on_file_finished_removes_item PASSED
+tests/test_batch_process.py::TestBatchProcess::test_process_next_updates_status PASSED
+tests/test_batch_process.py::TestBatchProcess::test_remove_selected PASSED
+tests/test_batch_reliability.py::TestBatchReliability::test_max_retries_reached PASSED
+tests/test_batch_reliability.py::TestBatchReliability::test_retry_logic PASSED
+tests/test_calendar_button.py::TestCalendarButton::test_open_calendar_tab PASSED
+tests/test_calendar_logic.py::TestCalendarLogic::test_fetch_by_date_and_tags PASSED
+tests/test_calendar_logic.py::TestCalendarLogic::test_fetch_by_date_range PASSED
+tests/test_calendar_logic.py::TestCalendarLogic::test_rag_search_with_ids PASSED
+tests/test_calendar_multiselection.py::TestCalendarMultiSelection::test_fetch_by_dates_empty PASSED
+tests/test_calendar_multiselection.py::TestCalendarMultiSelection::test_fetch_by_dates_no_match PASSED
+tests/test_calendar_multiselection.py::TestCalendarMultiSelection::test_fetch_by_multiple_dates PASSED
+tests/test_calendar_multiselection.py::TestCalendarMultiSelection::test_fetch_by_single_date PASSED
+tests/test_calendar_ui.py::TestCalendarUI::test_autonomous_popups PASSED
+tests/test_calendar_ui.py::TestCalendarUI::test_day_navigation PASSED
+tests/test_calendar_ui.py::TestCalendarUI::test_generate_summary PASSED
+tests/test_calendar_ui.py::TestCalendarUI::test_initial_selection PASSED
+tests/test_calendar_ui.py::TestCalendarUI::test_refresh_tags PASSED
+tests/test_calendar_ui.py::TestCalendarUI::test_set_selection_day PASSED
+tests/test_calendar_ui.py::TestCalendarUI::test_set_selection_range PASSED
+tests/test_calendar_ui.py::TestCalendarUI::test_set_selection_week PASSED
+tests/test_data_export.py::TestDataExport::test_export_all PASSED
+tests/test_data_export.py::TestDataExport::test_export_chat_sessions PASSED
+tests/test_data_export.py::TestDataExport::test_export_notebooks PASSED
+tests/test_data_export.py::TestDataExport::test_export_records PASSED
+tests/test_data_export.py::TestDataImport::test_full_export_import_cycle PASSED
+tests/test_data_export.py::TestDataImport::test_import_chat_sessions PASSED
+tests/test_data_export.py::TestDataImport::test_import_duplicate_detection PASSED
+tests/test_data_export.py::TestDataImport::test_import_invalid_file PASSED
+tests/test_data_export.py::TestDataImport::test_import_notebooks PASSED
+tests/test_data_export.py::TestDataImport::test_import_records PASSED
+tests/test_data_export.py::TestDataImport::test_import_to_fresh_database PASSED
+tests/test_data_export.py::TestImportStats::test_default_values PASSED
+tests/test_data_export.py::TestImportResult::test_default_values PASSED
+tests/test_database.py::TestDBManager::test_chat_sessions PASSED
+tests/test_database.py::TestDBManager::test_daily_summaries_by_range PASSED
+tests/test_database.py::TestDBManager::test_get_tasks_by_date_with_multi_tag_filter_matches_any_tag PASSED
+tests/test_database.py::TestDBManager::test_init_db PASSED
+tests/test_database.py::TestDBManager::test_legacy_tasks_schema_is_migrated_on_startup PASSED
+tests/test_database.py::TestDBManager::test_save_and_fetch PASSED
+tests/test_database.py::TestDBManager::test_update_methods PASSED
+tests/test_deletion.py::TestDeletion::test_delete_recording PASSED
+tests/test_diarization_toggle.py::TestDiarizationToggle::test_toggle_diarization PASSED
+tests/test_maintenance.py::TestMaintenance::test_calculate_stats PASSED
+tests/test_maintenance.py::TestMaintenance::test_cleanup PASSED
+tests/test_new_features_integrity.py::TestNewFeaturesIntegrity::test_calendar_widget_instantiation PASSED
+tests/test_new_features_integrity.py::TestNewFeaturesIntegrity::test_recording_widget_instantiation qt.multimedia.ffmpeg: Using Qt multimedia with FFmpeg version 7.1.2 LGPL version 2.1 or later
+PASSED
+tests/test_new_features_integrity.py::TestNewFeaturesIntegrity::test_summary_task_queue_signals PASSED
+tests/test_new_features_integrity.py::TestNewFeaturesIntegrity::test_summary_viewer_instantiation PASSED
+tests/test_new_features_integrity.py::TestNewFeaturesIntegrity::test_task_batch_widget_logic PASSED
+tests/test_new_features_integrity.py::TestNewFeaturesIntegrity::test_tools_widget_instantiation PASSED
+tests/test_notebooks.py::TestNotebooks::test_add_audio_entry PASSED
+tests/test_notebooks.py::TestNotebooks::test_add_text_entry PASSED
+tests/test_notebooks.py::TestNotebooks::test_create_notebook PASSED
+tests/test_notebooks.py::TestNotebooks::test_delete_notebook PASSED
+tests/test_notebooks.py::TestNotebooks::test_rename_entry PASSED
+tests/test_notebooks.py::TestNotebooks::test_rename_notebook PASSED
+tests/test_notes.py::TestNotes::test_database_save_note PASSED
+tests/test_notes.py::TestNotes::test_note_widget_save PASSED
+tests/test_notes.py::TestNotes::test_summary_generator_includes_notes PASSED
+tests/test_notes.py::TestNotes::test_welcome_widget_new_note_signal PASSED
+tests/test_oom_fallback.py::test_transcriber_thread_oom_fallback 
+OOM Fallback Test Passed Successfully!
+PASSED
+tests/test_rag_engine.py::TestRAGEngine::test_add_and_search PASSED
+tests/test_rag_engine.py::TestRAGEngine::test_delete PASSED
+tests/test_recording_flow.py::TestRecordingFlow::test_new_recording_flow PASSED
+tests/test_recording_widget_ui.py::TestRecordingWidgetUI::test_clean_button_removed PASSED
+tests/test_recording_widget_ui.py::TestRecordingWidgetUI::test_clean_tab_removed FAILED
+tests/test_recording_widget_ui.py::TestRecordingWidgetUI::test_load_record_does_not_fail FAILED
+tests/test_search.py::TestSearch::test_search_error_handler PASSED
+tests/test_search.py::TestSearch::test_search_opens_new_tab PASSED
+tests/test_settings.py::test_settings_load PASSED
+tests/test_settings.py::test_settings_save PASSED
+tests/test_settings.py::test_settings_show_copy_buttons PASSED
+tests/test_settings.py::test_prompts_panel_defaults PASSED
+tests/test_settings.py::test_prompts_panel_save PASSED
+tests/test_shutdown_cleanup_stress.py::TestShutdownCleanupStress::test_close_event_cleans_many_tabs_and_workers PASSED
+tests/test_shutdown_cleanup_stress.py::TestShutdownCleanupStress::test_close_tab_calls_cleanup PASSED
+tests/test_summary_generator_imports.py::TestSummaryGeneratorImports::test_import_and_instantiation PASSED
+tests/test_summary_queue.py::TestSummaryQueue::test_deduplication PASSED
+tests/test_summary_queue.py::TestSummaryQueue::test_enqueue_recording_summary PASSED
+tests/test_summary_queue.py::TestSummaryQueue::test_persistence_on_finish PASSED
+tests/test_summary_queue.py::TestSummaryQueue::test_task_extraction_persistence PASSED
+tests/test_summary_queue.py::TestSummaryQueue::test_task_extraction_queue_has_title PASSED
+tests/test_tab_context_menu.py::TestTabContextMenu::test_close_all_tabs PASSED
+tests/test_tab_context_menu.py::TestTabContextMenu::test_close_other_tabs PASSED
+tests/test_tab_context_menu.py::TestTabContextMenu::test_close_tab PASSED
+tests/test_theme.py::TestTheme::test_apply_theme_dark PASSED
+tests/test_theme.py::TestTheme::test_apply_theme_light PASSED
+tests/test_theme.py::TestTheme::test_apply_theme_snes PASSED
+tests/test_theme.py::TestTheme::test_apply_theme_system PASSED
+tests/test_transcription_logging.py::TestTranscriptionLogging::test_log_transcription PASSED
+tests/test_weekly_summary_sunday.py::TestWeeklySummarySunday::test_get_weeks_with_content PASSED
+tests/test_weekly_summary_sunday.py::TestWeeklySummarySunday::test_get_weeks_without_summary PASSED
+tests/test_weekly_summary_sunday.py::TestWeeklySummarySunday::test_migration PASSED
+tests/test_welcome_daily_summary_button.py::TestWelcomeDailySummaryButton::test_welcome_button_emits_signal PASSED
+tests/test_welcome_daily_summary_button.py::TestMainWindowDailySummaryIntegration::test_welcome_button_enqueues_today_daily_summary PASSED
+tests/test_worker.py::TestTranscriberThread::test_get_optimal_device_with_cuda PASSED
+tests/test_worker.py::TestTranscriberThread::test_get_optimal_device_without_cuda PASSED
+tests/test_worker.py::TestTranscriberThread::test_transcription PASSED
+tests/test_z_audio.py::TestRecorder::test_pause_resume SKIPPED (requ...)
+tests/test_z_audio.py::TestRecorder::test_start_stop SKIPPED (requir...)
+
+=================================== FAILURES ===================================
+_________________ TestRecordingWidgetUI.test_clean_tab_removed _________________
+
+self = <tests.test_recording_widget_ui.TestRecordingWidgetUI testMethod=test_clean_tab_removed>
+
+    def test_clean_tab_removed(self):
+        # Verify that "Cleaned" tab is NOT present
+        # Tabs are: Original (0), Summary (1)
+>       self.assertEqual(self.widget.tabs.count(), 2)
+E       AssertionError: 3 != 2
+
+tests/test_recording_widget_ui.py:53: AssertionError
+_____________ TestRecordingWidgetUI.test_load_record_does_not_fail _____________
+
+self = <tests.test_recording_widget_ui.TestRecordingWidgetUI testMethod=test_load_record_does_not_fail>
+
+    def test_load_record_does_not_fail(self):
+        # Ensure loading a record doesn't crash due to missing cleaned_text logic
+        record = {
+            'id': 1,
+            'filename': 'test.wav',
+            'transcription': 'test',
+            'is_diarized': 0,
+            'transcription_model': 'base',
+            'title': 'Test',
+            'tags': '',
+            'cleaned_text': 'Should be ignored',
+            'summary': 'Summary',
+            'created_at': '2023-01-01',
+            'duration': 10.0
+        }
+        self.mock_db.fetch_all.return_value = [record]
+    
+        # This calls load_record internally
+>       self.widget.load_record(1)
+
+tests/test_recording_widget_ui.py:84: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <src.ui.recording_widget.RecordingWidget object at 0x7cc2a816ce10>
+record_id = 1
+
+    def load_record(self, record_id):
+        record = self.db.fetch_record(record_id)
+        if record:
+            self.current_record_id = record['id']
+>           self.text_display.setText(record['transcription'])
+E           TypeError: setText(self, text: Optional[str]): argument 1 has unexpected type 'MagicMock'
+
+src/ui/recording_widget.py:249: TypeError
+=============================== warnings summary ===============================
+venv/lib/python3.12/site-packages/pyannote/core/notebook.py:134
+  /home/developer/repos/hector/El-Secretario/venv/lib/python3.12/site-packages/pyannote/core/notebook.py:134: MatplotlibDeprecationWarning: The get_cmap function was deprecated in Matplotlib 3.7 and will be removed in 3.11. Use ``matplotlib.colormaps[name]`` or ``matplotlib.colormaps.get_cmap()`` or ``pyplot.get_cmap()`` instead.
+    cm = get_cmap("Set1")
+
+<frozen importlib._bootstrap>:488
+  <frozen importlib._bootstrap>:488: DeprecationWarning: builtin type SwigPyPacked has no __module__ attribute
+
+<frozen importlib._bootstrap>:488
+  <frozen importlib._bootstrap>:488: DeprecationWarning: builtin type SwigPyObject has no __module__ attribute
+
+venv/lib/python3.12/site-packages/pyannote/audio/core/io.py:43
+  /home/developer/repos/hector/El-Secretario/venv/lib/python3.12/site-packages/pyannote/audio/core/io.py:43: UserWarning: torchaudio._backend.set_audio_backend has been deprecated. With dispatcher enabled, this function is no-op. You can remove the function call.
+    torchaudio.set_audio_backend("soundfile")
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+SKIPPED [2] tests/test_z_audio.py: requires --run-audio-hw
+FAILED tests/test_recording_widget_ui.py::TestRecordingWidgetUI::test_clean_tab_removed
+FAILED tests/test_recording_widget_ui.py::TestRecordingWidgetUI::test_load_record_does_not_fail
+============ 2 failed, 102 passed, 2 skipped, 4 warnings in 26.51s =============

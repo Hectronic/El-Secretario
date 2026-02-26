@@ -34,21 +34,7 @@ class SearchResultsWidget(QWidget):
         
         # Results List
         self.results_list = QListWidget()
-        self.results_list.setStyleSheet("""
-            QListWidget {
-                border: 1px solid #444;
-                border-radius: 5px;
-                background-color: #2b2b2b;
-                color: #eeeeee;
-            }
-            QListWidget::item {
-                padding: 10px;
-                border-bottom: 1px solid #3a3a3a;
-            }
-            QListWidget::item:hover {
-                background-color: #3a3a3a;
-            }
-        """)
+        self.results_list.setProperty("class", "embedded-list")
         self.results_list.itemClicked.connect(self.on_item_clicked)
         layout.addWidget(self.results_list)
 

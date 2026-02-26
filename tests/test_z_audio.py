@@ -15,8 +15,11 @@
 import unittest
 from unittest.mock import MagicMock, patch
 import numpy as np
+import pytest
 from PyQt6.QtWidgets import QApplication
 import sys
+
+pytestmark = pytest.mark.audio_hw
 
 class TestRecorder(unittest.TestCase):
     @classmethod
