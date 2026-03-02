@@ -7,7 +7,7 @@ from src.worker import TranscriberThread
 
 # Mocking WhisperModel to simulate OOM
 class MockWhisperModel:
-    def __init__(self, model_size, device, compute_type):
+    def __init__(self, model_size, device, compute_type, **kwargs):
         self.model_size = model_size
         self.device = device
         self.compute_type = compute_type

@@ -121,11 +121,16 @@ class TestTranscriberThread(unittest.TestCase):
 
     @patch('src.worker.platform.system', return_value="Windows")
     def test_windows_remaps_int8_compute_type_in_thread_init(self, _mock_system):
+        # On Windows, we remap int8 to float16 on CUDA for stability.
         thread_cuda = TranscriberThread("test.wav", device="cuda", compute_type="int8")
         self.assertEqual(thread_cuda.compute_type, "float16")
 
+        # On Windows CPU, we now prefer int8_float32 over pure float32/int8 to avoid native crashes.
         thread_cpu = TranscriberThread("test.wav", device="cpu", compute_type="int8")
-        self.assertEqual(thread_cpu.compute_type, "float32")
+        self.assertEqual(thread_cpu.compute_type, "int8_float32")
+
+        thread_cpu_explicit = TranscriberThread("test.wav", device="cpu", compute_type="float32")
+        self.assertEqual(thread_cpu_explicit.compute_type, "int8_float32")
 
 
 class TestSearchAndChatThreads(unittest.TestCase):

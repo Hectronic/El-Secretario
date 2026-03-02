@@ -107,15 +107,16 @@ class TestCalendarLogic(unittest.TestCase):
         _, kwargs = call_args
         where_arg = kwargs.get('where')
         
-        # We expect where={'id': {'$in': ['1', '2']}}
-        self.assertEqual(where_arg, {'id': {'$in': ['1', '2']}})
+        # We expect where con el filtro de borrado suave añadido automáticamente
+        expected_where = {"$and": [{'id': {'$in': ['1', '2']}}, {"deleted": {"$ne": "1"}}]}
+        self.assertEqual(where_arg, expected_where)
         
         # Test single id
         self.rag.search("query", ids=["1"])
         call_args = self.rag.collection.query.call_args
         _, kwargs = call_args
         where_arg = kwargs.get('where')
-        self.assertEqual(where_arg, {'id': '1'})
+        self.assertEqual(where_arg, {'$and': [{'id': '1'}, {'deleted': {'$ne': '1'}}]})
 
 if __name__ == '__main__':
     unittest.main()

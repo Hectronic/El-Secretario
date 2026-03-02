@@ -169,6 +169,11 @@ def _subprocess_transcribe_entry(payload: dict, result_queue):
         # Determine CPU threads for Windows CPU
         cpu_threads = 1 if (platform.system() == "Windows" and payload["device"] == "cpu") else 4
         
+        logging.info(
+            "Subprocess transcription starting: model=%s device=%s compute_type=%s cpu_threads=%s",
+            payload["model_size"], payload["device"], payload["compute_type"], cpu_threads
+        )
+        
         model = WhisperModel(
             payload["model_size"],
             device=payload["device"],
@@ -255,10 +260,14 @@ class TranscriberThread(QThread):
             self.compute_type = compute_type
 
         # Protect Windows from unstable backend combinations that may crash the process.
-        if platform.system() == "Windows" and self.device == "cpu":
-            # int8_float32 is often more stable than pure float32 on Windows CPU
-            # for preventing C0000005 Access Violations in ctranslate2.
-            self.compute_type = "int8_float32"
+        if platform.system() == "Windows":
+            if self.device == "cpu":
+                # int8_float32 is often more stable than pure float32/int8 on Windows CPU
+                # for preventing C0000005 Access Violations in ctranslate2.
+                self.compute_type = "int8_float32"
+            elif self.device == "cuda" and self.compute_type == "int8":
+                # On Windows, keep float16 default for CUDA to avoid rare crashes.
+                self.compute_type = "float16"
             
         self.language = language
         self.hf_token = hf_token
