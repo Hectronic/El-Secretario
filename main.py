@@ -13,6 +13,8 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 import os
+# Avoid DLL conflicts and potential crashes on Windows with multiple OpenMP libraries.
+os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
 os.environ["ANONYMIZED_TELEMETRY"] = "False"
 import sys
 from PyQt6.QtWidgets import QApplication
