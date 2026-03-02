@@ -301,7 +301,9 @@ class DataExporter:
             SHA256 hash of the transcription content.
         """
         transcription = record.get('transcription', '') or ''
-        return hashlib.sha256(transcription.encode('utf-8')).hexdigest()
+        recording_notes = record.get('recording_notes', '') or ''
+        merged_content = DBManager.compose_ai_text(transcription, recording_notes)
+        return hashlib.sha256(merged_content.encode('utf-8')).hexdigest()
 
     def _record_exists(self, created_at: str, content_hash: str) -> bool:
         """

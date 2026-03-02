@@ -6,6 +6,7 @@ import pytest
 
 # Force headless Qt unless explicitly overridden by the environment.
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+os.environ.setdefault("EL_SECRETARIO_SKIP_AUDIO_ENUM", "1")
 
 
 def pytest_addoption(parser):
@@ -29,7 +30,7 @@ def _has_input_audio_device() -> bool:
 
 def pytest_collection_modifyitems(config, items):
     run_audio_hw = config.getoption("--run-audio-hw")
-    has_audio_input = _has_input_audio_device()
+    has_audio_input = _has_input_audio_device() if run_audio_hw else False
 
     marker_by_file = {
         "test_shutdown_cleanup_stress.py": ("stress", "ui"),

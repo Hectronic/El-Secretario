@@ -49,11 +49,12 @@ class TestRecordingWidgetUI(unittest.TestCase):
 
     def test_clean_tab_removed(self):
         # Verify that "Cleaned" tab is NOT present
-        # Tabs are: Original (0), Summary (1), Tasks (2)
-        self.assertEqual(self.widget.tabs.count(), 3)
+        # Tabs are: Original (0), Notes (1), Summary (2), Tasks (3)
+        self.assertEqual(self.widget.tabs.count(), 4)
         self.assertEqual(self.widget.tabs.tabText(0), "Original")
-        self.assertEqual(self.widget.tabs.tabText(1), "Summary")
-        self.assertEqual(self.widget.tabs.tabText(2), "Tasks")
+        self.assertEqual(self.widget.tabs.tabText(1), "Notes")
+        self.assertEqual(self.widget.tabs.tabText(2), "Summary")
+        self.assertEqual(self.widget.tabs.tabText(3), "Tasks")
 
     def test_clean_button_removed(self):
         # Verify clean_btn attribute does not exist
@@ -74,6 +75,7 @@ class TestRecordingWidgetUI(unittest.TestCase):
             'transcription_model': 'base', 
             'title': 'Test', 
             'tags': '', 
+            'recording_notes': 'Important context',
             'cleaned_text': 'Should be ignored', 
             'summary': 'Summary', 
             'created_at': '2023-01-01', 
@@ -88,10 +90,94 @@ class TestRecordingWidgetUI(unittest.TestCase):
         
         # Check that loaded text is correct
         self.assertEqual(self.widget.text_display.toPlainText(), 'test')
+        self.assertEqual(self.widget.notes_display.toPlainText(), 'Important context')
         self.assertEqual(self.widget.summary_display.toPlainText(), 'Summary')
         
         # Check that we didn't crash and tabs are still correct
-        self.assertEqual(self.widget.tabs.count(), 3)
+        self.assertEqual(self.widget.tabs.count(), 4)
+
+    def test_auto_summary_runs_after_transcription_when_enabled(self):
+        self.widget.current_record_id = 1
+        self.widget.current_recording_path = "/tmp/test.wav"
+        self.widget.auto_summarize_after_transcription = True
+        self.mock_db.fetch_record.return_value = {
+            'id': 1,
+            'filename': 'test.wav',
+            'transcription': 'old',
+            'is_diarized': 0,
+            'transcription_model': 'base',
+            'title': 'Test',
+            'tags': '',
+            'recording_notes': '',
+            'summary': '',
+            'created_at': '2023-01-01',
+            'duration': 10.0
+        }
+        self.mock_db.get_tasks_by_record.return_value = []
+
+        result = {
+            "text": "new transcription",
+            "model_name": "base",
+            "audio_duration": 5.0,
+            "audio_size_bytes": 1024,
+            "transcription_time": 0.5,
+            "is_diarized": False,
+        }
+
+        with patch.object(self.widget, "run_ai_task") as mock_run_ai:
+            self.widget.on_transcription_finished(result)
+            mock_run_ai.assert_any_call("summary")
+            mock_run_ai.assert_any_call("task_extraction")
+
+    def test_auto_summary_mode_enqueues_summary_and_tasks_in_queue(self):
+        queue = MagicMock()
+        self.widget.summary_task_queue = queue
+        self.widget.current_record_id = 1
+        self.widget.current_recording_path = "/tmp/test.wav"
+        self.widget.auto_summarize_after_transcription = True
+        self.widget.title_input.setText("Test recording")
+        self.widget.tags_input.setText("alpha, beta")
+        self.mock_db.fetch_record.return_value = {
+            'id': 1,
+            'filename': 'test.wav',
+            'transcription': 'old',
+            'is_diarized': 0,
+            'transcription_model': 'base',
+            'title': 'Test',
+            'tags': 'alpha, beta',
+            'recording_notes': '',
+            'summary': '',
+            'created_at': '2023-01-01',
+            'duration': 10.0
+        }
+        self.mock_db.get_tasks_by_record.return_value = []
+
+        result = {
+            "text": "new transcription",
+            "model_name": "base",
+            "audio_duration": 5.0,
+            "audio_size_bytes": 1024,
+            "transcription_time": 0.5,
+            "is_diarized": False,
+        }
+
+        self.widget.on_transcription_finished(result)
+        queue.enqueue_recording_summary.assert_called_once()
+        queue.enqueue_task_extraction.assert_called_once()
+
+    def test_refresh_from_background_queue_updates_summary_and_tasks(self):
+        self.widget.current_record_id = 7
+        self.mock_db.fetch_record.return_value = {
+            "id": 7,
+            "summary": "Queue summary result"
+        }
+        self.mock_db.get_tasks_by_record.return_value = []
+
+        with patch.object(self.widget.tasks_widget, "refresh") as mock_tasks_refresh:
+            self.widget.refresh_from_background_queue(include_summary=True, include_tasks=True)
+
+        self.assertEqual(self.widget.summary_display.toPlainText(), "Queue summary result")
+        mock_tasks_refresh.assert_called_once()
 
 if __name__ == '__main__':
     unittest.main()

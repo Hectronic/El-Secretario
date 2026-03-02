@@ -15,16 +15,19 @@
 import os
 import sys
 import unittest
-from datetime import date
+from datetime import date, timedelta
 from unittest.mock import MagicMock, patch
 
 from PyQt6.QtWidgets import QApplication
+from PyQt6.QtCore import QSettings
 
 # Add project root to path
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from src.ui.main_window import MainWindow
 from src.ui.welcome_widget import WelcomeWidget
+from src.ui.dialogs import SettingsWidget
+from src.ui.components import SidebarTaskCompactWidget, create_tag_chip
 
 
 class _FakeDB:
@@ -53,6 +56,37 @@ class TestWelcomeDailySummaryButton(unittest.TestCase):
 
             self.assertEqual(len(calls), 1)
         finally:
+            widget.deleteLater()
+
+    def test_welcome_auto_summary_config_persisted_and_emitted(self):
+        settings = QSettings("Hectronic", "Secretario")
+        prev_value = settings.value("rec_config/auto_summarize_after_transcription", None)
+        settings.setValue("rec_config/auto_summarize_after_transcription", True)
+
+        widget = WelcomeWidget(_FakeDB())
+        try:
+            self.assertTrue(widget.auto_summary_check.isChecked())
+
+            emitted = []
+            widget.new_recording_requested.connect(lambda cfg: emitted.append(cfg))
+            widget.rec_btn.click()
+
+            self.assertEqual(len(emitted), 1)
+            self.assertTrue(emitted[0].get("auto_summarize_after_transcription"))
+
+            widget.auto_summary_check.setChecked(False)
+            self.assertFalse(
+                settings.value(
+                    "rec_config/auto_summarize_after_transcription",
+                    True,
+                    type=bool,
+                )
+            )
+        finally:
+            if prev_value is None:
+                settings.remove("rec_config/auto_summarize_after_transcription")
+            else:
+                settings.setValue("rec_config/auto_summarize_after_transcription", prev_value)
             widget.deleteLater()
 
 
@@ -109,6 +143,210 @@ class TestMainWindowDailySummaryIntegration(unittest.TestCase):
                 "tags_filter": "",
             }
         )
+
+    def test_right_sidebar_accordion_and_tags_section(self):
+        self.mock_db.get_all_tags.return_value = ["alpha", "beta"]
+        self.window.load_collections()
+
+        self.assertIn("tags", self.window._right_sidebar_sections)
+        self.assertEqual(self.window.collections_list.count(), 2)
+        self.assertEqual(self.window.collections_list.item(0).text(), "alpha")
+
+        self.window._set_active_right_section("tags")
+        for key, section in self.window._right_sidebar_sections.items():
+            self.assertEqual(not section["content"].isHidden(), key == "tags")
+            idx = section.get("index")
+            self.assertEqual(self.window._right_sidebar_layout.stretch(idx), 1 if key == "tags" else 0)
+        self.assertEqual(
+            self.window._right_sidebar_layout.stretch(self.window._right_sidebar_bottom_spacer_index),
+            0,
+        )
+
+        self.window._right_sidebar_sections["chats"]["header"].click()
+        for key, section in self.window._right_sidebar_sections.items():
+            self.assertEqual(not section["content"].isHidden(), key == "chats")
+            idx = section.get("index")
+            self.assertEqual(self.window._right_sidebar_layout.stretch(idx), 1 if key == "chats" else 0)
+        self.assertEqual(
+            self.window._right_sidebar_layout.stretch(self.window._right_sidebar_bottom_spacer_index),
+            0,
+        )
+
+        # Click active section again -> collapse all
+        self.window._right_sidebar_sections["chats"]["header"].click()
+        self.assertIsNone(self.window._active_right_section)
+        for key, section in self.window._right_sidebar_sections.items():
+            self.assertTrue(section["content"].isHidden())
+            idx = section.get("index")
+            self.assertEqual(self.window._right_sidebar_layout.stretch(idx), 0)
+            self.assertEqual(section["header"].property("class"), "accordion-header-btn")
+        self.assertEqual(
+            self.window._right_sidebar_layout.stretch(self.window._right_sidebar_bottom_spacer_index),
+            1,
+        )
+
+    def test_right_settings_section_opens_settings_tab(self):
+        self.assertTrue(hasattr(self.window, "right_settings_btn"))
+        self.assertNotIn("settings", self.window._right_sidebar_sections)
+        self.window.right_settings_btn.click()
+
+        current = self.window.central_tabs.currentWidget()
+        self.assertIsInstance(current, SettingsWidget)
+
+    def test_tasks_sidebar_compact_item_and_tag_colors(self):
+        self.mock_db.get_recent_incomplete_tasks.return_value = [
+            {
+                "id": 99,
+                "record_id": 1,
+                "content": "Prepare kickoff plan for next sprint",
+                "record_tags": "alpha, beta",
+                "tags": "",
+                "is_completed": 0,
+            }
+        ]
+        self.window.refresh_tasks_sidebar()
+
+        item = self.window.tasks_sidebar_list.item(0)
+        widget = self.window.tasks_sidebar_list.itemWidget(item)
+        self.assertIsInstance(widget, SidebarTaskCompactWidget)
+        self.assertIn("Prepare kickoff plan", widget.title_label.text())
+        self.assertEqual(len(widget.tag_chips), 2)
+        self.assertGreaterEqual(widget.minimumHeight(), 46)
+        widget.complete_check.setChecked(True)
+        self.mock_db.toggle_task_completion.assert_called_with(99, True)
+
+        chip_a = create_tag_chip("alpha")
+        chip_b = create_tag_chip("alpha")
+        chip_c = create_tag_chip("beta")
+        self.assertEqual(chip_a.styleSheet(), chip_b.styleSheet())
+        self.assertNotEqual(chip_a.styleSheet(), chip_c.styleSheet())
+
+    def test_startup_option_enqueues_missing_previous_weekly_summary(self):
+        settings = QSettings("Hectronic", "Secretario")
+        old_value = settings.value("startup_enqueue_last_weekly_summary", None)
+        settings.setValue("startup_enqueue_last_weekly_summary", True)
+        try:
+            self.window.summary_task_queue.enqueue_weekly_summary = MagicMock()
+            self.mock_db.get_weekly_summary.return_value = None
+            self.mock_db.fetch_by_date_range.return_value = [
+                {
+                    "title": "Weekly Sync",
+                    "created_at": "2026-02-24 10:00:00",
+                    "transcription": "transcription text",
+                    "recording_notes": "note text",
+                }
+            ]
+            self.mock_db.compose_ai_text.return_value = "combined text"
+
+            self.window._enqueue_missing_previous_week_summary_if_enabled()
+
+            today = date.today()
+            current_week_monday = today - timedelta(days=today.weekday())
+            previous_week_monday = current_week_monday - timedelta(days=7)
+            expected_sunday = (previous_week_monday + timedelta(days=6)).isoformat()
+
+            self.window.summary_task_queue.enqueue_weekly_summary.assert_called_once()
+            call_args = self.window.summary_task_queue.enqueue_weekly_summary.call_args.args
+            self.assertEqual(call_args[0], expected_sunday)
+            self.assertIn("combined text", call_args[1])
+            self.assertEqual(call_args[2], "")
+        finally:
+            if old_value is None:
+                settings.remove("startup_enqueue_last_weekly_summary")
+            else:
+                settings.setValue("startup_enqueue_last_weekly_summary", old_value)
+
+    def test_startup_option_enqueues_latest_missing_previous_daily_summary(self):
+        settings = QSettings("Hectronic", "Secretario")
+        old_value = settings.value("startup_enqueue_previous_daily_summary", None)
+        settings.setValue("startup_enqueue_previous_daily_summary", True)
+        try:
+            self.window.summary_task_queue.enqueue_daily_summary = MagicMock()
+            self.mock_db.get_latest_recording_day_without_daily_summary.return_value = "2026-02-27"
+
+            self.window._enqueue_missing_previous_daily_summary_if_enabled()
+
+            self.window.summary_task_queue.enqueue_daily_summary.assert_called_once_with(
+                {
+                    "date": "2026-02-27",
+                    "tags_filter": "",
+                }
+            )
+        finally:
+            if old_value is None:
+                settings.remove("startup_enqueue_previous_daily_summary")
+            else:
+                settings.setValue("startup_enqueue_previous_daily_summary", old_value)
+
+    def test_format_task_name_covers_supported_types(self):
+        self.assertEqual(
+            self.window._format_task_name({"type": "summary", "title": "Rec 1"}),
+            "Recording: Rec 1",
+        )
+        self.assertEqual(
+            self.window._format_task_name({"type": "task_extraction", "title": "Rec 2"}),
+            "Tasks: Rec 2",
+        )
+        self.assertEqual(
+            self.window._format_task_name({"type": "transcription", "title": "Rec 3"}),
+            "Transcribing: Rec 3",
+        )
+        self.assertEqual(
+            self.window._format_task_name({"type": "weekly_summary", "date": "2026-03-01"}),
+            "Week: 2026-03-01",
+        )
+        self.assertEqual(
+            self.window._format_task_name({"type": "daily_summary", "date": "2026-03-02", "tags_filter": "ops"}),
+            "Day: 2026-03-02 [ops]",
+        )
+        self.assertEqual(
+            self.window._format_task_name({"type": "daily_summary", "date": "2026-03-02"}),
+            "Day: 2026-03-02",
+        )
+
+    def test_queue_changed_and_progress_handling(self):
+        self.window.refresh_tasks_sidebar = MagicMock()
+
+        self.window._on_summary_queue_changed(3, True)
+        self.window.refresh_tasks_sidebar.assert_called()
+        self.assertEqual(self.window.task_queue_progress.minimum(), 0)
+        self.assertEqual(self.window.task_queue_progress.maximum(), 0)
+
+        self.window._on_summary_queue_changed(0, False)
+        self.assertEqual(self.window.task_queue_progress.minimum(), 0)
+        self.assertEqual(self.window.task_queue_progress.maximum(), 1)
+        self.assertEqual(self.window.task_queue_progress.value(), 0)
+        self.assertEqual(self.window.task_status_label.text(), "Summary queue idle.")
+
+        self.window.summary_task_queue._current_worker = None
+        self.window.handle_progress(-1)
+        self.assertEqual(self.window.task_queue_progress.maximum(), 0)
+
+        self.window.handle_progress(-2)
+        self.assertEqual(self.window.task_queue_progress.maximum(), 1)
+        self.assertEqual(self.window.task_queue_progress.value(), 0)
+
+        self.window.handle_progress(77)
+        self.assertEqual(self.window.task_queue_progress.maximum(), 100)
+        self.assertEqual(self.window.task_queue_progress.value(), 77)
+
+        running_worker = MagicMock()
+        running_worker.isRunning.return_value = False
+        self.window.summary_task_queue._current_worker = running_worker
+        self.window.task_queue_progress.setValue(33)
+        self.window.handle_progress(88)
+        self.assertEqual(self.window.task_queue_progress.value(), 33)
+
+    def test_handle_status_message_respects_running_queue(self):
+        self.window.summary_task_queue._current_worker = None
+        self.window.handle_status_message("idle-msg")
+        self.assertEqual(self.window.task_status_label.text(), "idle-msg")
+
+        running_worker = MagicMock()
+        running_worker.isRunning.return_value = False
+        self.window.summary_task_queue._current_worker = running_worker
+        self.window.handle_status_message("should-not-overwrite")
+        self.assertEqual(self.window.task_status_label.text(), "idle-msg")
 
 
 if __name__ == "__main__":

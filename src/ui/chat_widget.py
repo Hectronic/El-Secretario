@@ -18,123 +18,172 @@ from datetime import datetime
 from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QTextEdit, 
                              QLineEdit, QPushButton, QComboBox, QLabel, QApplication,
                              QFrame, QDialog, QListWidget, QListWidgetItem, QTabWidget,
-                             QDateEdit, QDialogButtonBox, QScrollArea)
-from PyQt6.QtCore import Qt, QSettings, pyqtSignal, QSize
-from PyQt6.QtGui import QCursor, QIcon
+                             QDateEdit, QDialogButtonBox, QScrollArea, QSplitter,
+                             QGroupBox, QCheckBox, QCalendarWidget)
+from PyQt6.QtCore import Qt, QSettings, pyqtSignal, QSize, QDate
+from PyQt6.QtGui import QCursor, QIcon, QTextCharFormat, QColor
 from src.worker import ChatThread
 from src.database import DBManager
 from src.ui.styles import TEXT_EDIT_STYLE, BUTTON_PRIMARY_STYLE
 from src.notebook_database import NotebookDBManager
 
-class ContextChip(QFrame):
-    removed = pyqtSignal(object) # Emits self
-
-    def __init__(self, context_type, value, label, parent=None):
+class ContextManagerPanel(QWidget):
+    """Side panel for ChatWidget to manage context synchronized with main sidebar."""
+    context_changed = pyqtSignal()
+    
+    def __init__(self, db, notebook_db, parent=None):
         super().__init__(parent)
-        self.context_type = context_type
-        self.value = value
-        self.label_text = label
+        self.db = db
+        self.notebook_db = notebook_db
         
-        self.setStyleSheet("""
-            ContextChip {
-                background-color: #E3F2FD;
-                border: 1px solid #2196F3;
-                border-radius: 15px;
-            }
-        """)
-        self.setFixedHeight(30)
+        # Selection State (Synced from Global)
+        self.current_week_monday = None
+        self.current_date_filter = None
+        self.active_global_tags = []
         
-        layout = QHBoxLayout(self)
-        layout.setContentsMargins(10, 0, 5, 0)
-        layout.setSpacing(5)
+        self.init_ui()
+        self.load_notebooks()
         
-        lbl = QLabel(label)
-        lbl.setStyleSheet("border: none; color: #1565C0; font-weight: bold;")
-        layout.addWidget(lbl)
+    def init_ui(self):
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(10, 10, 10, 10)
+        layout.setSpacing(12)
         
-        close_btn = QPushButton("×")
-        close_btn.setFixedSize(20, 20)
-        close_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        close_btn.setStyleSheet("""
-            QPushButton {
-                border: none;
-                color: #1565C0;
-                font-weight: bold;
-                font-size: 16px;
-                background: transparent;
-            }
-            QPushButton:hover {
-                color: red;
-            }
-        """)
-        close_btn.clicked.connect(lambda: self.removed.emit(self))
-        layout.addWidget(close_btn)
-
-    def to_dict(self):
-        return {
-            "type": self.context_type,
-            "value": self.value,
-            "label": self.label_text
-        }
-
-class ContextBar(QWidget):
-    context_added = pyqtSignal(dict)
-    context_removed = pyqtSignal(dict)
-
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self.chips = []
+        # --- Context Status ---
+        status_group = QGroupBox("Contexto del Calendario")
+        status_layout = QVBoxLayout(status_group)
         
-        self.layout = QHBoxLayout(self)
-        self.layout.setContentsMargins(0, 0, 0, 0)
-        self.layout.setSpacing(5)
-        self.layout.setAlignment(Qt.AlignmentFlag.AlignLeft)
+        self.sync_cb = QCheckBox("Sincronizar con App")
+        self.sync_cb.setChecked(True)
+        self.sync_cb.setStyleSheet("font-weight: bold; color: #2196F3;")
+        status_layout.addWidget(self.sync_cb)
         
-        self.add_btn = QPushButton("+ Context")
-        self.add_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.add_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #f0f0f0;
-                border: 1px dashed #999;
-                border-radius: 15px;
-                padding: 5px 10px;
-                color: #555;
-            }
-            QPushButton:hover {
-                background-color: #e0e0e0;
-                color: #333;
-            }
-        """)
-        self.layout.addWidget(self.add_btn)
-
-    def add_context(self, context_type, value, label):
-        # Check duplicates
-        for chip in self.chips:
-            if chip.context_type == context_type and chip.value == value:
-                return
-
-        chip = ContextChip(context_type, value, label)
-        chip.removed.connect(self.remove_chip)
+        self.date_lbl = QLabel("Fechas: Toda la historia")
+        self.date_lbl.setStyleSheet("font-size: 11px; color: #1565C0; font-weight: bold;")
+        self.date_lbl.setWordWrap(True)
+        status_layout.addWidget(self.date_lbl)
         
-        self.layout.insertWidget(self.layout.count() - 1, chip)
-        self.chips.append(chip)
+        self.tags_lbl = QLabel("Tags: Ninguno")
+        self.tags_lbl.setStyleSheet("font-size: 11px; color: #555;")
+        self.tags_lbl.setWordWrap(True)
+        status_layout.addWidget(self.tags_lbl)
         
-        self.context_added.emit(chip.to_dict())
+        layout.addWidget(status_group)
+        
+        # --- Notebooks Section ---
+        nb_group = QGroupBox("Incluir Libretas")
+        nb_layout = QVBoxLayout(nb_group)
+        self.nb_list = QListWidget()
+        self.nb_list.setFixedHeight(120)
+        self.nb_list.itemChanged.connect(self.on_metadata_changed)
+        nb_layout.addWidget(self.nb_list)
+        layout.addWidget(nb_group)
+        
+        # --- Entries (Fichas) List ---
+        entries_group = QGroupBox("Fichas Detectadas (Contexto)")
+        entries_layout = QVBoxLayout(entries_group)
+        
+        self.entries_list = QListWidget()
+        self.entries_list.setStyleSheet("font-size: 10px; background-color: #f9f9f9;")
+        entries_layout.addWidget(self.entries_list)
+        
+        self.entries_count_lbl = QLabel("0 entradas encontradas")
+        self.entries_count_lbl.setStyleSheet("color: gray; font-size: 10px; font-style: italic;")
+        entries_layout.addWidget(self.entries_count_lbl)
+        
+        layout.addWidget(entries_group)
+        
+        # --- Tools ---
+        self.clear_chat_btn = QPushButton("Borrar Historial de Chat")
+        self.clear_chat_btn.clicked.connect(self.parent().clear_history)
+        layout.addWidget(self.clear_chat_btn)
+        
+        layout.addStretch()
 
-    def remove_chip(self, chip):
-        self.layout.removeWidget(chip)
-        self.chips.remove(chip)
-        chip.deleteLater()
-        self.context_removed.emit(chip.to_dict())
+    def load_notebooks(self):
+        self.nb_list.clear()
+        notebooks = self.notebook_db.get_notebooks()
+        for nb in notebooks:
+            item = QListWidgetItem(f"📓 {nb['name']}")
+            item.setData(Qt.ItemDataRole.UserRole, nb['id'])
+            item.setFlags(item.flags() | Qt.ItemFlag.ItemIsUserCheckable)
+            item.setCheckState(Qt.CheckState.Unchecked)
+            self.nb_list.addItem(item)
 
-    def get_contexts(self):
-        return [chip.to_dict() for chip in self.chips]
+    def on_metadata_changed(self):
+        self.refresh_entries()
+        self.context_changed.emit()
 
-    def clear(self):
-        for chip in self.chips:
-            self.layout.removeWidget(chip)
-            chip.deleteLater()
-        self.chips = []
+    def sync_with_global(self, monday, date_str, tags_str):
+        if not self.sync_cb.isChecked():
+            return
+        
+        self.current_week_monday = monday
+        self.current_date_filter = date_str
+        self.active_global_tags = [t.strip() for t in tags_str.split(',')] if tags_str else []
+        
+        # Update Labels
+        if self.current_week_monday:
+            mon_s = self.current_week_monday.toString("yyyy-MM-dd")
+            self.date_lbl.setText(f"Rango: {mon_s} al {date_str}")
+        elif date_str:
+            self.date_lbl.setText(f"Día: {date_str}")
+        else:
+            self.date_lbl.setText("Fechas: Toda la historia")
+            
+        self.tags_lbl.setText(f"Tags: {', '.join(self.active_global_tags) if self.active_global_tags else 'Todos'}")
+        
+        self.refresh_entries()
+        self.context_changed.emit()
+
+    def get_active_tags(self):
+        return self.active_global_tags
+
+    def get_active_notebooks(self):
+        ids = []
+        for i in range(self.nb_list.count()):
+            item = self.nb_list.item(i)
+            if item.checkState() == Qt.CheckState.Checked:
+                ids.append(item.data(Qt.ItemDataRole.UserRole))
+        return ids
+
+    def refresh_entries(self):
+        """Fetch records matching current filters and display them."""
+        self.entries_list.clear()
+        
+        records = []
+        if self.current_week_monday:
+            start_date = self.current_week_monday.toString("yyyy-MM-dd")
+            end_date = self.current_date_filter
+            records = self.db.fetch_by_date_range(start_date, end_date, self.active_global_tags if self.active_global_tags else None)
+        elif self.current_date_filter:
+            records = self.db.fetch_by_dates([self.current_date_filter], self.active_global_tags if self.active_global_tags else None)
+        elif self.active_global_tags:
+            records = self.db.fetch_by_date_range("1970-01-01", "2099-12-31", self.active_global_tags)
+        
+        # Display Recordings
+        for r in records:
+            icon = "🎤" if r.get('type') == 'recording' else "📝"
+            item = QListWidgetItem(f"{icon} {r['title'] or 'Sin título'}")
+            item.setToolTip(f"{r['created_at']}")
+            self.entries_list.addItem(item)
+            
+        # Display Notebooks
+        for nid in self.get_active_notebooks():
+            nb_entries = self.notebook_db.get_entries(nid)
+            for e in nb_entries:
+                item = QListWidgetItem(f"📓 {e['title'] or 'Nota de Libreta'}")
+                self.entries_list.addItem(item)
+                
+        self.entries_count_lbl.setText(f"{self.entries_list.count()} entradas en contexto")
+
+    def reset_all(self):
+        self.current_date_filter = None
+        self.current_week_monday = None
+        self.active_global_tags = []
+        for i in range(self.nb_list.count()):
+            self.nb_list.item(i).setCheckState(Qt.CheckState.Unchecked)
+        self.refresh_entries()
 
 class AddContextDialog(QDialog):
     def __init__(self, db_manager, notebook_db, parent=None):
@@ -228,45 +277,76 @@ class ChatWidget(QWidget):
         # Load initial contexts if provided (for new chats)
         if initial_contexts:
             for ctx in initial_contexts:
-                self.context_bar.add_context(ctx['type'], ctx['value'], ctx['label'])
+                if ctx['type'] == 'date':
+                    self.context_panel.current_date_filter = ctx['value']
+                elif ctx['type'] == 'tag':
+                    for i in range(self.context_panel.tag_list.count()):
+                        item = self.context_panel.tag_list.item(i)
+                        if item.text() == ctx['value']:
+                            item.setCheckState(Qt.CheckState.Checked)
+                elif ctx['type'] == 'notebook':
+                    for i in range(self.context_panel.nb_list.count()):
+                        item = self.context_panel.nb_list.item(i)
+                        if item.data(Qt.ItemDataRole.UserRole) == ctx['value']:
+                            item.setCheckState(Qt.CheckState.Checked)
+            self.context_panel.update_visuals()
         
         if self.current_session_id:
             self.load_session(self.current_session_id)
 
     def init_ui(self):
-        layout = QVBoxLayout(self)
-
-        # Context Bar
-        self.context_bar = ContextBar()
-        self.context_bar.add_btn.clicked.connect(self.open_add_context_dialog)
-        layout.addWidget(self.context_bar)
+        main_layout = QHBoxLayout(self)
+        main_layout.setContentsMargins(0, 0, 0, 0)
+        main_layout.setSpacing(0)
+        
+        self.splitter = QSplitter(Qt.Orientation.Horizontal)
+        
+        # --- Left Side: Chat ---
+        chat_container = QWidget()
+        chat_layout = QVBoxLayout(chat_container)
 
         # Chat Display
         self.display = QTextEdit()
         self.display.setReadOnly(True)
-        self.display.setPlaceholderText("Ask anything about your notes...")
+        self.display.setPlaceholderText("Pregunta cualquier cosa sobre tus notas...")
         self.display.setStyleSheet(TEXT_EDIT_STYLE)
-        layout.addWidget(self.display)
+        chat_layout.addWidget(self.display)
 
         # Input Area
         input_layout = QHBoxLayout()
         self.input_field = QLineEdit()
-        self.input_field.setPlaceholderText("Type your question here...")
+        self.input_field.setPlaceholderText("Escribe tu pregunta aquí...")
         self.input_field.returnPressed.connect(self.send_message)
         input_layout.addWidget(self.input_field)
 
-        self.send_btn = QPushButton("Send")
+        self.send_btn = QPushButton("Enviar")
         self.send_btn.clicked.connect(self.send_message)
         self.send_btn.setStyleSheet(BUTTON_PRIMARY_STYLE)
         input_layout.addWidget(self.send_btn)
 
-        layout.addLayout(input_layout)
+        chat_layout.addLayout(input_layout)
+        
+        self.splitter.addWidget(chat_container)
+        
+        # --- Right Side: Context Manager Panel ---
+        self.context_panel = ContextManagerPanel(self.db, self.notebook_db, self)
+        self.splitter.addWidget(self.context_panel)
+        
+        self.splitter.setSizes([900, 350])
+        main_layout.addWidget(self.splitter)
 
-    def open_add_context_dialog(self):
-        dialog = AddContextDialog(self.db, self.notebook_db, self)
-        if dialog.exec():
-            ctx = dialog.selected_context
-            self.context_bar.add_context(ctx['type'], ctx['value'], ctx['label'])
+    def update_from_global_selection(self, monday, date_str, tags_str):
+        """Called by MainWindow when sidebar selection changes."""
+        self.context_panel.sync_with_global(monday, date_str, tags_str)
+
+    def clear_history(self):
+        reply = QMessageBox.question(self, "Borrar Historial", "¿Estás seguro de que quieres borrar el historial de este chat?",
+                                   QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+        if reply == QMessageBox.StandardButton.Yes:
+            self.chat_history = []
+            self.display.clear()
+            if self.current_session_id:
+                self.db.update_chat_session(self.current_session_id, json.dumps([]))
 
     def load_session(self, session_id):
         sessions = self.db.fetch_chat_sessions()
@@ -280,20 +360,23 @@ class ChatWidget(QWidget):
             if context_data:
                 try:
                     contexts = json.loads(context_data)
-                    self.context_bar.clear()
+                    self.context_panel.reset_all()
                     for ctx in contexts:
-                        self.context_bar.add_context(ctx['type'], ctx['value'], ctx['label'])
+                        if ctx['type'] == 'date':
+                            self.context_panel.current_date_filter = ctx['value']
+                        elif ctx['type'] == 'tag':
+                            for i in range(self.context_panel.tag_list.count()):
+                                item = self.context_panel.tag_list.item(i)
+                                if item.text() == ctx['value']:
+                                    item.setCheckState(Qt.CheckState.Checked)
+                        elif ctx['type'] == 'notebook':
+                            for i in range(self.context_panel.nb_list.count()):
+                                item = self.context_panel.nb_list.item(i)
+                                if item.data(Qt.ItemDataRole.UserRole) == ctx['value']:
+                                    item.setCheckState(Qt.CheckState.Checked)
+                    self.context_panel.update_visuals()
                 except:
                     pass
-            else:
-                # Legacy support: try to load from filter_date/tags
-                if session.get('filter_date'):
-                    self.context_bar.add_context('date', session['filter_date'], session['filter_date'])
-                if session.get('filter_tags'):
-                    tags = session['filter_tags'].split(',')
-                    for tag in tags:
-                        if tag.strip():
-                            self.context_bar.add_context('tag', tag.strip(), tag.strip())
             
             self.display.clear()
             for msg in self.chat_history:
@@ -310,60 +393,54 @@ class ChatWidget(QWidget):
         self.chat_history.append({"role": "user", "content": query})
 
         # Gather Context
-        contexts = self.context_bar.get_contexts()
         context_text_parts = []
         
         # 1. Notebooks
-        notebook_ids = [c['value'] for c in contexts if c['type'] == 'notebook']
+        notebook_ids = self.context_panel.get_active_notebooks()
         for nid in notebook_ids:
             entries = self.notebook_db.get_entries(nid)
             for entry in entries:
                 content = entry['content']
-                title = entry['title'] or "Untitled"
-                context_text_parts.append(f"[Notebook Note: {title}]\n{content}")
+                title = entry['title'] or "Sin título"
+                context_text_parts.append(f"[Nota de Libreta: {title}]\n{content}")
 
         # 2. Tags & Dates (RAG Filter)
-        tags = [c['value'] for c in contexts if c['type'] == 'tag']
-        dates = [c['value'] for c in contexts if c['type'] == 'date']
+        tags = self.context_panel.get_active_tags()
+        
+        records = []
+        if self.context_panel.current_week_monday:
+            # Multi-day range
+            start_date = self.context_panel.current_week_monday.toString("yyyy-MM-dd")
+            end_date = self.context_panel.current_date_filter
+            records = self.db.fetch_by_date_range(start_date, end_date, tags if tags else None)
+        elif self.context_panel.current_date_filter:
+            # Single day
+            records = self.db.fetch_by_dates([self.context_panel.current_date_filter], tags if tags else None)
+        elif tags:
+            # Tags only, all time
+            records = self.db.fetch_by_date_range("1970-01-01", "2099-12-31", tags)
         
         rag_ids = None
-        if tags or dates:
-            # If dates are present, we use them. If multiple dates, we might need fetch_by_dates
-            # Current DB supports fetch_by_date_range or fetch_by_dates
-            # Let's use fetch_by_dates if dates are present
-            records = []
-            if dates:
-                records = self.db.fetch_by_dates(dates, tags=tags if tags else None)
-            elif tags:
-                # Only tags, all time
-                # We can use fetch_all with tag filter, but fetch_all only supports single tag string match
-                # fetch_by_date_range supports list of tags
-                records = self.db.fetch_by_date_range("1970-01-01", "2099-12-31", tags)
-            
-            if records:
-                rag_ids = [str(r['id']) for r in records]
-            else:
-                if not notebook_ids: # Only warn if no other context
-                    context_text_parts.append("No recordings found for the selected tags/dates.")
+        if records:
+            rag_ids = [str(r['id']) for r in records]
+            for r in records:
+                context_text_parts.append(f"[Grabación: {r['title'] or 'Sin título'} ({r['created_at']})]\n{r['transcription']}")
 
         # 3. RAG Search
-        # If we have specific RAG IDs (from filters) OR no context at all (global search)
-        if rag_ids or (not contexts):
+        if rag_ids or (not tags and not self.context_panel.current_date_filter):
             try:
                 results = self.rag.search(query, n_results=5, ids=rag_ids)
                 for r in results:
-                    context_text_parts.append(f"[Recording: {r['metadata'].get('title', 'Unknown')}]\n{r['text']}")
+                    context_text_parts.append(f"[Fragmento relevante: {r['metadata'].get('title', 'Desconocido')}]\n{r['text']}")
             except Exception as e:
                 print(f"RAG Search error: {e}")
 
         context_text = "\n\n".join(context_text_parts)
         if not context_text:
-            context_text = "No relevant context found."
+            context_text = "No se encontró contexto relevante."
 
         # Start Chat Thread
         settings = QSettings("Hectronic", "Secretario")
-        
-        # Validate AI provider configuration
         from src.ai_provider import validate_ai_provider_config
         is_valid, error_msg = validate_ai_provider_config(settings)
         
@@ -374,7 +451,6 @@ class ChatWidget(QWidget):
         if self.chat_thread and self.chat_thread.isRunning():
             return
         self.set_busy(True)
-        # api_key parameter kept for backward compatibility
         self.chat_thread = ChatThread("", query, context_text, self.chat_history)
         self.chat_thread.finished.connect(self.on_chat_finished)
         self.chat_thread.error.connect(self.on_chat_error)
@@ -387,29 +463,26 @@ class ChatWidget(QWidget):
         self.append_to_chat("Assistant", response)
         self.chat_history.append({"role": "assistant", "content": response})
         
-        # Save/Update Session
+        # Save Session Context
         messages_json = json.dumps(self.chat_history)
-        contexts = self.context_bar.get_contexts()
-        context_json = json.dumps(contexts)
         
-        # Legacy fields for backward compatibility (optional, but good for list view if we want to show tags)
-        # Let's just use context_data primarily
+        # Construct simplified context for saving
+        save_contexts = []
+        if self.context_panel.current_date_filter:
+            save_contexts.append({"type": "date", "value": self.context_panel.current_date_filter})
+        for t in self.context_panel.get_active_tags():
+            save_contexts.append({"type": "tag", "value": t})
+        for n in self.context_panel.get_active_notebooks():
+            save_contexts.append({"type": "notebook", "value": n})
+            
+        context_json = json.dumps(save_contexts)
         
         if self.current_session_id:
             self.db.update_chat_session(self.current_session_id, messages_json, context_data=context_json)
             self.session_updated.emit()
         else:
-            # Create new session
             name = self.chat_history[0]['content'][:30] + "..."
-            
-            # Derive collection name from contexts
-            collection = "General"
-            if contexts:
-                labels = [c['label'] for c in contexts]
-                collection = ", ".join(labels[:2])
-                if len(labels) > 2:
-                    collection += "..."
-            
+            collection = "Chat"
             self.current_session_id = self.db.save_chat_session(name, collection, messages_json, context_data=context_json)
             self.session_updated.emit()
 

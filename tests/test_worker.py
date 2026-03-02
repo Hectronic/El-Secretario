@@ -14,7 +14,7 @@
 
 import unittest
 from unittest.mock import MagicMock, patch
-from src.worker import TranscriberThread
+from src.worker import TranscriberThread, SearchThread, ChatThread
 import os
 
 class TestTranscriberThread(unittest.TestCase):
@@ -79,6 +79,78 @@ class TestTranscriberThread(unittest.TestCase):
         device, compute_type = get_optimal_device(force_cpu=False, model_size="base")
         self.assertEqual(device, "cpu")
         self.assertEqual(compute_type, "int8")
+
+    @patch('src.worker.torch.cuda.is_available')
+    @patch('src.worker.torch.cuda.get_device_properties')
+    def test_get_optimal_device_with_large_gpu_prefers_float16(self, mock_props, mock_cuda):
+        from src.worker import get_optimal_device
+
+        mock_cuda.return_value = True
+        mock_props.return_value.total_memory = 12 * (1024**3)
+        device, compute_type = get_optimal_device(force_cpu=False, model_size="base")
+        self.assertEqual(device, "cuda")
+        self.assertEqual(compute_type, "float16")
+
+    @patch('src.worker.torch.cuda.is_available')
+    @patch('src.worker.torch.cuda.get_device_properties', side_effect=RuntimeError("gpu err"))
+    def test_get_optimal_device_cuda_properties_error_defaults_int8(self, _mock_props, mock_cuda):
+        from src.worker import get_optimal_device
+
+        mock_cuda.return_value = True
+        device, compute_type = get_optimal_device(force_cpu=False, model_size="base")
+        self.assertEqual(device, "cuda")
+        self.assertEqual(compute_type, "int8")
+
+
+class TestSearchAndChatThreads(unittest.TestCase):
+    def test_search_thread_success(self):
+        rag = MagicMock()
+        rag.search.return_value = [{"id": 1}]
+        thread = SearchThread(rag, "hello")
+        thread.finished = MagicMock()
+        thread.error = MagicMock()
+
+        thread.run()
+
+        thread.finished.emit.assert_called_once_with([{"id": 1}])
+        thread.error.emit.assert_not_called()
+
+    def test_search_thread_error(self):
+        rag = MagicMock()
+        rag.search.side_effect = Exception("boom")
+        thread = SearchThread(rag, "hello")
+        thread.finished = MagicMock()
+        thread.error = MagicMock()
+
+        thread.run()
+
+        thread.error.emit.assert_called_once_with("boom")
+        thread.finished.emit.assert_not_called()
+
+    def test_chat_thread_success(self):
+        provider = MagicMock()
+        provider.chat.return_value = "ok-response"
+
+        with patch("src.ai_provider.get_ai_provider", return_value=provider), \
+             patch("PyQt6.QtCore.QSettings"):
+            thread = ChatThread("k", "q", "ctx", history=[{"role": "user", "content": "hi"}], model_name="x")
+            thread.finished = MagicMock()
+            thread.error = MagicMock()
+            thread.run()
+
+        thread.finished.emit.assert_called_once_with("ok-response")
+        thread.error.emit.assert_not_called()
+
+    def test_chat_thread_error(self):
+        with patch("src.ai_provider.get_ai_provider", side_effect=Exception("provider fail")), \
+             patch("PyQt6.QtCore.QSettings"):
+            thread = ChatThread("k", "q", "ctx")
+            thread.finished = MagicMock()
+            thread.error = MagicMock()
+            thread.run()
+
+        thread.error.emit.assert_called_once_with("provider fail")
+        thread.finished.emit.assert_not_called()
 
 if __name__ == '__main__':
     unittest.main()

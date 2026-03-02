@@ -12,10 +12,140 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
+import hashlib
+
 from PyQt6.QtWidgets import (QWidget, QHBoxLayout, QVBoxLayout, QLabel, 
-                             QPushButton, QSizePolicy, QLineEdit, QCompleter)
+                             QPushButton, QSizePolicy, QLineEdit, QCompleter, QCheckBox)
 from PyQt6.QtCore import Qt, pyqtSignal, QStringListModel
-from PyQt6.QtGui import QIcon
+from PyQt6.QtGui import QIcon, QColor
+
+
+def _tag_palette(tag: str):
+    """Return deterministic colors for a tag name."""
+    norm = (tag or "").strip().lower()
+    digest = hashlib.md5(norm.encode("utf-8")).hexdigest()
+    hue = int(digest[:2], 16) % 360
+
+    base = QColor.fromHsv(hue, 130, 215)
+    border = base.darker(145)
+    text_color = "#111111" if base.lightness() > 145 else "#ffffff"
+    return base.name(), border.name(), text_color
+
+
+def create_tag_chip(tag: str, width: int | None = 84, height: int = 18, font_size: int = 10, parent=None) -> QLabel:
+    """Create a compact colored chip with stable color for a given tag."""
+    bg, border, text_color = _tag_palette(tag)
+    chip = QLabel(tag, parent)
+    chip.setAlignment(Qt.AlignmentFlag.AlignCenter)
+    if width is None:
+        metrics = chip.fontMetrics()
+        dynamic_width = max(24, metrics.horizontalAdvance(tag) + 14)
+        chip.setFixedHeight(height)
+        chip.setMinimumWidth(dynamic_width)
+    else:
+        chip.setFixedSize(width, height)
+    chip.setToolTip(tag)
+    chip.setStyleSheet(
+        f"QLabel {{"
+        f"background-color: {bg};"
+        f"color: {text_color};"
+        f"border: 1px solid {border};"
+        f"border-radius: 7px;"
+        f"padding: 0px 4px;"
+        f"font-size: {font_size}px;"
+        f"font-weight: 600;"
+        f"}}"
+    )
+    return chip
+
+
+class SidebarTaskCompactWidget(QWidget):
+    """Compact task row for sidebar accordion: title + tiny tags line."""
+    completion_toggled = pyqtSignal(int, bool)
+
+    def __init__(
+        self,
+        title: str,
+        tags: list[str],
+        task_id: int | None = None,
+        is_completed: bool = False,
+        parent=None,
+    ):
+        super().__init__(parent)
+        self.task_id = task_id
+        self._build_ui(title, tags, is_completed)
+
+    def _build_ui(self, title: str, tags: list[str], is_completed: bool):
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(8, 6, 8, 6)
+        layout.setSpacing(4)
+
+        top_row = QWidget()
+        top_layout = QHBoxLayout(top_row)
+        top_layout.setContentsMargins(0, 0, 0, 0)
+        top_layout.setSpacing(6)
+
+        self.complete_check = QCheckBox()
+        self.complete_check.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.complete_check.setChecked(bool(is_completed))
+        self.complete_check.setStyleSheet("""
+            QCheckBox {
+                spacing: 0px;
+            }
+            QCheckBox::indicator {
+                width: 16px;
+                height: 16px;
+                border: 2px solid #7f8c8d;
+                border-radius: 5px;
+                background-color: rgba(255, 255, 255, 0.06);
+            }
+            QCheckBox::indicator:hover {
+                border-color: #b0bec5;
+                background-color: rgba(176, 190, 197, 0.18);
+            }
+            QCheckBox::indicator:checked {
+                border-color: #66bb6a;
+                background-color: #2e7d32;
+                image: none;
+            }
+            QCheckBox::indicator:checked:hover {
+                border-color: #81c784;
+                background-color: #388e3c;
+            }
+        """)
+        self.complete_check.toggled.connect(self._on_toggle_completed)
+        top_layout.addWidget(self.complete_check, 0, Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
+
+        self.title_label = QLabel((title or "").strip() or "Untitled task")
+        self.title_label.setWordWrap(False)
+        self.title_label.setStyleSheet("font-size: 13px; font-weight: 600;")
+        top_layout.addWidget(self.title_label, 1)
+        layout.addWidget(top_row)
+
+        tags_row = QWidget()
+        tags_layout = QHBoxLayout(tags_row)
+        tags_layout.setContentsMargins(0, 0, 0, 0)
+        tags_layout.setSpacing(4)
+
+        self.tag_chips = []
+        if tags:
+            for tag in tags:
+                chip = create_tag_chip(tag, width=None, height=16, font_size=9, parent=self)
+                self.tag_chips.append(chip)
+                tags_layout.addWidget(chip)
+        else:
+            no_tags = QLabel("No tags")
+            no_tags.setStyleSheet("font-size: 10px; color: #8a8a8a;")
+            tags_layout.addWidget(no_tags)
+            self.tag_chips.append(no_tags)
+
+        tags_layout.addStretch()
+        layout.addWidget(tags_row)
+        self.setMinimumHeight(46)
+
+    def _on_toggle_completed(self, checked: bool):
+        if isinstance(self.task_id, int):
+            self.completion_toggled.emit(self.task_id, bool(checked))
 
 
 class TagsLineEdit(QLineEdit):
@@ -267,20 +397,43 @@ class TaskRowWidget(QWidget):
         self.content_label.setStyleSheet("font-size: 14px; font-weight: 500;")
         text_layout.addWidget(self.content_label)
 
-        # Source Metadata
-        record_title = task.get("record_title")
-        source_type_val = task.get("record_type") or task.get("source_type") or "recording"
-        source_type = "Note" if source_type_val == "note" else "Recording"
-        
-        # Add date if available (important for general tasks board)
-        date_str = task.get("day_date") or (task.get("created_at") or "")[:10]
-        date_part = f" • {date_str}" if date_str else ""
-        
-        source_text = f"Source: {source_type} - {record_title}{date_part}" if record_title else f"Source: {source_type}{date_part}"
-        
-        self.source_label = QLabel(source_text)
+        # Source Metadata (origin + tags + date, easy to scan)
+        record_title = (task.get("record_title") or "").strip()
+        task_origin = (task.get("task_origin") or "").strip()
+        if isinstance(task.get("record_id"), int):
+            tags_text = (task.get("record_tags") or task.get("tags") or "").strip()
+        else:
+            tags_text = (task.get("tags") or task.get("record_tags") or "").strip()
+        date_str = (task.get("day_date") or (task.get("created_at") or "")[:10]).strip()
+
+        meta_row = QWidget()
+        meta_row.setFixedHeight(22)
+        meta_layout = QHBoxLayout(meta_row)
+        meta_layout.setContentsMargins(0, 0, 0, 0)
+        meta_layout.setSpacing(6)
+
+        origin_text = task_origin or record_title
+        self.origin_label = QLabel(f"Origin: {origin_text}" if origin_text else "")
+        self.origin_label.setStyleSheet("font-size: 11px; font-weight: 700; color: #8ec5ff;")
+        self.origin_label.setFixedHeight(18)
+        self.origin_label.setVisible(bool(origin_text))
+        if origin_text:
+            meta_layout.addWidget(self.origin_label)
+
+        tag_values = [t.strip() for t in tags_text.split(",") if t.strip()]
+        for tag in tag_values:
+            meta_layout.addWidget(self._create_tag_chip(tag))
+
+        self.source_label = QLabel(f"Date: {date_str}" if date_str else "")
         self.source_label.setStyleSheet("font-size: 11px; color: #888;")
-        text_layout.addWidget(self.source_label)
+        self.source_label.setFixedHeight(18)
+        self.source_label.setVisible(bool(date_str))
+        if date_str:
+            meta_layout.addWidget(self.source_label)
+
+        meta_layout.addStretch()
+        meta_row.setVisible(bool(origin_text or tag_values or date_str))
+        text_layout.addWidget(meta_row)
 
         layout.addLayout(text_layout, 1)
 
@@ -342,3 +495,6 @@ class TaskRowWidget(QWidget):
             self.is_completed = is_completed
             self._update_status_icon()
             self._apply_visual_state()
+
+    def _create_tag_chip(self, tag: str) -> QLabel:
+        return create_tag_chip(tag, width=84, height=18, font_size=10, parent=self)

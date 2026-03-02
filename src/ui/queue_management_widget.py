@@ -13,7 +13,7 @@
 # along with this program.  See <https://www.gnu.org/licenses/>.
 
 from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QListWidget, 
-                             QListWidgetItem, QPushButton, QLabel, QMessageBox)
+                             QListWidgetItem, QPushButton, QLabel, QMessageBox, QProgressBar)
 from PyQt6.QtCore import Qt, pyqtSignal
 
 class QueueManagementWidget(QWidget):
@@ -33,6 +33,10 @@ class QueueManagementWidget(QWidget):
         self.task_queue.task_started.connect(lambda task, remaining: self.refresh_queue())
         self.task_queue.task_finished.connect(lambda task: self.refresh_queue())
         self.task_queue.wait_state_changed.connect(lambda *_: self.refresh_queue())
+        self.task_queue.task_status_update.connect(self._on_status_update)
+        self.task_queue.task_progress.connect(self._on_progress_update)
+        self.task_queue.task_failed.connect(lambda *_: self.refresh_queue())
+        self.task_queue.task_skipped.connect(lambda *_: self.refresh_queue())
 
     def init_ui(self):
         layout = QVBoxLayout(self)
@@ -54,6 +58,17 @@ class QueueManagementWidget(QWidget):
         self.wait_label = QLabel("Wait: none")
         self.wait_label.setStyleSheet("padding: 8px; color: #f5c542;")
         current_group.addWidget(self.wait_label)
+
+        self.live_status_label = QLabel("Status: idle")
+        self.live_status_label.setStyleSheet("padding: 8px; color: #90CAF9;")
+        current_group.addWidget(self.live_status_label)
+
+        self.live_progress = QProgressBar()
+        self.live_progress.setRange(0, 1)
+        self.live_progress.setValue(0)
+        self.live_progress.setTextVisible(True)
+        self.live_progress.setFormat("Idle")
+        current_group.addWidget(self.live_progress)
         layout.addLayout(current_group)
         
         # Pending Tasks List
@@ -128,8 +143,14 @@ class QueueManagementWidget(QWidget):
         current = self.task_queue.get_current_task()
         if current:
             self.current_task_label.setText(self._format_task_display(current))
+            if self.live_status_label.text().strip().lower() == "status: idle":
+                self.live_status_label.setText("Status: running...")
         else:
             self.current_task_label.setText("None (Idle)")
+            self.live_status_label.setText("Status: idle")
+            self.live_progress.setRange(0, 1)
+            self.live_progress.setValue(0)
+            self.live_progress.setFormat("Idle")
 
         is_waiting, seconds_left, desc = self.task_queue.get_wait_state()
         if is_waiting:
@@ -159,6 +180,28 @@ class QueueManagementWidget(QWidget):
             self.queue_list.setCurrentRow(current_row)
             
         self.queue_list.blockSignals(False)
+
+    def _on_status_update(self, message):
+        msg = (message or "").strip()
+        if not msg:
+            return
+        self.live_status_label.setText(f"Status: {msg}")
+
+    def _on_progress_update(self, value):
+        if value == -1:
+            self.live_progress.setRange(0, 0)
+            self.live_progress.setFormat("Working...")
+            return
+        if value == -2:
+            self.live_progress.setRange(0, 1)
+            self.live_progress.setValue(0)
+            self.live_progress.setFormat("Idle")
+            return
+        if value < 0:
+            return
+        self.live_progress.setRange(0, 100)
+        self.live_progress.setValue(int(value))
+        self.live_progress.setFormat(f"{int(value)}%")
 
     def _move_up(self):
         row = self.queue_list.currentRow()

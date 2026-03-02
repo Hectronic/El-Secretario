@@ -17,10 +17,10 @@ from PyQt6.QtCore import Qt, pyqtSignal, QTimer, QSettings
 from PyQt6.QtGui import QPixmap
 from src.ui.styles import LIST_WIDGET_STYLE
 from src.ui.styles import LIST_WIDGET_STYLE
-from src.audio import Recorder
-import sounddevice as sd
 import numpy as np
 import os
+
+Recorder = None
 
 class WelcomeWidget(QWidget):
     # Modified signal to include recording configuration
@@ -79,17 +79,33 @@ class WelcomeWidget(QWidget):
         saved_diar = self.settings.value("rec_config/diarization", False, type=bool)
         self.diarization_check.setChecked(saved_diar)
         
+        saved_sys_audio = self.settings.value("rec_config/capture_system_audio", None)
+        if saved_sys_audio is None:
+            # Try global default from settings
+            saved_sys_audio = self.settings.value("capture_system_audio", False, type=bool)
+        else:
+            saved_sys_audio = self.settings.value("rec_config/capture_system_audio", False, type=bool)
+            
+        self.sys_audio_check.setChecked(saved_sys_audio)
+
+        saved_auto_summary = self.settings.value("rec_config/auto_summarize_after_transcription", False, type=bool)
+        self.auto_summary_check.setChecked(saved_auto_summary)
+        
     def _connect_config_signals(self):
         self.mic_combo.currentIndexChanged.connect(self._save_config)
         self.model_combo.currentIndexChanged.connect(self._save_config)
         self.lang_combo.currentIndexChanged.connect(self._save_config)
         self.diarization_check.toggled.connect(self._save_config)
+        self.sys_audio_check.toggled.connect(self._save_config)
+        self.auto_summary_check.toggled.connect(self._save_config)
 
     def _save_config(self):
         self.settings.setValue("rec_config/mic", self.mic_combo.currentData())
         self.settings.setValue("rec_config/model", self.model_combo.currentText())
         self.settings.setValue("rec_config/language", self.lang_combo.currentText())
         self.settings.setValue("rec_config/diarization", self.diarization_check.isChecked())
+        self.settings.setValue("rec_config/capture_system_audio", self.sys_audio_check.isChecked())
+        self.settings.setValue("rec_config/auto_summarize_after_transcription", self.auto_summary_check.isChecked())
         self.status_message_requested.emit("Recording configuration saved.")
 
     def init_ui(self):
@@ -141,39 +157,21 @@ class WelcomeWidget(QWidget):
         # REC Button Container (bordered, rounded left side)
         rec_container = QWidget()
         rec_container.setObjectName("rec_container")
-        rec_container.setFixedSize(110, 130)
-        rec_container.setStyleSheet("""
-            #rec_container {
-                border: 2px solid #555;
-                border-top-left-radius: 10px;
-                border-bottom-left-radius: 10px;
-                border-top-right-radius: 0px;
-                border-bottom-right-radius: 0px;
-                border-right: none;
-                background-color: transparent;
-            }
-        """)
+        rec_container.setProperty("class", "welcome-rec-container")
+        rec_container.setFixedSize(110, 160)
         rec_container_layout = QVBoxLayout(rec_container)
         rec_container_layout.setContentsMargins(0, 0, 0, 0)
         rec_container_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.rec_btn = self.create_round_button("REC", "#f44336", self.on_new_recording, size=85)
+        self.rec_btn = self.create_round_button("REC", "#f44336", self.on_new_recording, size=85, class_name="rec-btn")
         rec_container_layout.addWidget(self.rec_btn, 0, Qt.AlignmentFlag.AlignCenter)
         rec_config_row.addWidget(rec_container)
 
         # Config area (Modern card style with title inside)
         config_group = QGroupBox()
         config_group.setObjectName("config_group")
+        config_group.setProperty("class", "welcome-config-group")
         config_group.setFixedWidth(450)
-        config_group.setFixedHeight(130)
-        config_group.setStyleSheet("""
-            QGroupBox#config_group {
-                border: 2px solid #555;
-                border-radius: 0px;
-                border-left: none;
-                border-right: none;
-                padding-top: 5px;
-            }
-        """)
+        config_group.setFixedHeight(160)
         
         inner_config_layout = QVBoxLayout(config_group)
         inner_config_layout.setContentsMargins(5, 10, 5, 10)
@@ -181,7 +179,7 @@ class WelcomeWidget(QWidget):
 
         config_layout = QFormLayout()
         config_layout.setContentsMargins(15, 5, 15, 5)
-        config_layout.setSpacing(12)
+        config_layout.setSpacing(8)
 
         # Mic Selector with Test Button
         mic_row = QHBoxLayout()
@@ -198,6 +196,7 @@ class WelcomeWidget(QWidget):
                 color: white;
                 border-radius: 5px;
                 padding: 5px;
+                font-weight: bold;
             }
             QPushButton:hover {
                 background-color: #1976D2;
@@ -206,18 +205,20 @@ class WelcomeWidget(QWidget):
         self.test_mic_btn.clicked.connect(self.toggle_mic_test)
         mic_row.addWidget(self.test_mic_btn)
         
-        config_layout.addRow("Microphone:", mic_row)
+        mic_label = QLabel("🎤 Microphone:")
+        mic_label.setProperty("class", "welcome-config-label")
+        config_layout.addRow(mic_label, mic_row)
         
         # VU Meter for testing (hidden initially)
         self.test_vu_meter = QProgressBar()
         self.test_vu_meter.setRange(0, 100)
         self.test_vu_meter.setTextVisible(False)
-        self.test_vu_meter.setFixedHeight(20)
+        self.test_vu_meter.setFixedHeight(15)
         self.test_vu_meter.setStyleSheet("""
             QProgressBar {
-                border: 2px solid #555;
+                border: 1px solid #555;
                 border-radius: 5px;
-                background-color: #333;
+                background-color: #222;
             }
             QProgressBar::chunk {
                 background-color: #4CAF50;
@@ -227,39 +228,70 @@ class WelcomeWidget(QWidget):
         config_layout.addRow("", self.test_vu_meter)
         
         self.test_status_label = QLabel("")
-        self.test_status_label.setStyleSheet("color: #888; font-size: 12px;")
+        self.test_status_label.setStyleSheet("color: #90A4AE; font-size: 11px;")
         self.test_status_label.hide()
         config_layout.addRow("", self.test_status_label)
 
-        # Model, Language, and Diarization Row
-        options_row = QHBoxLayout()
-        options_row.setSpacing(10)
+        # Row 1: Model & Language
+        ml_row = QHBoxLayout()
+        ml_row.setSpacing(10)
         
         self.model_combo = QComboBox()
         self.model_combo.addItems(["tiny", "base", "small", "medium", "large-v3"])
         self.model_combo.setCurrentText("base")
         self.model_combo.setMinimumWidth(80)
-        options_row.addWidget(QLabel("Model:"))
-        options_row.addWidget(self.model_combo, 1)
+        
+        model_label = QLabel("🧠 Model:")
+        model_label.setProperty("class", "welcome-config-label")
+        ml_row.addWidget(model_label)
+        ml_row.addWidget(self.model_combo, 1)
 
         self.lang_combo = QComboBox()
         self.lang_combo.addItems(["Auto", "Spanish", "English"])
         self.lang_combo.setMinimumWidth(80)
-        options_row.addWidget(QLabel("Lang:"))
-        options_row.addWidget(self.lang_combo, 1)
-
-        options_row.addSpacing(15)
-        self.diarization_check = QCheckBox("Diarization")
-        self.diarization_check.setToolTip("Enable speaker diarization (Requires HF Token)")
-        options_row.addWidget(self.diarization_check)
         
-        config_layout.addRow(options_row)
+        lang_label = QLabel("🌐 Lang:")
+        lang_label.setProperty("class", "welcome-config-label")
+        ml_row.addWidget(lang_label)
+        ml_row.addWidget(self.lang_combo, 1)
+        
+        config_layout.addRow(ml_row)
+
+        # Row 2: Checkboxes
+        check_row = QHBoxLayout()
+        check_row.setSpacing(15)
+        
+        self.diarization_check = QCheckBox("👥 Diarization")
+        self.diarization_check.setToolTip("Enable speaker diarization (Requires HF Token)")
+        self.diarization_check.setProperty("class", "welcome-config-check")
+        check_row.addWidget(self.diarization_check)
+        
+        self.sys_audio_check = QCheckBox("🖥️ PC Internal Audio")
+        self.sys_audio_check.setToolTip("Capture audio from the computer (speakers/internal)")
+        self.sys_audio_check.setStyleSheet("""
+            QCheckBox {
+                color: #FFB74D;
+                font-weight: bold;
+                background-color: transparent;
+            }
+            QCheckBox:hover {
+                color: #FFCC80;
+            }
+        """)
+        check_row.addWidget(self.sys_audio_check)
+
+        self.auto_summary_check = QCheckBox("📝 Auto summary")
+        self.auto_summary_check.setToolTip("Generate summary automatically when transcription completes")
+        self.auto_summary_check.setProperty("class", "welcome-config-check")
+        check_row.addWidget(self.auto_summary_check)
+        
+        config_layout.addRow(check_row)
 
         inner_config_layout.addLayout(config_layout)
         rec_config_row.addWidget(config_group)
 
         # NOTE Button (right side, rounded right corners)
-        self.new_note_top_btn = self.create_squircle_button("NOTE", "#2196F3", self.new_note_requested.emit, width=110, height=130)
+        self.new_note_top_btn = self.create_squircle_button("NOTE", "#2196F3", self.new_note_requested.emit, width=110, height=160, class_name="new-note-btn")
         rec_config_row.addWidget(self.new_note_top_btn)
 
         rec_config_row.addStretch()
@@ -271,10 +303,10 @@ class WelcomeWidget(QWidget):
         btn_layout.setSpacing(20)
         btn_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
-        self.chat_btn = self.create_big_button("Start Chat", "#4CAF50", self.new_chat_requested.emit, width=160, height=60)
-        self.import_btn = self.create_big_button("Import Audio", "#9C27B0", self.on_import_audio, width=160, height=60)
-        self.tools_btn = self.create_big_button("⚙️ Tools", "#607D8B", self.tools_requested.emit, width=160, height=60)
-        self.settings_btn = self.create_big_button("🔧 Settings", "#009688", self.settings_requested.emit, width=160, height=60)
+        self.chat_btn = self.create_big_button("Start Chat", "#4CAF50", self.new_chat_requested.emit, width=160, height=60, class_name="big-btn-chat")
+        self.import_btn = self.create_big_button("Import Audio", "#9C27B0", self.on_import_audio, width=160, height=60, class_name="big-btn-import")
+        self.tools_btn = self.create_big_button("⚙️ Tools", "#607D8B", self.tools_requested.emit, width=160, height=60, class_name="big-btn-tools")
+        self.settings_btn = self.create_big_button("🔧 Settings", "#009688", self.settings_requested.emit, width=160, height=60, class_name="big-btn-settings")
 
         btn_layout.addWidget(self.chat_btn)
         btn_layout.addWidget(self.import_btn)
@@ -366,6 +398,14 @@ class WelcomeWidget(QWidget):
 
     def populate_mics(self):
         """Populate the microphone combo box with available devices."""
+        if os.environ.get("EL_SECRETARIO_SKIP_AUDIO_ENUM", "").strip().lower() in {"1", "true", "yes"}:
+            self.mic_combo.clear()
+            self.mic_combo.addItem("Default (Auto)", None)
+            return
+        global Recorder
+        if Recorder is None:
+            from src.audio import Recorder as _Recorder
+            Recorder = _Recorder
         devices = Recorder.get_input_devices()
         self.mic_combo.clear()
         # Add default option first
@@ -382,6 +422,7 @@ class WelcomeWidget(QWidget):
 
     def start_mic_test(self):
         """Start testing the selected microphone."""
+        import sounddevice as sd
         device_index = self.mic_combo.currentData()
         
         # Try different sample rates
@@ -488,7 +529,9 @@ class WelcomeWidget(QWidget):
             "device_index": self.mic_combo.currentData(),
             "model": self.model_combo.currentText(),
             "language": lang_map.get(self.lang_combo.currentText()),
-            "diarization": self.diarization_check.isChecked()
+            "diarization": self.diarization_check.isChecked(),
+            "capture_system_audio": self.sys_audio_check.isChecked(),
+            "auto_summarize_after_transcription": self.auto_summary_check.isChecked(),
         }
 
     def on_new_recording(self):
@@ -501,82 +544,94 @@ class WelcomeWidget(QWidget):
         config = self.get_recording_config()
         self.import_audio_requested.emit(config)
 
-    def create_big_button(self, text, color, callback, width=200, height=150):
+    def create_big_button(self, text, color, callback, width=200, height=150, class_name=None):
         btn = QPushButton(text)
+        if class_name:
+            btn.setProperty("class", class_name)
         btn.setFixedSize(width, height)
-        btn.setStyleSheet(f"""
-            QPushButton {{
-                background-color: {color};
-                color: white;
-                font-size: 16px;
-                font-weight: bold;
-                border-radius: 10px;
-            }}
-            QPushButton:hover {{
-                background-color: {color}cc;
-            }}
-        """)
+        
+        # Only apply hardcoded style if NO class is provided
+        if not class_name:
+            btn.setStyleSheet(f"""
+                QPushButton {{
+                    background-color: {color};
+                    color: white;
+                    font-size: 16px;
+                    font-weight: bold;
+                    border-radius: 10px;
+                }}
+                QPushButton:hover {{
+                    background-color: {color}cc;
+                }}
+            """)
         btn.clicked.connect(callback)
         return btn
 
-    def create_round_button(self, text, color, callback, size=120):
+    def create_round_button(self, text, color, callback, size=120, class_name=None):
         btn = QPushButton(text)
+        if class_name:
+            btn.setProperty("class", class_name)
         btn.setFixedSize(size, size)
-        btn.setStyleSheet(f"""
-            QPushButton {{
-                background-color: {color};
-                color: white;
-                font-size: 20px;
-                font-weight: bold;
-                border-radius: {size // 2}px;
-                border: 5px solid #fff;
-            }}
-            QPushButton:hover {{
-                background-color: {color}cc;
-                border-color: #eee;
-            }}
-            QPushButton:pressed {{
-                background-color: {color}aa;
-                border-color: #ccc;
-            }}
-        """)
+        
+        if not class_name:
+            btn.setStyleSheet(f"""
+                QPushButton {{
+                    background-color: {color};
+                    color: white;
+                    font-size: 20px;
+                    font-weight: bold;
+                    border-radius: {size // 2}px;
+                    border: 5px solid #fff;
+                }}
+                QPushButton:hover {{
+                    background-color: {color}cc;
+                    border-color: #eee;
+                }}
+                QPushButton:pressed {{
+                    background-color: {color}aa;
+                    border-color: #ccc;
+                }}
+            """)
         btn.clicked.connect(callback)
         return btn
 
-    def create_squircle_button(self, text, color, callback, width=100, height=90):
+    def create_squircle_button(self, text, color, callback, width=100, height=90, class_name=None):
         from PyQt6.QtGui import QColor
         btn = QPushButton(text)
+        if class_name:
+            btn.setProperty("class", class_name)
         btn.setFixedSize(width, height)
         border_radius = int(height * 0.25)
         
-        bg = QColor(color)
-        hover_bg = bg.lighter(115).name()
-        pressed_bg = bg.darker(110).name()
+        if not class_name:
+            bg = QColor(color)
+            hover_bg = bg.lighter(115).name()
+            pressed_bg = bg.darker(110).name()
 
-        btn.setStyleSheet(f"""
-            QPushButton {{
-                background-color: {color};
-                color: white;
-                font-size: 20px;
-                font-weight: bold;
-                border-top-right-radius: {border_radius}px;
-                border-bottom-right-radius: {border_radius}px;
-                border-top-left-radius: 0px;
-                border-bottom-left-radius: 0px;
-                border: 2px solid #555;
-                border-left: none;
-            }}
-            QPushButton:hover {{
-                background-color: {hover_bg};
-                border: 2px solid #777;
-                border-left: none;
-            }}
-            QPushButton:pressed {{
-                background-color: {pressed_bg};
-                border: 2px solid #999;
-                border-left: none;
-            }}
-        """)
+            btn.setStyleSheet(f"""
+                QPushButton {{
+                    background-color: {color};
+                    color: white;
+                    font-size: 20px;
+                    font-weight: bold;
+                    border-top-right-radius: {border_radius}px;
+                    border-bottom-right-radius: {border_radius}px;
+                    border-top-left-radius: 0px;
+                    border-bottom-left-radius: 0px;
+                    border: 2px solid #555;
+                    border-left: none;
+                }}
+                QPushButton:hover {{
+                    background-color: {hover_bg};
+                    border: 2px solid #777;
+                    border-left: none;
+                }}
+                QPushButton:pressed {{
+                    background-color: {pressed_bg};
+                    border: 2px solid #999;
+                    border-left: none;
+                }}
+            """)
         btn.clicked.connect(callback)
         return btn
 

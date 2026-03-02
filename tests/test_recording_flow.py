@@ -18,7 +18,7 @@ import unittest
 from unittest.mock import MagicMock, patch
 import wave
 from PyQt6.QtWidgets import QApplication
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import Qt, QSettings
 
 # Add project root to path
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
@@ -137,6 +137,41 @@ class TestRecordingFlow(unittest.TestCase):
         
         if self.mock_msgbox.called:
             print("MessageBox was called:", self.mock_msgbox.call_args)
+
+    def test_auto_summary_option_propagates_and_is_saved_from_recording_tab(self):
+        settings = QSettings("Hectronic", "Secretario")
+        prev_value = settings.value("rec_config/auto_summarize_after_transcription", None)
+        settings.setValue("rec_config/auto_summarize_after_transcription", False)
+
+        try:
+            self.window.start_new_recording({})
+            current_widget = self.window.central_tabs.currentWidget()
+            self.assertIsInstance(current_widget, RecordingInProgressWidget)
+
+            current_widget.auto_summary_check.setChecked(True)
+            current_widget.finish_recording()
+
+            new_widget = self.window.central_tabs.currentWidget()
+            self.assertIsInstance(new_widget, RecordingWidget)
+            self.assertTrue(new_widget.auto_summarize_after_transcription)
+
+            self.assertTrue(
+                settings.value(
+                    "rec_config/auto_summarize_after_transcription",
+                    False,
+                    type=bool,
+                )
+            )
+
+            self.assertTrue(self.mock_start_transcription.called)
+            _, args, _ = self.mock_start_transcription.mock_calls[-1]
+            passed_config = args[2]
+            self.assertTrue(passed_config.get("auto_summarize_after_transcription"))
+        finally:
+            if prev_value is None:
+                settings.remove("rec_config/auto_summarize_after_transcription")
+            else:
+                settings.setValue("rec_config/auto_summarize_after_transcription", prev_value)
         
         # Verify Recorder stopped
         self.mock_recorder.stop.assert_called()

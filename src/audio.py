@@ -32,10 +32,15 @@ class Recorder(QObject):
         self.is_paused = False
         self.start_time = None
         self.device_index = None # Default device
+        self.capture_machine_audio = False
 
     def set_device(self, device_index):
         """Set the input device index."""
         self.device_index = device_index
+        
+    def set_capture_machine_audio(self, enabled):
+        """If enabled, start() will try to find a monitor/loopback device."""
+        self.capture_machine_audio = enabled
 
     def callback(self, indata, frames, time, status):
         """Callback to collect audio data."""
@@ -60,29 +65,78 @@ class Recorder(QObject):
         self.is_paused = False
         self.start_time = datetime.now()
         
-        # Try different sample rates if the device doesn't support 16000
-        sample_rates_to_try = [self.fs, 44100, 48000, 22050, 8000]
-        
-        for rate in sample_rates_to_try:
+        # Determine target device
+        target_device = self.device_index
+        if self.capture_machine_audio:
+            # Try to find a monitor/loopback device automatically
             try:
-                self.stream = sd.InputStream(
-                    samplerate=rate,
-                    channels=self.channels,
-                    callback=self.callback,
-                    device=self.device_index
-                )
-                self.stream.start()
-                self.fs = rate  # Update to the rate that worked
-                logging.info(f"Recording started at {rate} Hz")
-                return
+                devices = sd.query_devices()
+                # Prioritize devices with monitor, loopback, or stereo mix in their name
+                found = False
+                
+                # Step 1: Look for explicit monitor/loopback keywords
+                monitor_keywords = ['monitor', 'loopback', 'stereo mix', 'what u hear', 'output.monitor', 'analog-stereo.monitor']
+                for i, dev in enumerate(devices):
+                    if dev['max_input_channels'] > 0:
+                        name = dev['name'].lower()
+                        if any(kw in name for kw in monitor_keywords):
+                            target_device = i
+                            logging.info(f"INTERNAL AUDIO: Found explicit monitor device: {dev['name']} (Index {i})")
+                            found = True
+                            break
+                
+                # Step 2: Linux/Pipewire Fallback: If no monitor found, look for pipewire/default with many channels
+                if not found:
+                    for i, dev in enumerate(devices):
+                        if dev['max_input_channels'] >= 2:
+                            name = dev['name'].lower()
+                            if name in ['pipewire', 'default', 'pulse']:
+                                target_device = i
+                                logging.info(f"INTERNAL AUDIO: Using Linux fallback device: {dev['name']} (Index {i})")
+                                # For internal capture on these generic devices, stereo is almost always required
+                                self.channels = 2 
+                                found = True
+                                break
+                
+                if not found:
+                    logging.warning("INTERNAL AUDIO: No suitable internal capture device found. Falling back to default input.")
             except Exception as e:
-                logging.warning(f"Failed to start recording at {rate} Hz: {e}")
-                if rate == sample_rates_to_try[-1]:
-                    # Last attempt failed, re-raise
-                    self.is_recording = False
-                    logging.error("Failed to start recording on all attempted sample rates", exc_info=True)
-                    raise e
-                continue
+                logging.error(f"INTERNAL AUDIO: Error during device discovery: {e}")
+
+        # Try different sample rates and channel counts if the device doesn't support the requested one
+        sample_rates_to_try = [self.fs, 44100, 48000, 22050, 8000]
+        # Common channel counts: many loopback devices require stereo (2)
+        channels_to_try = [self.channels]
+        if self.channels == 1:
+            channels_to_try.append(2)
+        elif self.channels == 2:
+            channels_to_try.append(1)
+
+        logging.info(f"STARTING RECORDING: Device Index={target_device}, Initial Rate={self.fs}, Initial Channels={self.channels}")
+        for rate in sample_rates_to_try:
+            for ch in channels_to_try:
+                try:
+                    self.stream = sd.InputStream(
+                        samplerate=rate,
+                        channels=ch,
+                        callback=self.callback,
+                        device=target_device
+                    )
+                    self.stream.start()
+                    self.fs = rate
+                    self.channels = ch # Update to the channels that worked
+                    logging.info(f"Recording started at {rate} Hz, {ch} channels")
+                    return
+                except Exception as e:
+                    # Only log warning on the last channel attempt for this rate
+                    if ch == channels_to_try[-1]:
+                        logging.warning(f"Failed to start recording at {rate} Hz: {e}")
+                    continue
+        
+        # All rates and channel combinations failed
+        self.is_recording = False
+        logging.error("Failed to start recording on all attempted sample rates and channel counts", exc_info=True)
+        raise Exception("Could not initialize audio stream. Please check your audio settings.")
 
     def pause(self):
         """Pause the recording."""
@@ -133,15 +187,27 @@ class Recorder(QObject):
             self.recording.clear()
 
     @staticmethod
-    @staticmethod
     def get_input_devices():
-        """Return a list of input devices."""
-        devices = sd.query_devices()
-        input_devices = []
-        for i, dev in enumerate(devices):
-            if dev['max_input_channels'] > 0:
-                input_devices.append((i, dev['name']))
-        return input_devices
+        """Return a list of input devices, including monitor/loopback devices."""
+        import sounddevice as sd
+        try:
+            devices = sd.query_devices()
+            input_devices = []
+            for i, dev in enumerate(devices):
+                if dev['max_input_channels'] > 0:
+                    name = dev['name']
+                    # Label monitor devices clearly
+                    lname = name.lower()
+                    if any(kw in lname for kw in ['monitor', 'loopback', 'stereo mix', 'what u hear', 'output.monitor']):
+                        display_name = f"🖥️ {name}"
+                    elif lname in ['pipewire', 'default'] and dev['max_input_channels'] >= 64:
+                        display_name = f"🖥️ {name} (System Audio)"
+                    else:
+                        display_name = f"🎤 {name}"
+                    input_devices.append((i, display_name))
+            return input_devices
+        except Exception:
+            return []
 
     @staticmethod
     def get_duration(file_path):

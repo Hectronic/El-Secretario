@@ -14,11 +14,13 @@
 
 from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QPushButton, 
                              QLabel, QProgressBar, QComboBox, QSpacerItem, QSizePolicy,
-                             QLineEdit, QFormLayout, QGroupBox, QCheckBox)
-from PyQt6.QtCore import Qt, QTimer, pyqtSignal
-from src.audio import Recorder
+                             QLineEdit, QFormLayout, QGroupBox, QCheckBox, QTextEdit,
+                             QListWidget, QListWidgetItem, QSplitter)
+from PyQt6.QtCore import Qt, QTimer, pyqtSignal, QSettings
 from src.database import DBManager
 from src.ui.components import TagsLineEdit
+
+Recorder = None
 
 class RecordingInProgressWidget(QWidget):
     finished = pyqtSignal(str, dict)  # Emits file path and config when finished
@@ -26,16 +28,28 @@ class RecordingInProgressWidget(QWidget):
 
     def __init__(self, recorder=None, config=None, parent=None):
         super().__init__(parent)
-        self.recorder = recorder or Recorder()
+        if recorder is not None:
+            self.recorder = recorder
+        else:
+            global Recorder
+            if Recorder is None:
+                from src.audio import Recorder as _Recorder
+                Recorder = _Recorder
+            self.recorder = Recorder()
         self.recorder.amplitude_changed.connect(self.update_vu_meter)
         self._amplitude_connected = True
         self.config = config or {}
         self.recording_started = False
+        self._is_finishing = False
         self.db = DBManager()  # For tags autocomplete
+        self.settings = QSettings("Hectronic", "Secretario")
         
         # Set device from config if provided
         if self.config.get("device_index") is not None:
             self.recorder.set_device(self.config["device_index"])
+            
+        if self.config.get("capture_system_audio"):
+            self.recorder.set_capture_machine_audio(True)
         
         self.duration_seconds = 0
         self.timer = QTimer()
@@ -48,18 +62,17 @@ class RecordingInProgressWidget(QWidget):
 
     def init_ui(self):
         layout = QVBoxLayout(self)
-        layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        layout.setSpacing(20)
+        layout.setSpacing(14)
 
         # Status Label
         self.status_label = QLabel("Recording in Progress...")
         self.status_label.setStyleSheet("font-size: 24px; color: #f44336; font-weight: bold;")
-        layout.addWidget(self.status_label, alignment=Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(self.status_label, alignment=Qt.AlignmentFlag.AlignHCenter)
 
         # Timer
         self.timer_label = QLabel("00:00")
         self.timer_label.setStyleSheet("font-size: 64px; font-weight: bold; color: #eeeeee;")
-        layout.addWidget(self.timer_label, alignment=Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(self.timer_label, alignment=Qt.AlignmentFlag.AlignHCenter)
 
         # VU Meter
         self.vu_meter = QProgressBar()
@@ -77,11 +90,10 @@ class RecordingInProgressWidget(QWidget):
                 width: 10px;
             }
         """)
-        layout.addWidget(self.vu_meter, alignment=Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(self.vu_meter, alignment=Qt.AlignmentFlag.AlignHCenter)
 
         # Recording Options Group
         options_group = QGroupBox("Recording Options")
-        options_group.setMinimumWidth(450)
         options_group.setStyleSheet("""
             QGroupBox {
                 font-size: 14px;
@@ -124,8 +136,66 @@ class RecordingInProgressWidget(QWidget):
         self.diarization_check.setChecked(self.config.get("diarization", False))
         options_layout.addRow("", self.diarization_check)
 
+        # Auto-summary after transcription
+        default_auto_summary = self.settings.value(
+            "rec_config/auto_summarize_after_transcription",
+            False,
+            type=bool,
+        )
+        self.auto_summary_check = QCheckBox("Summarize automatically after transcription")
+        self.auto_summary_check.setToolTip("Queues an AI summary as soon as transcription is done")
+        self.auto_summary_check.setChecked(
+            self.config.get("auto_summarize_after_transcription", default_auto_summary)
+        )
+        options_layout.addRow("", self.auto_summary_check)
+        self.model_combo.currentTextChanged.connect(self._save_last_run_config)
+        self.diarization_check.toggled.connect(self._save_last_run_config)
+        self.auto_summary_check.toggled.connect(self._save_last_run_config)
+
         options_group.setLayout(options_layout)
-        layout.addWidget(options_group, alignment=Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(options_group)
+
+        workspace_split = QSplitter(Qt.Orientation.Horizontal)
+
+        notes_group = QGroupBox("Notes")
+        notes_layout = QVBoxLayout(notes_group)
+        self.notes_input = QTextEdit()
+        self.notes_input.setPlaceholderText("Write important context while recording...")
+        self.notes_input.setMinimumHeight(220)
+        self.notes_input.setStyleSheet("font-size: 14px; line-height: 1.4;")
+        notes_layout.addWidget(self.notes_input)
+        workspace_split.addWidget(notes_group)
+
+        tasks_group = QGroupBox("Quick Tasks")
+        tasks_layout = QVBoxLayout(tasks_group)
+        quick_add = QHBoxLayout()
+        self.task_input = QLineEdit()
+        self.task_input.setPlaceholderText("Add actionable task and press Add...")
+        self.task_input.returnPressed.connect(self.add_quick_task)
+        self.add_task_btn = QPushButton("Add")
+        self.add_task_btn.clicked.connect(self.add_quick_task)
+        quick_add.addWidget(self.task_input, 1)
+        quick_add.addWidget(self.add_task_btn)
+        tasks_layout.addLayout(quick_add)
+
+        self.quick_tasks_list = QListWidget()
+        self.quick_tasks_list.setAlternatingRowColors(True)
+        self.quick_tasks_list.setStyleSheet("font-size: 13px;")
+        tasks_layout.addWidget(self.quick_tasks_list, 1)
+
+        quick_actions = QHBoxLayout()
+        self.remove_task_btn = QPushButton("Remove Selected")
+        self.remove_task_btn.clicked.connect(self.remove_selected_quick_task)
+        self.clear_tasks_btn = QPushButton("Clear All")
+        self.clear_tasks_btn.clicked.connect(self.quick_tasks_list.clear)
+        quick_actions.addWidget(self.remove_task_btn)
+        quick_actions.addWidget(self.clear_tasks_btn)
+        quick_actions.addStretch()
+        tasks_layout.addLayout(quick_actions)
+        workspace_split.addWidget(tasks_group)
+
+        workspace_split.setSizes([1, 1])
+        layout.addWidget(workspace_split, 1)
 
         # Controls
         controls_layout = QHBoxLayout()
@@ -151,6 +221,28 @@ class RecordingInProgressWidget(QWidget):
         self.cancel_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self.cancel_btn.clicked.connect(self.cancel_recording)
         layout.addWidget(self.cancel_btn, alignment=Qt.AlignmentFlag.AlignCenter)
+
+    def add_quick_task(self):
+        text = self.task_input.text().strip()
+        if not text:
+            return
+        self.quick_tasks_list.addItem(QListWidgetItem(text))
+        self.task_input.clear()
+
+    def remove_selected_quick_task(self):
+        for item in self.quick_tasks_list.selectedItems():
+            row = self.quick_tasks_list.row(item)
+            self.quick_tasks_list.takeItem(row)
+
+    def get_quick_tasks(self):
+        tasks = []
+        for i in range(self.quick_tasks_list.count()):
+            item = self.quick_tasks_list.item(i)
+            if item:
+                text = item.text().strip()
+                if text:
+                    tasks.append(text)
+        return tasks
 
     def start_recording(self):
         try:
@@ -180,13 +272,21 @@ class RecordingInProgressWidget(QWidget):
             self.timer.stop()
 
     def finish_recording(self):
+        if self._is_finishing:
+            return
+        self._is_finishing = True
         self.timer.stop()
         if not self.recording_started:
             # If recording never started, just cancel
             self.cleanup()
             self.cancelled.emit()
+            self._is_finishing = False
             return
-        file_path = self.recorder.stop()
+        try:
+            file_path = self.recorder.stop()
+        except Exception:
+            file_path = None
+        self.recording_started = False
         self.cleanup()
         if file_path:
             # Build final config with user inputs
@@ -194,12 +294,17 @@ class RecordingInProgressWidget(QWidget):
                 **self.config,
                 "title": self.title_input.text().strip(),
                 "tags": self.tags_input.text().strip(),
+                "recording_notes": self.notes_input.toPlainText().strip(),
+                "pending_tasks": self.get_quick_tasks(),
                 "model": self.model_combo.currentText(),
-                "diarization": self.diarization_check.isChecked()
+                "diarization": self.diarization_check.isChecked(),
+                "auto_summarize_after_transcription": self.auto_summary_check.isChecked(),
             }
+            self._save_last_run_config()
             self.finished.emit(file_path, final_config)
         else:
             self.cancelled.emit()
+        self._is_finishing = False
 
     def cancel_recording(self):
         self.timer.stop()
@@ -208,6 +313,7 @@ class RecordingInProgressWidget(QWidget):
                 self.recorder.stop()
             except Exception:
                 pass  # Ignore errors when cancelling
+        self.recording_started = False
         self.cleanup()
         self.cancelled.emit()
 
@@ -230,6 +336,14 @@ class RecordingInProgressWidget(QWidget):
             except Exception:
                 pass
             self._amplitude_connected = False
+
+    def _save_last_run_config(self, *args):
+        self.settings.setValue("rec_config/model", self.model_combo.currentText())
+        self.settings.setValue("rec_config/diarization", self.diarization_check.isChecked())
+        self.settings.setValue(
+            "rec_config/auto_summarize_after_transcription",
+            self.auto_summary_check.isChecked(),
+        )
 
     def closeEvent(self, event):
         self.cleanup()

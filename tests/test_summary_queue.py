@@ -110,5 +110,19 @@ class TestSummaryQueue(unittest.TestCase):
         self.assertEqual(queued.get("type"), "task_extraction")
         self.assertEqual(queued.get("title"), "My Recording")
 
+    def test_daily_summary_enqueues_pending_recording_summaries_first(self):
+        rec1 = self.db.save("a.wav", "Tx A", 10.0, "A")
+        rec2 = self.db.save("b.wav", "Tx B", 10.0, "B")
+        self.db.update_ai_content(rec1, summary="Already done")
+
+        with patch('src.ui.summary_task_queue.AIAssistant'):
+            self.queue_manager.enqueue_daily_summary({"date": "2026-02-27", "tags_filter": ""})
+            queued = self.queue_manager.get_queue_list()
+            current = self.queue_manager.get_current_task() or {}
+            all_tasks = [current] + queued
+            # rec2 summary should be pending in queue and daily summary should also exist.
+            self.assertTrue(any(t.get("type") == "summary" and t.get("record_id") == rec2 for t in all_tasks))
+            self.assertTrue(any(t.get("type") == "daily_summary" and t.get("date") == "2026-02-27" for t in all_tasks))
+
 if __name__ == '__main__':
     unittest.main()

@@ -25,12 +25,13 @@ from PyQt6.QtMultimedia import QMediaPlayer, QAudioOutput
 from PyQt6.QtGui import QCursor
 
 from src.database import DBManager
-from src.audio import Recorder
 from src.worker import TranscriberThread
 from src.ai_assistant import AIAssistant
 from src.ui.dialogs import SpeakerDialog
 from src.ui.components import TagsLineEdit
 from src.ui.tasks_list_widget import TasksListWidget
+
+Recorder = None
 
 class RecordingWidget(QWidget):
     recording_saved = pyqtSignal() # To refresh history list in MainWindow
@@ -42,12 +43,25 @@ class RecordingWidget(QWidget):
         super().__init__(parent)
         self.rag = rag_engine
         self.db = DBManager()
-        self.recorder = recorder or Recorder()
+        if recorder is not None:
+            self.recorder = recorder
+        else:
+            global Recorder
+            if Recorder is None:
+                from src.audio import Recorder as _Recorder
+                Recorder = _Recorder
+            self.recorder = Recorder()
         self.summary_task_queue = task_queue
         self.current_record_id = record_id
         self.current_recording_path = None
         self.transcriber_thread = None
         self.ai_thread = None
+        settings = QSettings("Hectronic", "Secretario")
+        self.auto_summarize_after_transcription = settings.value(
+            "rec_config/auto_summarize_after_transcription",
+            False,
+            type=bool,
+        )
         
         # Audio Player Setup
         self.player = QMediaPlayer()
@@ -181,6 +195,10 @@ class RecordingWidget(QWidget):
         self.text_display.setPlaceholderText("Transcription will appear here...")
         original_layout.addWidget(self.text_display)
         self.tabs.addTab(original_widget, "Original")
+
+        self.notes_display = QTextEdit()
+        self.notes_display.setPlaceholderText("Add notes for this recording...")
+        self.tabs.addTab(self.notes_display, "Notes")
         
         self.summary_display = QTextEdit()
         self.summary_display.setReadOnly(True)
@@ -223,6 +241,7 @@ class RecordingWidget(QWidget):
         if record:
             self.current_record_id = record['id']
             self.text_display.setText(record['transcription'])
+            self.notes_display.setText(record.get('recording_notes') or "")
             self.summary_display.setText(record['summary'] if record['summary'] else "")
             self.title_input.setText(record['title'] if record['title'] else "")
             self.title_input.setEnabled(True)
@@ -234,7 +253,7 @@ class RecordingWidget(QWidget):
             self.date_label.setText(record['created_at'])
             self.duration_label.setText(f"{record['duration']:.1f}s")
             
-            has_text = bool(record['transcription'])
+            has_text = bool((record.get('transcription') or '').strip() or (record.get('recording_notes') or '').strip())
             self.summarize_btn.setEnabled(has_text)
             self.extract_tasks_btn.setEnabled(has_text)
             self.rename_speakers_btn.setEnabled(has_text)
@@ -263,6 +282,10 @@ class RecordingWidget(QWidget):
             if index >= 0: self.lang_combo.setCurrentIndex(index)
         if config.get("diarization") is not None:
             self.diarization_check.setChecked(config["diarization"])
+        if config.get("auto_summarize_after_transcription") is not None:
+            self.auto_summarize_after_transcription = self._to_bool(
+                config.get("auto_summarize_after_transcription")
+            )
 
     def start_transcription_with_config(self, audio_path, config):
         self.set_transcription_config(config)
@@ -313,8 +336,11 @@ class RecordingWidget(QWidget):
             self.db.log_transcription(model_name=result["model_name"], audio_duration=result["audio_duration"], audio_size_bytes=result["audio_size_bytes"], transcription_time_seconds=result["transcription_time"], record_id=self.current_record_id)
         self.load_record(self.current_record_id)
         self.recording_saved.emit()
+        if self.auto_summarize_after_transcription and text.strip():
+            self._enqueue_post_transcription_ai_tasks()
         if self.rag:
-            self.rag.add_document(self.current_record_id, text, {"title": filename, "date": self.date_label.text()})
+            ai_text = self.db.get_record_ai_text(self.current_record_id)
+            self.rag.add_document(self.current_record_id, ai_text, {"title": filename, "date": self.date_label.text()})
 
     def on_transcription_error(self, err):
         self.status_changed.emit("Failed.")
@@ -326,18 +352,21 @@ class RecordingWidget(QWidget):
         if self.current_record_id:
             new_title = self.title_input.text().strip()
             new_text = self.text_display.toPlainText()
+            new_notes = self.notes_display.toPlainText().strip()
             new_tags = self.tags_input.text().strip()
             is_diarized = self.is_diarized_check_meta.isChecked()
             self.db.update_title(self.current_record_id, new_title)
             self.db.update_transcription(self.current_record_id, new_text, is_diarized=is_diarized)
+            self.db.update_recording_notes(self.current_record_id, new_notes)
             self.db.update_tags(self.current_record_id, new_tags)
             if self.rag:
-                self.rag.add_document(self.current_record_id, new_text, {"title": new_title, "date": self.date_label.text(), "tags": new_tags})
+                ai_text = self.db.compose_ai_text(new_text, new_notes)
+                self.rag.add_document(self.current_record_id, ai_text, {"title": new_title, "date": self.date_label.text(), "tags": new_tags})
             self.recording_saved.emit()
             self.status_changed.emit("Saved.")
 
     def run_ai_task(self, task_type):
-        text = self.text_display.toPlainText()
+        text = self.db.compose_ai_text(self.text_display.toPlainText(), self.notes_display.toPlainText())
         if not text: return
         
         if self.summary_task_queue:
@@ -373,14 +402,62 @@ class RecordingWidget(QWidget):
         self.ai_thread.error.connect(self._clear_ai_thread_ref)
         self.ai_thread.start()
 
+    def _enqueue_post_transcription_ai_tasks(self):
+        """When auto mode is enabled, run both summary and task extraction."""
+        text = self.db.compose_ai_text(self.text_display.toPlainText(), self.notes_display.toPlainText())
+        if not text.strip():
+            return
+        title = self.title_input.text() or f"Recording {self.current_record_id}"
+        tags = self.tags_input.text()
+
+        if self.summary_task_queue:
+            self.summary_task_queue.enqueue_recording_summary(
+                self.current_record_id,
+                text,
+                title,
+            )
+            self.summary_task_queue.enqueue_task_extraction(
+                self.current_record_id,
+                text,
+                tags,
+                title,
+            )
+        else:
+            self.run_ai_task("summary")
+            self.run_ai_task("task_extraction")
+
+    @staticmethod
+    def _to_bool(value):
+        if isinstance(value, bool):
+            return value
+        if value is None:
+            return False
+        if isinstance(value, str):
+            return value.strip().lower() in {"1", "true", "yes", "y", "on"}
+        return bool(value)
+
     def on_ai_finished(self, task_type, result):
         self.status_changed.emit("AI Task Done.")
         self.progress_changed.emit(-2)
         if task_type == "summary":
             self.summary_display.setText(result)
             self.db.update_ai_content(self.current_record_id, summary=result)
-            self.tabs.setCurrentIndex(1)
+            self.tabs.setCurrentWidget(self.summary_display)
         elif task_type == "task_extraction":
+            self.tasks_widget.refresh()
+
+    def refresh_from_background_queue(self, include_summary=False, include_tasks=False):
+        """
+        Refresh UI sections after queue-completed tasks while this tab is open.
+        Keeps user context (doesn't force tab switches or overwrite editable fields).
+        """
+        if not self.current_record_id:
+            return
+        if include_summary:
+            rec = self.db.fetch_record(self.current_record_id)
+            if isinstance(rec, dict):
+                self.summary_display.setText(rec.get("summary") or "")
+        if include_tasks:
             self.tasks_widget.refresh()
 
     def on_ai_error(self, err):

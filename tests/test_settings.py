@@ -10,6 +10,8 @@ def clean_settings():
     old_hf = settings.value("hf_token")
     old_gemini = settings.value("gemini_key")
     old_theme = settings.value("app_theme")
+    old_startup_weekly = settings.value("startup_enqueue_last_weekly_summary")
+    old_startup_daily = settings.value("startup_enqueue_previous_daily_summary")
     
     yield settings
     
@@ -23,10 +25,22 @@ def clean_settings():
     if old_theme: settings.setValue("app_theme", old_theme)
     else: settings.remove("app_theme")
 
+    if old_startup_weekly is not None:
+        settings.setValue("startup_enqueue_last_weekly_summary", old_startup_weekly)
+    else:
+        settings.remove("startup_enqueue_last_weekly_summary")
+
+    if old_startup_daily is not None:
+        settings.setValue("startup_enqueue_previous_daily_summary", old_startup_daily)
+    else:
+        settings.remove("startup_enqueue_previous_daily_summary")
+
 def test_settings_load(qtbot, clean_settings):
     """Test that settings are loaded correctly into the widget."""
     clean_settings.setValue("hf_token", "test_hf_token_123")
     clean_settings.setValue("gemini_key", "test_gemini_key_456")
+    clean_settings.setValue("startup_enqueue_last_weekly_summary", True)
+    clean_settings.setValue("startup_enqueue_previous_daily_summary", True)
     
     widget = SettingsWidget()
     qtbot.addWidget(widget)
@@ -34,6 +48,8 @@ def test_settings_load(qtbot, clean_settings):
     # Access through general_panel
     assert widget.general_panel.token_input.text() == "test_hf_token_123"
     assert widget.general_panel.gemini_key_input.text() == "test_gemini_key_456"
+    assert widget.general_panel.startup_last_weekly_check.isChecked()
+    assert widget.general_panel.startup_prev_daily_check.isChecked()
 
 def test_settings_save(qtbot, clean_settings):
     """Test that saving works."""
@@ -45,12 +61,16 @@ def test_settings_save(qtbot, clean_settings):
     
     # Test setting theme
     widget.general_panel.theme_combo.setCurrentText("Light")
+    widget.general_panel.startup_last_weekly_check.setChecked(True)
+    widget.general_panel.startup_prev_daily_check.setChecked(True)
     
     widget.save_settings()
     
     assert clean_settings.value("hf_token") == "new_hf_token"
     assert clean_settings.value("gemini_key") == "new_gemini_key"
     assert clean_settings.value("app_theme") == "Light"
+    assert clean_settings.value("startup_enqueue_last_weekly_summary", False, type=bool) is True
+    assert clean_settings.value("startup_enqueue_previous_daily_summary", False, type=bool) is True
     assert "saved successfully" in widget.status_label.text()
 
 def test_settings_show_copy_buttons(qtbot, clean_settings):

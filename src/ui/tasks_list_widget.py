@@ -18,12 +18,15 @@ from PyQt6.QtWidgets import (
     QCheckBox,
     QComboBox,
     QMessageBox,
-    QInputDialog,
+    QDialog,
+    QDialogButtonBox,
+    QTextEdit,
     QFrame,
+    QMenu,
     QAbstractItemView,
     QApplication,
 )
-from src.ui.components import TaskRowWidget
+from src.ui.components import TaskRowWidget, TagsLineEdit
 
 
 class ReorderableTasksList(QListWidget):
@@ -32,6 +35,74 @@ class ReorderableTasksList(QListWidget):
     def dropEvent(self, event):
         super().dropEvent(event)
         self.reordered.emit()
+
+
+class TaskEditDialog(QDialog):
+    """Unified modal for creating and editing tasks."""
+
+    def __init__(self, db, parent=None, title="Task", task_data=None):
+        super().__init__(parent)
+        self.db = db
+        self.task_data = task_data or {}
+        self.setWindowTitle(title)
+        self.setModal(True)
+        self.resize(560, 360)
+        self._build_ui()
+
+    def _build_ui(self):
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(12, 12, 12, 12)
+        layout.setSpacing(10)
+
+        layout.addWidget(QLabel("Task content"))
+        self.content_input = QTextEdit()
+        self.content_input.setPlaceholderText("Describe the task...")
+        self.content_input.setMinimumHeight(110)
+        self.content_input.setPlainText((self.task_data.get("content") or "").strip())
+        layout.addWidget(self.content_input)
+
+        layout.addWidget(QLabel("Notes (optional)"))
+        self.notes_input = QTextEdit()
+        self.notes_input.setPlaceholderText("Extra context, links, blockers...")
+        self.notes_input.setMinimumHeight(90)
+        self.notes_input.setPlainText((self.task_data.get("notes") or "").strip())
+        layout.addWidget(self.notes_input)
+
+        layout.addWidget(QLabel("Tags"))
+        self.tags_input = TagsLineEdit()
+        self.tags_input.set_tags(self.db.get_all_tags() if hasattr(self.db, "get_all_tags") else [])
+        initial_tags = (self.task_data.get("tags") or "").strip()
+        if not initial_tags and isinstance(self.task_data.get("record_id"), int):
+            initial_tags = (self.task_data.get("record_tags") or "").strip()
+        self.tags_input.setText(initial_tags)
+        layout.addWidget(self.tags_input)
+
+        self.error_label = QLabel("")
+        self.error_label.setStyleSheet("color: #f44336; font-size: 12px;")
+        layout.addWidget(self.error_label)
+
+        buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Cancel | QDialogButtonBox.StandardButton.Save)
+        buttons.accepted.connect(self._on_accept)
+        buttons.rejected.connect(self.reject)
+        layout.addWidget(buttons)
+
+    def _on_accept(self):
+        if not self.get_content():
+            self.error_label.setText("Task content is required.")
+            self.content_input.setFocus()
+            return
+        self.accept()
+
+    def get_content(self):
+        return self.content_input.toPlainText().strip()
+
+    def get_notes(self):
+        notes = self.notes_input.toPlainText().strip()
+        return notes or None
+
+    def get_tags(self):
+        tags = self.tags_input.text().strip()
+        return tags or None
 
 
 class TasksListWidget(QWidget):
@@ -43,12 +114,28 @@ class TasksListWidget(QWidget):
     ORDER_MODE_KEY = "tasks_tab/order_mode"
     SHOW_COMPLETED_KEY = "tasks_tab/show_completed"
 
-    def __init__(self, db, limit=None, filter_date=None, record_id=None, parent=None):
+    def __init__(
+        self,
+        db,
+        limit=None,
+        filter_date=None,
+        record_id=None,
+        parent=None,
+        show_controls=True,
+        snapshot_mode=None,
+        snapshot_ref=None,
+    ):
         super().__init__(parent)
         self.db = db
         self.limit = limit
         self.filter_date = filter_date
         self.record_id = record_id
+        self.show_controls = show_controls
+        self.snapshot_mode = snapshot_mode
+        self.snapshot_ref = snapshot_ref
+        self.global_start_date = None
+        self.global_end_date = None
+        self.global_tags_filter = None
         self.settings = QSettings("ElSecretario", "TasksTab")
         self._build_ui()
         self.refresh()
@@ -63,6 +150,8 @@ class TasksListWidget(QWidget):
             layout.addWidget(title)
 
         controls = QHBoxLayout()
+        self.controls_widget = QWidget()
+        self.controls_widget.setLayout(controls)
         self.count_label = QLabel("Loading...")
         controls.addWidget(self.count_label)
         controls.addStretch()
@@ -82,12 +171,18 @@ class TasksListWidget(QWidget):
         self.show_completed_cb.stateChanged.connect(self._on_show_completed_changed)
         controls.addWidget(self.show_completed_cb)
 
+        controls.addWidget(QLabel("Tag:"))
+        self.tag_filter_combo = QComboBox()
+        self.tag_filter_combo.setMinimumWidth(140)
+        self.tag_filter_combo.currentIndexChanged.connect(self.refresh)
+        controls.addWidget(self.tag_filter_combo)
+
         self.refresh_btn = QPushButton("Refresh")
         self.refresh_btn.setProperty("class", "calendar-nav-btn")
         self.refresh_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self.refresh_btn.clicked.connect(self.refresh)
         controls.addWidget(self.refresh_btn)
-        layout.addLayout(controls)
+        layout.addWidget(self.controls_widget)
 
         self.tasks_list = ReorderableTasksList()
         self.tasks_list.setProperty("class", "embedded-list")
@@ -100,9 +195,13 @@ class TasksListWidget(QWidget):
         self.tasks_list.setDropIndicatorShown(True)
         self.tasks_list.reordered.connect(self._on_list_reordered)
         self.tasks_list.itemDoubleClicked.connect(self._on_item_double_clicked)
+        self.tasks_list.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self.tasks_list.customContextMenuRequested.connect(self._show_context_menu)
         layout.addWidget(self.tasks_list)
 
         actions = QHBoxLayout()
+        self.actions_widget = QWidget()
+        self.actions_widget.setLayout(actions)
 
         self.add_task_btn = QPushButton("Add Task")
         self.add_task_btn.setProperty("class", "calendar-nav-btn")
@@ -141,23 +240,54 @@ class TasksListWidget(QWidget):
         self.delete_btn.clicked.connect(self._delete_selected)
         actions.addWidget(self.delete_btn)
 
-        layout.addLayout(actions)
+        layout.addWidget(self.actions_widget)
 
         self.tasks_list.itemSelectionChanged.connect(self._update_button_states)
         self._update_button_states()
 
         hint = QLabel("Drag rows to reorder when using 'Custom order'. Double-click to open source.")
         hint.setStyleSheet("color: #888888;")
+        self.hint_label = hint
         layout.addWidget(hint)
 
         self._apply_drag_mode()
+        self._refresh_tag_filter_options()
+        if not self.show_controls:
+            self.controls_widget.setVisible(False)
+            self.actions_widget.setVisible(False)
+            self.hint_label.setVisible(False)
+            self.tasks_list.setDragDropMode(QAbstractItemView.DragDropMode.NoDragDrop)
+
+    def _refresh_tag_filter_options(self):
+        if not hasattr(self, "tag_filter_combo"):
+            return
+        current = self.tag_filter_combo.currentText() or "All"
+        tags = self.db.get_all_tags() if hasattr(self.db, "get_all_tags") else []
+        self.tag_filter_combo.blockSignals(True)
+        self.tag_filter_combo.clear()
+        self.tag_filter_combo.addItem("All")
+        for tag in tags:
+            self.tag_filter_combo.addItem(tag)
+        idx = self.tag_filter_combo.findText(current)
+        self.tag_filter_combo.setCurrentIndex(idx if idx >= 0 else 0)
+        self.tag_filter_combo.blockSignals(False)
+
+    def _has_global_context(self):
+        return bool(self.global_start_date and self.global_end_date)
+
+    def _effective_tags_filter(self):
+        if self.snapshot_mode and self.global_tags_filter:
+            return self.global_tags_filter
+        if self._has_global_context():
+            return self.global_tags_filter
+        local_tag = self.tag_filter_combo.currentText() if hasattr(self, "tag_filter_combo") else "All"
+        if local_tag and local_tag != "All":
+            return local_tag
+        return None
 
     def open_create_dialog(self):
-        content, ok = QInputDialog.getMultiLineText(self, "Create Task", "Task content:", "")
-        if not ok or not content.strip():
-            return
-        notes, ok_notes = QInputDialog.getMultiLineText(self, "Task Notes", "Notes (optional):", "")
-        if not ok_notes:
+        dialog = TaskEditDialog(self.db, self, title="Create Task")
+        if dialog.exec() != QDialog.DialogCode.Accepted:
             return
         
         target_date = self.filter_date or date.today().isoformat()
@@ -165,10 +295,11 @@ class TasksListWidget(QWidget):
         
         self.db.save_task(
             record_id=self.record_id,
-            content=content.strip(),
+            content=dialog.get_content(),
+            tags=dialog.get_tags(),
             day_date=target_date if self.filter_date else (date.today().isoformat() if not self.record_id else None),
             week_start=week_sunday if not self.record_id else None,
-            notes=notes.strip() or None,
+            notes=dialog.get_notes(),
         )
         self.tasks_changed.emit()
         self.refresh()
@@ -189,18 +320,94 @@ class TasksListWidget(QWidget):
         self.settings.setValue(self.SHOW_COMPLETED_KEY, "true" if self.show_completed_cb.isChecked() else "false")
         self.refresh()
 
+    def set_global_filters(self, week_monday=None, date_filter=None, tags_filter=None):
+        """Apply global calendar filters for the main Tasks tab and refresh."""
+        if self.record_id is not None or self.filter_date is not None:
+            return
+
+        if week_monday:
+            self.global_start_date = week_monday.toString("yyyy-MM-dd")
+            self.global_end_date = date_filter or week_monday.addDays(6).toString("yyyy-MM-dd")
+        elif date_filter:
+            self.global_start_date = date_filter
+            self.global_end_date = date_filter
+        else:
+            self.global_start_date = None
+            self.global_end_date = None
+
+        self.global_tags_filter = tags_filter or None
+        if hasattr(self, "tag_filter_combo"):
+            self._refresh_tag_filter_options()
+            if self._has_global_context():
+                self.tag_filter_combo.blockSignals(True)
+                if self.global_tags_filter:
+                    idx = self.tag_filter_combo.findText(self.global_tags_filter)
+                    self.tag_filter_combo.setCurrentIndex(idx if idx >= 0 else 0)
+                else:
+                    self.tag_filter_combo.setCurrentIndex(0)
+                self.tag_filter_combo.blockSignals(False)
+                self.tag_filter_combo.setEnabled(False)
+            else:
+                self.tag_filter_combo.setEnabled(True)
+        self.refresh()
+
     def refresh(self):
-        if self.record_id:
+        self._refresh_tag_filter_options()
+        tags_filter = self._effective_tags_filter()
+        if self.snapshot_mode in ("day_created", "day_completed"):
+            day_ref = self.snapshot_ref or self.filter_date
+            snapshot = self.db.get_daily_task_snapshot(day_ref, tags_filter) if day_ref else {}
+            if self.snapshot_mode == "day_created":
+                tasks = snapshot.get("created_this_day", [])
+            else:
+                tasks = snapshot.get("completed_this_day", [])
+        elif self.snapshot_mode in ("week_created", "week_completed", "week_pending_before"):
+            week_ref = self.snapshot_ref
+            snapshot = self.db.get_weekly_task_snapshot(week_ref, tags_filter) if week_ref else {}
+            mapping = {
+                "week_created": "created_this_week",
+                "week_completed": "completed_this_week",
+                "week_pending_before": "pending_from_before",
+            }
+            tasks = snapshot.get(mapping.get(self.snapshot_mode, ""), [])
+        elif self.record_id:
             tasks = self.db.get_tasks_by_record(self.record_id)
+            if tags_filter:
+                filtered = []
+                for t in tasks:
+                    if isinstance(t.get("record_id"), int):
+                        tags_text = str(t.get("record_tags") or t.get("tags") or "")
+                    else:
+                        tags_text = str(t.get("tags") or t.get("record_tags") or "")
+                    if tags_filter in [x.strip() for x in tags_text.split(",") if x.strip()]:
+                        filtered.append(t)
+                tasks = filtered
         elif self.filter_date:
-            tags_filter = self.settings.value("last_tags_filter", None) # Could be passed from parent too
             tasks = self.db.get_tasks_by_date(self.filter_date, tags_filter, order_mode=self._current_order_mode())
+        elif self.global_start_date and self.global_end_date:
+            tasks = self.db.get_tasks_by_date_range(
+                self.global_start_date,
+                self.global_end_date,
+                tags_filter=tags_filter,
+                order_mode=self._current_order_mode(),
+                include_completed=self.show_completed_cb.isChecked(),
+            )
         else:
             tasks = self.db.get_tasks_for_board(
                 order_mode=self._current_order_mode(),
                 include_completed=self.show_completed_cb.isChecked(),
                 limit=self.limit,
             )
+            if tags_filter:
+                filtered = []
+                for t in tasks:
+                    if isinstance(t.get("record_id"), int):
+                        tags_text = str(t.get("record_tags") or t.get("tags") or "")
+                    else:
+                        tags_text = str(t.get("tags") or t.get("record_tags") or "")
+                    if tags_filter in [x.strip() for x in tags_text.split(",") if x.strip()]:
+                        filtered.append(t)
+                tasks = filtered
         self.tasks_list.clear()
         self.count_label.setText(f"{len(tasks)} task(s)")
 
@@ -233,6 +440,96 @@ class TasksListWidget(QWidget):
         self.delete_btn.setEnabled(selected_count > 0)
         self.complete_btn.setEnabled(selected_count > 0)
 
+    def _selected_task_items(self):
+        task_items = []
+        for item in self.tasks_list.selectedItems():
+            task = item.data(Qt.ItemDataRole.UserRole)
+            if isinstance(task, dict) and isinstance(task.get("id"), int):
+                task_items.append(item)
+        return task_items
+
+    def _show_context_menu(self, pos):
+        clicked_item = self.tasks_list.itemAt(pos)
+        if clicked_item:
+            task = clicked_item.data(Qt.ItemDataRole.UserRole)
+            if isinstance(task, dict):
+                if clicked_item not in self.tasks_list.selectedItems():
+                    self.tasks_list.clearSelection()
+                    clicked_item.setSelected(True)
+
+        selected_items = self._selected_task_items()
+        if not selected_items:
+            return
+
+        selected_tasks = [it.data(Qt.ItemDataRole.UserRole) for it in selected_items]
+        all_completed = all(bool(t.get("is_completed")) for t in selected_tasks)
+
+        menu = QMenu(self)
+        complete_action = menu.addAction("Mark as pending" if all_completed else "Mark as completed")
+        edit_action = menu.addAction("Edit")
+        delete_action = menu.addAction("Delete")
+        go_action = menu.addAction("Go to recording")
+
+        edit_action.setEnabled(len(selected_items) == 1)
+        record_id = None
+        if len(selected_items) == 1:
+            record_id = selected_tasks[0].get("record_id")
+        go_action.setEnabled(isinstance(record_id, int))
+
+        chosen = menu.exec(self.tasks_list.viewport().mapToGlobal(pos))
+        if chosen is None:
+            return
+        if chosen == complete_action:
+            self._set_completion_for_items(selected_items, not all_completed)
+        elif chosen == edit_action and len(selected_items) == 1:
+            self._edit_task_item(selected_items[0])
+        elif chosen == delete_action:
+            self._delete_items(selected_items)
+        elif chosen == go_action and isinstance(record_id, int):
+            self.open_recording_requested.emit(record_id)
+
+    def _set_completion_for_items(self, items, completed_state: bool):
+        for item in items:
+            task = item.data(Qt.ItemDataRole.UserRole)
+            if not task:
+                continue
+            self.db.toggle_task_completion(task['id'], completed_state)
+            widget = self.tasks_list.itemWidget(item)
+            if isinstance(widget, TaskRowWidget):
+                widget.set_completed(completed_state)
+            task['is_completed'] = completed_state
+            item.setData(Qt.ItemDataRole.UserRole, task)
+        self.tasks_changed.emit()
+        self._notify_global_refresh()
+        self.refresh()
+
+    def _edit_task_item(self, item):
+        task = item.data(Qt.ItemDataRole.UserRole)
+        if not task:
+            return
+        dialog = TaskEditDialog(self.db, self, title="Edit Task", task_data=task)
+        if dialog.exec() == QDialog.DialogCode.Accepted:
+            self.db.update_task_details(
+                task["id"],
+                dialog.get_content(),
+                dialog.get_notes(),
+                dialog.get_tags(),
+            )
+            self.refresh()
+            self.tasks_changed.emit()
+            self._notify_global_refresh()
+
+    def _delete_items(self, items):
+        if QMessageBox.question(self, "Delete Tasks", f"Delete {len(items)} task(s)?") != QMessageBox.StandardButton.Yes:
+            return
+        for item in items:
+            task = item.data(Qt.ItemDataRole.UserRole)
+            if task:
+                self.db.delete_task(task['id'])
+        self.refresh()
+        self.tasks_changed.emit()
+        self._notify_global_refresh()
+
     def _on_single_complete_toggle(self, task_id, is_completed):
         self.db.toggle_task_completion(task_id, is_completed)
         self.tasks_changed.emit()
@@ -245,68 +542,39 @@ class TasksListWidget(QWidget):
                 widget.refresh_tasks_sidebar()
 
     def _complete_selected(self):
-        selected_items = self.tasks_list.selectedItems()
+        selected_items = self._selected_task_items()
         if not selected_items:
             item = self.tasks_list.currentItem()
             if not item: return
-            selected_items = [item]
-            
-        for item in selected_items:
             task = item.data(Qt.ItemDataRole.UserRole)
-            if not task: continue
-            
-            is_currently_completed = bool(task.get('is_completed', False))
-            new_state = not is_currently_completed
-            
-            # Update DB
-            self.db.toggle_task_completion(task['id'], new_state)
-            
-            # Update Widget UI
-            widget = self.tasks_list.itemWidget(item)
-            if isinstance(widget, TaskRowWidget):
-                widget.set_completed(new_state)
-            
-            # Update data in item
-            task['is_completed'] = new_state
-            item.setData(Qt.ItemDataRole.UserRole, task)
-
-        self.tasks_changed.emit()
-        self._notify_global_refresh()
+            if not isinstance(task, dict):
+                return
+            selected_items = [item]
+        selected_tasks = [it.data(Qt.ItemDataRole.UserRole) for it in selected_items]
+        all_completed = all(bool(t.get("is_completed")) for t in selected_tasks if isinstance(t, dict))
+        self._set_completion_for_items(selected_items, not all_completed)
 
     def _edit_selected(self):
-        selected_items = self.tasks_list.selectedItems()
+        selected_items = self._selected_task_items()
         if not selected_items:
             item = self.tasks_list.currentItem()
             if not item: return
+            task = item.data(Qt.ItemDataRole.UserRole)
+            if not isinstance(task, dict):
+                return
             selected_items = [item]
-        
-        item = selected_items[0]
-        task = item.data(Qt.ItemDataRole.UserRole)
-        if not task: return
-        
-        old_content = task.get('content', '')
-        text, ok = QInputDialog.getMultiLineText(self, "Edit Task", "Task content:", old_content)
-        if ok and text.strip():
-            self.db.update_task_content(task['id'], text.strip())
-            self.refresh()
-            self.tasks_changed.emit()
-            self._notify_global_refresh()
+        self._edit_task_item(selected_items[0])
 
     def _delete_selected(self):
-        selected_items = self.tasks_list.selectedItems()
+        selected_items = self._selected_task_items()
         if not selected_items:
             item = self.tasks_list.currentItem()
             if not item: return
+            task = item.data(Qt.ItemDataRole.UserRole)
+            if not isinstance(task, dict):
+                return
             selected_items = [item]
-        
-        if QMessageBox.question(self, "Delete Tasks", f"Delete {len(selected_items)} task(s)?") == QMessageBox.StandardButton.Yes:
-            for item in selected_items:
-                task = item.data(Qt.ItemDataRole.UserRole)
-                if task:
-                    self.db.delete_task(task['id'])
-            self.refresh()
-            self.tasks_changed.emit()
-            self._notify_global_refresh()
+        self._delete_items(selected_items)
 
     def _ordered_task_ids(self):
         ids = []

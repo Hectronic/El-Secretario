@@ -1,3 +1,5 @@
+import os
+
 from PyQt6.QtWidgets import (
     QWidget,
     QVBoxLayout,
@@ -5,15 +7,10 @@ from PyQt6.QtWidgets import (
     QLabel,
     QHBoxLayout,
     QPushButton,
-    QListWidget,
-    QListWidgetItem,
     QTabWidget,
-    QInputDialog,
     QMessageBox,
-    QSizePolicy,
 )
 from PyQt6.QtCore import Qt, pyqtSignal, QDate
-from src.ui.components import TaskRowWidget
 from src.ui.tasks_list_widget import TasksListWidget
 
 
@@ -70,7 +67,8 @@ class SummaryViewerWidget(QWidget):
             self.content_area.setReadOnly(True)
             self.content_area.setMarkdown(self.summary_data.get("summary", ""))
             self.content_area.setStyleSheet("font-size: 14px; line-height: 1.6;")
-            layout.addWidget(self.content_area)
+            layout.addWidget(self.content_area, 2)
+            self._build_weekly_tasks_snapshot(layout)
 
         # Actions
         actions_layout = QHBoxLayout()
@@ -124,118 +122,122 @@ class SummaryViewerWidget(QWidget):
         general_layout.addWidget(self.content_area)
         self.summary_tabs.addTab(general_tab, "General")
 
-        # Tasks tab - using unified component
-        self.tasks_board = TasksListWidget(
-            self.db, 
-            filter_date=self.summary_data.get("date"),
-            parent=self
+        date_ref = self.summary_data.get("date")
+        tags_filter = self.summary_data.get("tags_filter")
+
+        self.daily_created_board = TasksListWidget(
+            self.db,
+            show_controls=False,
+            snapshot_mode="day_created",
+            snapshot_ref=date_ref,
+            parent=self,
         )
-        self.tasks_board.open_recording_requested.connect(self.open_recording_requested.emit)
-        self.summary_tabs.addTab(self.tasks_board, "Day Tasks")
+        self.daily_created_board.global_tags_filter = tags_filter
+        self.daily_created_board.open_recording_requested.connect(self.open_recording_requested.emit)
+        self.summary_tabs.addTab(self.daily_created_board, "Created Today")
 
-        root_layout.addWidget(self.summary_tabs, 3)
-        self._build_daily_columns(root_layout)
+        self.daily_completed_board = TasksListWidget(
+            self.db,
+            show_controls=False,
+            snapshot_mode="day_completed",
+            snapshot_ref=date_ref,
+            parent=self,
+        )
+        self.daily_completed_board.global_tags_filter = tags_filter
+        self.daily_completed_board.open_recording_requested.connect(self.open_recording_requested.emit)
+        self.summary_tabs.addTab(self.daily_completed_board, "Completed Today")
 
-        self._load_daily_recordings()
+        root_layout.addWidget(self.summary_tabs, 1)
+        self._refresh_daily_task_boards()
 
-    def _build_daily_columns(self, layout):
-        self.daily_split_layout = QHBoxLayout()
-        self.daily_split_layout.setSpacing(16)
+    def _build_weekly_tasks_snapshot(self, root_layout):
+        if not self.db:
+            return
+        container = QWidget()
+        container_layout = QVBoxLayout(container)
+        container_layout.setContentsMargins(0, 0, 0, 0)
+        container_layout.setSpacing(8)
 
-        left_col = QVBoxLayout()
-        self.daily_recordings_title = QLabel("Recordings")
-        self.daily_recordings_title.setStyleSheet("font-size: 15px; font-weight: bold;")
-        left_col.addWidget(self.daily_recordings_title)
+        header_row = QHBoxLayout()
+        title = QLabel("Weekly Tasks Snapshot")
+        title.setStyleSheet("font-size: 16px; font-weight: bold;")
+        header_row.addWidget(title)
+        header_row.addStretch()
+        refresh_btn = QPushButton("Refresh")
+        refresh_btn.setProperty("class", "calendar-nav-btn")
+        refresh_btn.clicked.connect(self._load_weekly_tasks_snapshot)
+        header_row.addWidget(refresh_btn)
+        container_layout.addLayout(header_row)
 
-        self.daily_recordings_list = QListWidget()
-        self.daily_recordings_list.setProperty("class", "embedded-list")
-        self.daily_recordings_list.itemClicked.connect(self._on_daily_recording_clicked)
-        left_col.addWidget(self.daily_recordings_list)
+        lists_row = QHBoxLayout()
+        lists_row.setSpacing(12)
+        self.weekly_task_boards = {}
+        sections = [
+            ("week_created", "Created This Week"),
+            ("week_completed", "Completed This Week"),
+            ("week_pending_before", "Pending From Before"),
+        ]
+        week_ref = self.summary_data.get("week_start")
+        tags_filter = self.summary_data.get("tags_filter")
+        for mode, label in sections:
+            col = QVBoxLayout()
+            title_lbl = QLabel(label)
+            title_lbl.setStyleSheet("font-size: 13px; font-weight: 700;")
+            col.addWidget(title_lbl)
+            board = TasksListWidget(
+                self.db,
+                show_controls=False,
+                snapshot_mode=mode,
+                snapshot_ref=week_ref,
+                parent=self,
+            )
+            board.global_tags_filter = tags_filter
+            board.open_recording_requested.connect(self.open_recording_requested.emit)
+            col.addWidget(board, 1)
+            host = QWidget()
+            host.setLayout(col)
+            lists_row.addWidget(host, 1)
+            self.weekly_task_boards[mode] = (title_lbl, board, label)
 
-        left_col_host = QWidget()
-        left_col_host.setLayout(left_col)
-        left_col_host.setMaximumWidth(420)
-        self.daily_split_layout.addWidget(left_col_host, 1)
+        container_layout.addLayout(lists_row, 1)
+        root_layout.addWidget(container, 2)
+        self._load_weekly_tasks_snapshot()
 
-        right_col = QVBoxLayout()
-        self.daily_tags_title = QLabel("Tags")
-        self.daily_tags_title.setStyleSheet("font-size: 15px; font-weight: bold;")
-        right_col.addWidget(self.daily_tags_title)
+    def _load_weekly_tasks_snapshot(self):
+        if not hasattr(self, "weekly_task_boards"):
+            return
+        week_start = self.summary_data.get("week_start")
+        tags_filter = self.summary_data.get("tags_filter")
+        snapshot = self.db.get_weekly_task_snapshot(week_start, tags_filter) if (self.db and week_start) else {}
+        mapping = {
+            "week_created": "created_this_week",
+            "week_completed": "completed_this_week",
+            "week_pending_before": "pending_from_before",
+        }
+        for mode, (title_lbl, board, base_label) in self.weekly_task_boards.items():
+            key = mapping.get(mode, "")
+            title_lbl.setText(f"{base_label} ({len(snapshot.get(key, []))})")
+            board.snapshot_ref = week_start
+            board.global_tags_filter = tags_filter
+            board.refresh()
 
-        self.daily_tags_list = QListWidget()
-        self.daily_tags_list.setProperty("class", "embedded-list")
-        self.daily_tags_list.itemClicked.connect(self._on_daily_tag_clicked)
-        right_col.addWidget(self.daily_tags_list)
-
-        right_col_host = QWidget()
-        right_col_host.setLayout(right_col)
-        self.daily_split_layout.addWidget(right_col_host, 2)
-
-        layout.addLayout(self.daily_split_layout, 2)
+    def _refresh_daily_task_boards(self):
+        date_ref = self.summary_data.get("date")
+        tags_filter = self.summary_data.get("tags_filter")
+        if hasattr(self, "daily_created_board"):
+            self.daily_created_board.snapshot_ref = date_ref
+            self.daily_created_board.global_tags_filter = tags_filter
+            self.daily_created_board.refresh()
+        if hasattr(self, "daily_completed_board"):
+            self.daily_completed_board.snapshot_ref = date_ref
+            self.daily_completed_board.global_tags_filter = tags_filter
+            self.daily_completed_board.refresh()
 
     def _get_summary_tags(self):
         tags_filter = self.summary_data.get("tags_filter")
         if not tags_filter:
             return None
         return [t.strip() for t in str(tags_filter).split(",") if t.strip()]
-
-    def _load_daily_recordings(self):
-        if not self.db or not hasattr(self, "daily_recordings_list"):
-            return
-
-        date = self.summary_data.get("date")
-        if not date:
-            return
-
-        tags = self._get_summary_tags()
-        records = self.db.fetch_by_date_range(date, date, tags=tags)
-
-        self.daily_recordings_list.clear()
-        self.daily_recordings_title.setText(f"Recordings ({len(records)})")
-
-        if not records:
-            self.daily_recordings_list.addItem("No recordings found for this day.")
-            self.daily_tags_title.setText("Tags (0)")
-            self.daily_tags_list.clear()
-            self.daily_tags_list.addItem("No tags found for this day.")
-            return
-
-        for record in records:
-            title = record.get("title") or f"Recording {record.get('id')}"
-            created_at = record.get("created_at", "")
-            time_part = created_at[11:16] if len(created_at) >= 16 else ""
-            line = f"{time_part}  {title}" if time_part else title
-            item = QListWidgetItem(line)
-            item.setData(Qt.ItemDataRole.UserRole, record.get("id"))
-            self.daily_recordings_list.addItem(item)
-
-        self._update_daily_tags_summary(records)
-
-    def _update_daily_tags_summary(self, records):
-        tag_counts = {}
-
-        for record in records:
-            raw_tags = record.get("tags") or ""
-            tags = [t.strip() for t in str(raw_tags).split(",") if t.strip()]
-            for tag in tags:
-                tag_counts[tag] = tag_counts.get(tag, 0) + 1
-
-        sorted_tags = sorted(tag_counts.items(), key=lambda pair: (-pair[1], pair[0].lower()))
-        self.daily_tags_title.setText(f"Tags ({len(sorted_tags)})")
-        self.daily_tags_list.clear()
-        if not sorted_tags:
-            self.daily_tags_list.addItem("No tags on this day.")
-            return
-        for tag, count in sorted_tags:
-            item = QListWidgetItem(f"{tag} ({count})")
-            item.setData(Qt.ItemDataRole.UserRole, tag)
-            self.daily_tags_list.addItem(item)
-
-    def _on_daily_tag_clicked(self, item):
-        date_str = self.summary_data.get("date")
-        tag = item.data(Qt.ItemDataRole.UserRole)
-        if date_str and isinstance(tag, str) and tag.strip():
-            self.start_chat_requested.emit(date_str, [tag.strip()])
 
     def _open_day_chat(self):
         date_str = self.summary_data.get("date")
@@ -311,10 +313,11 @@ class SummaryViewerWidget(QWidget):
         
         enqueued = 0
         for rec in records:
-            if rec.get('transcription'):
+            ai_text = self.db.compose_ai_text(rec.get('transcription', ''), rec.get('recording_notes', ''))
+            if ai_text:
                 if self.task_queue.enqueue_task_extraction(
                     rec['id'], 
-                    rec['transcription'], 
+                    ai_text, 
                     rec.get('tags', '') or '',
                     rec.get('title') or f"Recording {rec['id']}"
                 ):
@@ -326,11 +329,6 @@ class SummaryViewerWidget(QWidget):
             f"Se han encolado {enqueued} extracciones de tareas, una por grabación."
         )
 
-    def _on_daily_recording_clicked(self, item):
-        record_id = item.data(Qt.ItemDataRole.UserRole)
-        if isinstance(record_id, int):
-            self.open_recording_requested.emit(record_id)
-
     def update_content(self, summary_data):
         """Update the content of the viewer with new data."""
         self.summary_data = summary_data
@@ -340,7 +338,6 @@ class SummaryViewerWidget(QWidget):
         self.meta_label.setText(f"Generated at: {generated_at}")
 
         if self.summary_data.get("type") == "daily":
-            self._load_daily_recordings()
-            if hasattr(self, "tasks_board"):
-                self.tasks_board.filter_date = self.summary_data.get("date")
-                self.tasks_board.refresh()
+            self._refresh_daily_task_boards()
+        else:
+            self._load_weekly_tasks_snapshot()
