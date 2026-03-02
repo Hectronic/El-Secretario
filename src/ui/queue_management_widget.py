@@ -37,6 +37,8 @@ class QueueManagementWidget(QWidget):
         self.task_queue.task_progress.connect(self._on_progress_update)
         self.task_queue.task_failed.connect(lambda *_: self.refresh_queue())
         self.task_queue.task_skipped.connect(lambda *_: self.refresh_queue())
+        if hasattr(self.task_queue, "history_changed"):
+            self.task_queue.history_changed.connect(lambda *_: self.refresh_history())
 
     def init_ui(self):
         layout = QVBoxLayout(self)
@@ -76,6 +78,12 @@ class QueueManagementWidget(QWidget):
         self.queue_list = QListWidget()
         self.queue_list.setProperty("class", "embedded-list")
         layout.addWidget(self.queue_list)
+
+        # Session History
+        layout.addWidget(QLabel("<b>Execution History (Session):</b>"))
+        self.history_list = QListWidget()
+        self.history_list.setProperty("class", "embedded-list")
+        layout.addWidget(self.history_list)
         
         # Controls
         controls_layout = QHBoxLayout()
@@ -180,6 +188,26 @@ class QueueManagementWidget(QWidget):
             self.queue_list.setCurrentRow(current_row)
             
         self.queue_list.blockSignals(False)
+        self.refresh_history()
+
+    def refresh_history(self):
+        history = []
+        if hasattr(self.task_queue, "get_session_history"):
+            history = self.task_queue.get_session_history()
+
+        self.history_list.clear()
+        for entry in history:
+            self.history_list.addItem(QListWidgetItem(self._format_history_entry(entry)))
+
+    def _format_history_entry(self, entry):
+        when = entry.get("time") or "--:--:--"
+        event = (entry.get("event") or "info").replace("_", " ").capitalize()
+        task = entry.get("task") or {}
+        message = entry.get("message") or ""
+        base = f"[{when}] {event}: {self._format_task_display(task)}"
+        if message:
+            base += f" - {message}"
+        return base
 
     def _on_status_update(self, message):
         msg = (message or "").strip()

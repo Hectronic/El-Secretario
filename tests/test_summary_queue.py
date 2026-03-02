@@ -124,5 +124,13 @@ class TestSummaryQueue(unittest.TestCase):
             self.assertTrue(any(t.get("type") == "summary" and t.get("record_id") == rec2 for t in all_tasks))
             self.assertTrue(any(t.get("type") == "daily_summary" and t.get("date") == "2026-02-27" for t in all_tasks))
 
+    def test_session_history_records_queue_events(self):
+        with patch('src.ui.summary_task_queue.AIAssistant'):
+            self.queue_manager.enqueue_recording_summary(1, "text 1", "title 1")
+            history = self.queue_manager.get_session_history()
+            events = [entry.get("event") for entry in history]
+            self.assertIn("queued", events)
+            self.assertIn("started", events)
+
 if __name__ == '__main__':
     unittest.main()

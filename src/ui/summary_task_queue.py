@@ -23,6 +23,7 @@ class SummaryTaskQueueManager(QObject):
     task_progress = pyqtSignal(int)        # Proxy for progress (0-100, -1 for indeterminate)
     task_status_update = pyqtSignal(str)   # Proxy for status messages
     wait_state_changed = pyqtSignal(bool, int, str)  # is_waiting, seconds_left, description
+    history_changed = pyqtSignal(int)  # number of entries in session history
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -36,6 +37,8 @@ class SummaryTaskQueueManager(QObject):
         self._wait_timer = QTimer(self)
         self._wait_timer.setInterval(1000)
         self._wait_timer.timeout.connect(self._tick_wait_timer)
+        self._session_history: Deque[Dict[str, Any]] = deque(maxlen=300)
+        self._current_task_had_error = False
 
     @property
     def current_worker(self):
@@ -63,6 +66,10 @@ class SummaryTaskQueueManager(QObject):
     def get_wait_state(self) -> Tuple[bool, int, str]:
         return self._wait_remaining_seconds > 0, int(self._wait_remaining_seconds), self._wait_description
 
+    def get_session_history(self) -> List[Dict]:
+        """Return session execution history (newest first)."""
+        return list(reversed(self._session_history))
+
     def remove_task_at(self, index: int) -> bool:
         """Remove a task from the pending queue at the given index."""
         if 0 <= index < len(self._queue):
@@ -85,6 +92,7 @@ class SummaryTaskQueueManager(QObject):
         date = summary_data.get("date")
         if not date:
             self.task_skipped.emit(summary_data, "Daily summary task missing date.")
+            self._append_history("skipped", summary_data, "Daily summary task missing date.")
             return False
 
         # Before daily summary, ensure every unsummarized recording gets its own summary.
@@ -163,20 +171,25 @@ class SummaryTaskQueueManager(QObject):
 
         if self._current_task and self._task_key(self._current_task) == dedupe_key:
             self.task_skipped.emit(task, "Task already running.")
+            self._append_history("skipped", task, "Task already running.")
             return False
 
         for queued_task in self._queue:
             if self._task_key(queued_task) == dedupe_key:
                 self.task_skipped.emit(task, "Task already queued.")
+                self._append_history("skipped", task, "Task already queued.")
                 return False
 
         self._queue.append(task)
         self.task_enqueued.emit(task, len(self._queue))
+        self._append_history("queued", task)
         self._emit_queue_state()
         self._start_next_if_idle()
         return True
 
     def cancel_all(self):
+        pending_removed = len(self._queue)
+        current_task = self._current_task
         self._queue.clear()
         if self._current_worker and self._current_worker.isRunning():
             try:
@@ -189,8 +202,13 @@ class SummaryTaskQueueManager(QObject):
                 pass
         self._current_worker = None
         self._current_task = None
+        self._current_task_had_error = False
         self._clear_wait_state()
         self.task_status_update.emit("Queue stopped by user.")
+        if current_task:
+            self._append_history("cancelled", current_task, "Stopped by user.")
+        if pending_removed:
+            self._append_history("cleared", {"type": "queue"}, f"Cleared {pending_removed} pending task(s).")
         self._emit_queue_state()
 
     def cancel_current(self) -> bool:
@@ -198,6 +216,7 @@ class SummaryTaskQueueManager(QObject):
             return False
 
         worker = self._current_worker
+        task = self._current_task or {}
         try:
             if hasattr(worker, "cancel"):
                 worker.cancel()
@@ -210,6 +229,7 @@ class SummaryTaskQueueManager(QObject):
 
         self._clear_wait_state()
         self.task_status_update.emit("Stopping current task...")
+        self._append_history("cancel_requested", task, "Stop requested by user.")
         return True
 
     def _task_key(self, task: Dict) -> Tuple[Any, ...]:
@@ -233,6 +253,7 @@ class SummaryTaskQueueManager(QObject):
 
         task = self._queue.popleft()
         self._current_task = task
+        self._current_task_had_error = False
         self._clear_wait_state()
         
         task_type = task["type"]
@@ -293,6 +314,7 @@ class SummaryTaskQueueManager(QObject):
                 worker.retry_wait.connect(self._on_worker_retry_wait)
             
             self.task_started.emit(task, len(self._queue))
+            self._append_history("started", task)
             self._emit_queue_state()
             worker.start()
         except Exception as e:
@@ -351,6 +373,8 @@ class SummaryTaskQueueManager(QObject):
     def _on_worker_error(self, error_msg: str):
         task = self._current_task or {}
         self._clear_wait_state()
+        self._current_task_had_error = True
+        self._append_history("failed", task, str(error_msg or "Unknown error"))
         self.task_failed.emit(task, str(error_msg or "Unknown error"))
 
     def _on_worker_completely_finished(self):
@@ -359,7 +383,11 @@ class SummaryTaskQueueManager(QObject):
         self._current_worker = None
         self._current_task = None
         self._clear_wait_state()
-        if task: self.task_finished.emit(task)
+        if task:
+            if not self._current_task_had_error:
+                self._append_history("finished", task)
+            self.task_finished.emit(task)
+        self._current_task_had_error = False
         if worker:
             worker.deleteLater()
             self._zombie_workers.append(worker)
@@ -397,3 +425,15 @@ class SummaryTaskQueueManager(QObject):
         if self._wait_timer.isActive():
             self._wait_timer.stop()
         self.wait_state_changed.emit(False, 0, "")
+
+    def _append_history(self, event: str, task: Dict, message: str = ""):
+        from datetime import datetime
+
+        snapshot = dict(task or {})
+        self._session_history.append({
+            "time": datetime.now().strftime("%H:%M:%S"),
+            "event": str(event or "").strip().lower() or "info",
+            "task": snapshot,
+            "message": str(message or "").strip(),
+        })
+        self.history_changed.emit(len(self._session_history))

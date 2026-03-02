@@ -15,6 +15,7 @@
 import os
 import re
 import shutil
+import logging
 from datetime import date, timedelta
 from PyQt6.QtWidgets import (QMainWindow, QWidget, QVBoxLayout, 
                              QHBoxLayout, QListWidget, QPushButton, 
@@ -88,6 +89,7 @@ class MainWindow(QMainWindow):
         apply_theme()
         
         self.init_ui()
+        self._log_user_settings_snapshot("startup")
         self.load_history()
         self.refresh_tag_filter()
         self.load_chat_sessions()
@@ -101,6 +103,22 @@ class MainWindow(QMainWindow):
         # Show Welcome Tab
         self.show_welcome_screen()
         logging.info("MainWindow initialized.")
+
+    def _log_user_settings_snapshot(self, context: str):
+        settings = QSettings("Hectronic", "Secretario")
+        snapshot = {}
+        for key in sorted(settings.allKeys()):
+            value = settings.value(key)
+            key_l = str(key).lower()
+            if any(token in key_l for token in ("token", "password", "secret", "apikey", "api_key")):
+                value_text = str(value or "")
+                if value_text:
+                    snapshot[key] = f"<masked len={len(value_text)}>"
+                else:
+                    snapshot[key] = "<empty>"
+            else:
+                snapshot[key] = value
+        logging.info("User settings snapshot [%s]: %s", context, snapshot)
 
     def _enqueue_missing_previous_week_summary_if_enabled(self):
         settings = QSettings("Hectronic", "Secretario")
@@ -405,11 +423,8 @@ class MainWindow(QMainWindow):
         # Initialize date filter state
         self.current_date_filter = None # Single date (string) or None for week/all
         self.current_week_monday = None # QDate of Monday if filtering by week
-        
-        # Set default to current week
-        today = QDate.currentDate()
-        self.current_week_monday = today.addDays(-(today.dayOfWeek() - 1))
-        # Highlight current week
+
+        # Default view: no date filter (show all recordings at startup)
         QTimer.singleShot(100, self.update_calendar_visuals)
 
         # Search Box
@@ -704,8 +719,8 @@ class MainWindow(QMainWindow):
 
     def start_new_recording(self, config):
         """Start a new recording with the given configuration."""
-        import logging
         logging.info(f"Starting new recording with config: {config}")
+        self._log_user_settings_snapshot("start_new_recording")
         # Check if we have a recording in progress already
         for i in range(self.central_tabs.count()):
             widget = self.central_tabs.widget(i)
@@ -789,11 +804,21 @@ class MainWindow(QMainWindow):
 
     def on_recording_finished(self, file_path, config, widget):
         """Handle recording finished - save to DB and start transcription with config."""
+        self._log_user_settings_snapshot("on_recording_finished")
+        logging.info(
+            "on_recording_finished called with file_path=%s widget=%s config_keys=%s",
+            file_path,
+            type(widget).__name__ if widget else None,
+            sorted(list((config or {}).keys())),
+        )
         # Close the recording widget
         index = self.central_tabs.indexOf(widget)
         if index != -1:
             self.central_tabs.removeTab(index)
             widget.deleteLater()
+            logging.info("RecordingInProgress tab closed at index=%s", index)
+        else:
+            logging.warning("RecordingInProgress widget tab not found during finish flow.")
         
         try:
             filename = os.path.basename(file_path)
@@ -801,13 +826,22 @@ class MainWindow(QMainWindow):
             title = config.get("title") or filename
             recording_notes = config.get("recording_notes", "")
             pending_tasks = config.get("pending_tasks") or []
+            logging.info(
+                "Persisting new recording filename=%s title=%s notes_len=%d pending_tasks=%d",
+                filename,
+                title,
+                len(recording_notes),
+                len(pending_tasks),
+            )
             # Create DB entry to get an ID
             record_id = self.db.save(filename, "", 0.0, title=title, recording_notes=recording_notes)
+            logging.info("DB save completed with record_id=%s", record_id)
             
             # Update tags if provided
             tags = config.get("tags", "")
             if tags:
                 self.db.update_tags(record_id, tags)
+                logging.info("Tags saved for record_id=%s tags=%s", record_id, tags)
 
             # Persist quick tasks captured during recording.
             for task_content in pending_tasks:
@@ -815,20 +849,25 @@ class MainWindow(QMainWindow):
                 if clean_task:
                     try:
                         self.db.save_task(record_id=record_id, content=clean_task, tags=tags or None)
+                        logging.info("Saved quick task for record_id=%s: %s", record_id, clean_task)
                     except Exception:
-                        pass
+                        logging.exception("Failed saving quick task for record_id=%s", record_id)
             
             # Refresh sidebar to show new recording with title
             self.request_sidebar_reload(include_tags=True, include_history=True)
+            logging.info("Requested sidebar reload after recording finish for record_id=%s", record_id)
             
             # Open standard recording tab with config
             rec_widget = self.open_recording_tab(record_id, config)
+            logging.info("Opened recording tab for record_id=%s widget_created=%s", record_id, bool(rec_widget))
             
             # Trigger transcription with config
             if rec_widget and isinstance(rec_widget, RecordingWidget):
+                logging.info("Starting transcription with config for record_id=%s file=%s", record_id, file_path)
                 rec_widget.start_transcription_with_config(file_path, config)
                 
         except Exception as e:
+            logging.exception("Failed while handling recording completion flow.")
             QMessageBox.critical(self, "Error", f"Failed to save recording: {e}")
 
 
@@ -1779,6 +1818,12 @@ class MainWindow(QMainWindow):
     # open_maintenance_tab removed - now handled by open_tools_tab
 
     def closeEvent(self, event):
+        logging.warning(
+            "MainWindow.closeEvent triggered. tabs=%d queue_running=%s recorder_recording=%s",
+            self.central_tabs.count(),
+            self.summary_task_queue.is_running if self.summary_task_queue else None,
+            self.recorder.is_recording if self.recorder else None,
+        )
         self._sidebar_refresh_timer.stop()
         self._pending_history_reload = False
         self._pending_tag_reload = False
@@ -1795,6 +1840,7 @@ class MainWindow(QMainWindow):
 
         if self.summary_task_queue:
             self.summary_task_queue.cancel_all()
+            logging.info("Summary task queue cancelled during closeEvent.")
         self.regen_worker = None
 
         # Close tabs from right to left and allow each widget to cleanup resources.
@@ -1809,8 +1855,9 @@ class MainWindow(QMainWindow):
         if self.recorder and self.recorder.is_recording:
             try:
                 self.recorder.stop()
+                logging.info("Active recorder stopped during closeEvent.")
             except Exception:
-                pass
+                logging.exception("Failed stopping recorder during closeEvent.")
 
         try:
             import gc
@@ -1822,3 +1869,4 @@ class MainWindow(QMainWindow):
             pass
 
         super().closeEvent(event)
+        logging.warning("MainWindow.closeEvent completed.")
