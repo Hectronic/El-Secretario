@@ -17,6 +17,7 @@ from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QPushButton,
                              QLineEdit, QFormLayout, QGroupBox, QCheckBox, QTextEdit,
                              QListWidget, QListWidgetItem, QSplitter)
 from PyQt6.QtCore import Qt, QTimer, pyqtSignal, QSettings
+import logging
 from src.database import DBManager
 from src.ui.components import TagsLineEdit
 
@@ -246,11 +247,19 @@ class RecordingInProgressWidget(QWidget):
 
     def start_recording(self):
         try:
+            logging.info("RecordingInProgressWidget.start_recording called")
             if not self.recorder.is_recording:
                 self.recorder.start()
             self.recording_started = True
             self.timer.start(1000)
+            logging.info(
+                "Recording started: is_recording=%s fs=%s channels=%s",
+                self.recorder.is_recording,
+                getattr(self.recorder, "fs", "?"),
+                getattr(self.recorder, "channels", "?"),
+            )
         except Exception as e:
+            logging.exception("Failed to start recording in RecordingInProgressWidget.")
             self.recording_started = False
             self.status_label.setText(f"Error: {e}")
             self.status_label.setStyleSheet("font-size: 18px; color: #f44336; font-weight: bold;")
@@ -273,18 +282,28 @@ class RecordingInProgressWidget(QWidget):
 
     def finish_recording(self):
         if self._is_finishing:
+            logging.warning("finish_recording ignored because _is_finishing is already True.")
             return
         self._is_finishing = True
         self.timer.stop()
+        logging.info(
+            "finish_recording started: recording_started=%s recorder.is_recording=%s duration_seconds=%s",
+            self.recording_started,
+            getattr(self.recorder, "is_recording", None),
+            self.duration_seconds,
+        )
         if not self.recording_started:
             # If recording never started, just cancel
+            logging.warning("finish_recording called without active recording; emitting cancelled.")
             self.cleanup()
             self.cancelled.emit()
             self._is_finishing = False
             return
         try:
             file_path = self.recorder.stop()
+            logging.info("recorder.stop() returned path=%s", file_path)
         except Exception:
+            logging.exception("Exception while stopping recorder.")
             file_path = None
         self.recording_started = False
         self.cleanup()
@@ -300,9 +319,19 @@ class RecordingInProgressWidget(QWidget):
                 "diarization": self.diarization_check.isChecked(),
                 "auto_summarize_after_transcription": self.auto_summary_check.isChecked(),
             }
+            logging.info(
+                "Recording finished. Emitting finished signal with file=%s title=%s model=%s diarization=%s auto_summary=%s pending_tasks=%d",
+                file_path,
+                final_config.get("title", ""),
+                final_config.get("model", ""),
+                final_config.get("diarization", False),
+                final_config.get("auto_summarize_after_transcription", False),
+                len(final_config.get("pending_tasks") or []),
+            )
             self._save_last_run_config()
             self.finished.emit(file_path, final_config)
         else:
+            logging.error("Recording stop did not produce an audio file. Emitting cancelled.")
             self.cancelled.emit()
         self._is_finishing = False
 

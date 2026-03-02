@@ -16,10 +16,14 @@ import logging
 import os
 import shutil
 import sys
+import threading
+import faulthandler
 from pathlib import Path
 
 LOG_DIR = Path("log")
 LOG_FILE = LOG_DIR / "app.log"
+CRASH_LOG_FILE = LOG_DIR / "crash.log"
+_CRASH_FP = None
 
 def setup_logging():
     """
@@ -49,5 +53,24 @@ def setup_logging():
         sys.__excepthook__(exctype, value, traceback)
 
     sys.excepthook = exception_hook
+
+    # Log exceptions raised from Python threads that would otherwise be easy to miss.
+    def thread_exception_hook(args):
+        logging.error(
+            "Unhandled thread exception in %s",
+            getattr(args.thread, "name", "<unknown>"),
+            exc_info=(args.exc_type, args.exc_value, args.exc_traceback),
+        )
+
+    threading.excepthook = thread_exception_hook
+
+    # Capture low-level crashes (segfault/access violation/abort) when possible.
+    try:
+        global _CRASH_FP
+        _CRASH_FP = open(CRASH_LOG_FILE, "w", encoding="utf-8")
+        faulthandler.enable(file=_CRASH_FP, all_threads=True)
+        logging.info("Faulthandler enabled. Crash log file: %s", CRASH_LOG_FILE.absolute())
+    except Exception:
+        logging.exception("Could not enable faulthandler.")
 
     logging.info("Logging initialized. Log file: %s", LOG_FILE.absolute())

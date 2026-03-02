@@ -12,11 +12,13 @@ class _FakeQueue(QObject):
     task_progress = pyqtSignal(int)
     task_failed = pyqtSignal(dict, str)
     task_skipped = pyqtSignal(dict, str)
+    history_changed = pyqtSignal(int)
 
     def __init__(self):
         super().__init__()
         self._current = {"type": "summary", "title": "Demo"}
         self._pending = []
+        self._history = []
 
     def get_current_task(self):
         return self._current
@@ -26,6 +28,9 @@ class _FakeQueue(QObject):
 
     def get_wait_state(self):
         return False, 0, ""
+
+    def get_session_history(self):
+        return list(self._history)
 
     @property
     def pending_count(self):
@@ -67,3 +72,21 @@ def test_queue_widget_shows_live_status_with_empty_pending(qtbot):
     fake_queue.task_progress.emit(42)
     assert widget.live_progress.value() == 42
     assert widget.live_progress.format() == "42%"
+
+
+def test_queue_widget_renders_session_history(qtbot):
+    fake_queue = _FakeQueue()
+    fake_queue._history = [
+        {
+            "time": "12:00:00",
+            "event": "finished",
+            "task": {"type": "summary", "title": "Demo"},
+            "message": "",
+        }
+    ]
+    widget = QueueManagementWidget(fake_queue)
+    qtbot.addWidget(widget)
+
+    assert widget.history_list.count() == 1
+    assert "Finished" in widget.history_list.item(0).text()
+    assert "Demo" in widget.history_list.item(0).text()
