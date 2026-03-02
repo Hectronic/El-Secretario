@@ -87,6 +87,22 @@ class SummaryTaskQueueManager(QObject):
             self.task_skipped.emit(summary_data, "Daily summary task missing date.")
             return False
 
+        # Before daily summary, ensure every unsummarized recording gets its own summary.
+        # This keeps daily/weekly layers coherent when users trigger day regeneration.
+        try:
+            pending_records = self.db.get_records_without_summary()
+            for rec in pending_records:
+                rec_id = rec.get("id")
+                if not isinstance(rec_id, int):
+                    continue
+                rec_text = self.db.compose_ai_text(rec.get("transcription", ""), rec.get("recording_notes", ""))
+                if not rec_text.strip():
+                    continue
+                rec_title = (rec.get("title") or f"Recording {rec_id}").strip()
+                self.enqueue_recording_summary(rec_id, rec_text, rec_title)
+        except Exception:
+            pass
+
         task = {
             "type": "daily_summary",
             "date": date,
@@ -300,9 +316,10 @@ class SummaryTaskQueueManager(QObject):
                     self.db.update_ai_content(task["record_id"], summary=str(result))
                     rec = self.db.fetch_record(task["record_id"])
                     if rec:
+                        ai_text = self.db.get_record_ai_text(task["record_id"])
                         self.enqueue_task_extraction(
                             task["record_id"],
-                            rec.get("transcription", ""),
+                            ai_text,
                             rec.get("tags") or "",
                             rec.get("title") or f"Recording {task['record_id']}",
                         )
@@ -326,7 +343,8 @@ class SummaryTaskQueueManager(QObject):
                     text = result["text"]
                     self.db.update_transcription(task["record_id"], text, is_diarized=result.get("is_diarized", False), transcription_model=result.get("model_size"))
                     # Auto chain summary
-                    self.enqueue_recording_summary(task["record_id"], text, task.get("title", ""))
+                    ai_text = self.db.get_record_ai_text(task["record_id"])
+                    self.enqueue_recording_summary(task["record_id"], ai_text, task.get("title", ""))
             except Exception as e:
                 logging.error(f"Queue persistence error: {e}", exc_info=True)
 

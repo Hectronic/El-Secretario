@@ -30,6 +30,14 @@ class TestNewFeaturesIntegrity(unittest.TestCase):
         if os.path.exists(self.db_name):
             os.remove(self.db_name)
         self.db = DBManager(self.db_name)
+
+        # Avoid multimedia/audio backend hangs in headless CI.
+        self.media_player_patcher = patch('src.ui.recording_widget.QMediaPlayer')
+        self.audio_output_patcher = patch('src.ui.recording_widget.QAudioOutput')
+        self.recorder_patcher = patch('src.ui.recording_widget.Recorder')
+        self.media_player_patcher.start()
+        self.audio_output_patcher.start()
+        self.recorder_patcher.start()
         
         # Mock dependencies
         self.rag = MagicMock()
@@ -37,6 +45,9 @@ class TestNewFeaturesIntegrity(unittest.TestCase):
         self.notebook_db = MagicMock()
 
     def tearDown(self):
+        self.media_player_patcher.stop()
+        self.audio_output_patcher.stop()
+        self.recorder_patcher.stop()
         if os.path.exists(self.db_name):
             os.remove(self.db_name)
 

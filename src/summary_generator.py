@@ -181,7 +181,7 @@ JSON:"""
                     
                     if not param_summary or not param_summary.strip():
                         if self.generate_recordings:
-                            text = rec.get('transcription', '')
+                            text = self.db.compose_ai_text(rec.get('transcription', ''), rec.get('recording_notes', ''))
                             if text and text.strip():
                                 # Summary Generation
                                 prompt = recording_prompt_template.replace("{text}", text)
@@ -296,7 +296,7 @@ JSON:"""
         full_text = ""
         for rec in recordings:
             full_text += f"\n\n--- Recording: {rec.get('title', 'Untitled')} ({rec.get('created_at', '')}) ---\n"
-            full_text += rec.get('transcription', '') or ""
+            full_text += self.db.compose_ai_text(rec.get('transcription', ''), rec.get('recording_notes', ''))
         return full_text
 
     def _emit_retry_wait(self, task_name, target, delay, attempt, total_attempts, error_text):

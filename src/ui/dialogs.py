@@ -18,7 +18,6 @@ from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QFormLayout, QLineEdit,
                              QHBoxLayout, QApplication, QTabWidget, QTextEdit, QScrollArea)
 from PyQt6.QtCore import QSettings, QStringListModel, Qt, QDate, QTimer
 from src.ui.styles import apply_theme
-from src.audio import Recorder
 
 # Default prompts for AI tasks
 DEFAULT_PROMPTS = {
@@ -184,6 +183,28 @@ class GeneralSettingsPanel(QWidget):
         self.lang_input.setText(self.settings.value("system_language", "Spanish"))
         self.lang_input.setToolTip("The language the AI will use for daily and weekly summaries.")
         form_layout.addRow(lbl_lang, self.lang_input)
+
+        lbl_startup_weekly = QLabel("Startup Weekly Summary:")
+        lbl_startup_weekly.setStyleSheet("font-weight: bold;")
+        self.startup_last_weekly_check = QCheckBox("Auto-enqueue last week summary if missing")
+        self.startup_last_weekly_check.setChecked(
+            self.settings.value("startup_enqueue_last_weekly_summary", False, type=bool)
+        )
+        self.startup_last_weekly_check.setToolTip(
+            "On app startup, if last week's summary doesn't exist, queue it automatically."
+        )
+        form_layout.addRow(lbl_startup_weekly, self.startup_last_weekly_check)
+
+        lbl_startup_daily = QLabel("Startup Daily Summary:")
+        lbl_startup_daily.setStyleSheet("font-weight: bold;")
+        self.startup_prev_daily_check = QCheckBox("Auto-enqueue latest missing previous daily summary")
+        self.startup_prev_daily_check.setChecked(
+            self.settings.value("startup_enqueue_previous_daily_summary", False, type=bool)
+        )
+        self.startup_prev_daily_check.setToolTip(
+            "On startup, find the most recent earlier day with recordings and no daily summary, then queue it."
+        )
+        form_layout.addRow(lbl_startup_daily, self.startup_prev_daily_check)
         
         layout.addLayout(form_layout)
         
@@ -309,6 +330,14 @@ class GeneralSettingsPanel(QWidget):
         selected_theme = self.theme_combo.currentText()
         self.settings.setValue("app_theme", selected_theme)
         self.settings.setValue("system_language", self.lang_input.text().strip() or "Spanish")
+        self.settings.setValue(
+            "startup_enqueue_last_weekly_summary",
+            self.startup_last_weekly_check.isChecked(),
+        )
+        self.settings.setValue(
+            "startup_enqueue_previous_daily_summary",
+            self.startup_prev_daily_check.isChecked(),
+        )
         apply_theme(selected_theme)
 
 
@@ -348,6 +377,14 @@ class AudioSettingsPanel(QWidget):
                 self.mic_combo.setCurrentIndex(index)
         
         form_layout.addRow(lbl_mic, self.mic_combo)
+        
+        # System Audio Loopback
+        lbl_sys_audio = QLabel("System Audio Capture:")
+        lbl_sys_audio.setStyleSheet("font-weight: bold;")
+        self.sys_audio_check = QCheckBox("Capture audio from the machine (Speaker output)")
+        self.sys_audio_check.setToolTip("Attempts to automatically find and record from the system monitor device.")
+        self.sys_audio_check.setChecked(self.settings.value("capture_system_audio", False, type=bool))
+        form_layout.addRow(lbl_sys_audio, self.sys_audio_check)
         
         # --- Transcription Section ---
         trans_label = QLabel("📝 Transcription Engine")
@@ -395,9 +432,13 @@ class AudioSettingsPanel(QWidget):
 
     def _populate_mics(self):
         """Populate microphone list."""
+        import os
         self.mic_combo.clear()
         self.mic_combo.addItem("System Default", "")
+        if os.environ.get("EL_SECRETARIO_SKIP_AUDIO_ENUM", "").strip().lower() in {"1", "true", "yes"}:
+            return
         try:
+            from src.audio import Recorder
             devices = Recorder.get_input_devices()
             for idx, name in devices:
                 self.mic_combo.addItem(name, name) # Store name as data to be more portable
@@ -407,6 +448,7 @@ class AudioSettingsPanel(QWidget):
     def save(self):
         """Save audio settings."""
         self.settings.setValue("default_mic_name", self.mic_combo.currentData())
+        self.settings.setValue("capture_system_audio", self.sys_audio_check.isChecked())
         self.settings.setValue("whisper_model", self.whisper_combo.currentText())
         self.settings.setValue("force_cpu", self.force_cpu_check.isChecked())
         self.settings.setValue("compute_type", self.compute_combo.currentText())

@@ -48,6 +48,7 @@ class DBManager:
                     filename TEXT,
                     duration REAL,
                     transcription TEXT,
+                    recording_notes TEXT,
                     title TEXT,
                     tags TEXT,
                     summary TEXT,
@@ -121,9 +122,11 @@ class DBManager:
                         day_date TEXT,
                         week_start TEXT NOT NULL,
                         content TEXT NOT NULL,
+                        task_origin TEXT,
                         notes TEXT,
                         tags TEXT,
                         is_completed INTEGER DEFAULT 0,
+                        completed_at DATETIME,
                         custom_order REAL,
                         created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
                         FOREIGN KEY(record_id) REFERENCES records(id) ON DELETE CASCADE,
@@ -138,6 +141,8 @@ class DBManager:
                 
                 if 'title' not in columns:
                     cursor.execute('ALTER TABLE records ADD COLUMN title TEXT')
+                if 'recording_notes' not in columns:
+                    cursor.execute('ALTER TABLE records ADD COLUMN recording_notes TEXT')
                 if 'summary' not in columns:
                     cursor.execute('ALTER TABLE records ADD COLUMN summary TEXT')
                 if 'cleaned_text' not in columns:
@@ -181,9 +186,11 @@ class DBManager:
                             day_date TEXT,
                             week_start TEXT NOT NULL,
                             content TEXT NOT NULL,
+                            task_origin TEXT,
                             notes TEXT,
                             tags TEXT,
                             is_completed INTEGER DEFAULT 0,
+                            completed_at DATETIME,
                             custom_order REAL,
                             created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
                             FOREIGN KEY(record_id) REFERENCES records(id) ON DELETE CASCADE,
@@ -193,7 +200,7 @@ class DBManager:
                     ''')
                     cursor.execute('''
                         INSERT INTO tasks_new (
-                            id, record_id, day_date, week_start, content, notes, tags, is_completed, custom_order, created_at
+                            id, record_id, day_date, week_start, content, task_origin, notes, tags, is_completed, completed_at, custom_order, created_at
                         )
                         SELECT
                             t.id,
@@ -202,8 +209,10 @@ class DBManager:
                             COALESCE(date(r.created_at, 'weekday 0'), date(t.created_at, 'weekday 0'), date('now', 'weekday 0')),
                             t.content,
                             NULL,
+                            NULL,
                             t.tags,
                             t.is_completed,
+                            NULL,
                             NULL,
                             t.created_at
                         FROM tasks t
@@ -221,6 +230,10 @@ class DBManager:
                     cursor.execute('ALTER TABLE tasks ADD COLUMN week_start TEXT')
                 if "notes" not in task_columns:
                     cursor.execute('ALTER TABLE tasks ADD COLUMN notes TEXT')
+                if "task_origin" not in task_columns:
+                    cursor.execute('ALTER TABLE tasks ADD COLUMN task_origin TEXT')
+                if "completed_at" not in task_columns:
+                    cursor.execute('ALTER TABLE tasks ADD COLUMN completed_at DATETIME')
                 if "custom_order" not in task_columns:
                     cursor.execute('ALTER TABLE tasks ADD COLUMN custom_order REAL')
 
@@ -278,6 +291,7 @@ class DBManager:
                 cursor.execute("CREATE INDEX IF NOT EXISTS idx_chat_sessions_created_at ON chat_sessions(created_at)")
                 cursor.execute("CREATE INDEX IF NOT EXISTS idx_tasks_is_completed_created_at ON tasks(is_completed, created_at DESC)")
                 cursor.execute("CREATE INDEX IF NOT EXISTS idx_tasks_custom_order ON tasks(custom_order)")
+                cursor.execute("CREATE INDEX IF NOT EXISTS idx_tasks_completed_at ON tasks(completed_at)")
 
                 conn.commit()
             logging.info(f"Database initialized: {self.db_name}")
@@ -296,15 +310,15 @@ class DBManager:
             ''', (created_at, model_name, audio_duration, audio_size_bytes, transcription_time_seconds, record_id))
             conn.commit()
 
-    def save(self, filename: str, text: str, duration: float, title: Optional[str] = None, is_diarized: bool = False, transcription_model: Optional[str] = None, type: str = 'recording') -> int:
+    def save(self, filename: str, text: str, duration: float, title: Optional[str] = None, is_diarized: bool = False, transcription_model: Optional[str] = None, type: str = 'recording', recording_notes: Optional[str] = None) -> int:
         """Save a new record (recording or note)."""
         with self.get_connection() as conn:
             cursor = conn.cursor()
             created_at = datetime.now().isoformat(sep=' ', timespec='seconds')
             cursor.execute('''
-                INSERT INTO records (created_at, filename, duration, transcription, title, is_diarized, transcription_model, type)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-            ''', (created_at, filename, duration, text, title, 1 if is_diarized else 0, transcription_model, type))
+                INSERT INTO records (created_at, filename, duration, transcription, recording_notes, title, is_diarized, transcription_model, type)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ''', (created_at, filename, duration, text, recording_notes, title, 1 if is_diarized else 0, transcription_model, type))
             conn.commit()
             return cursor.lastrowid
 
@@ -493,6 +507,8 @@ class DBManager:
         with self.get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute('UPDATE records SET tags = ? WHERE id = ?', (tags, record_id))
+            # Keep task tags in sync for tasks linked to this recording.
+            cursor.execute('UPDATE tasks SET tags = ? WHERE record_id = ?', (tags, record_id))
             conn.commit()
 
     def update_title(self, record_id: int, title: str) -> None:
@@ -500,6 +516,8 @@ class DBManager:
         with self.get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute('UPDATE records SET title = ? WHERE id = ?', (title, record_id))
+            # Keep task origin in sync for tasks linked to this recording.
+            cursor.execute('UPDATE tasks SET task_origin = ? WHERE record_id = ?', (title, record_id))
             conn.commit()
 
     def update_duration(self, record_id: int, duration: float) -> None:
@@ -530,6 +548,32 @@ class DBManager:
             query = f"UPDATE records SET {', '.join(fields)} WHERE id = ?"
             cursor.execute(query, params)
             conn.commit()
+
+    def update_recording_notes(self, record_id: int, notes: str) -> None:
+        """Update user notes associated with a recording."""
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute('UPDATE records SET recording_notes = ? WHERE id = ?', (notes, record_id))
+            conn.commit()
+
+    @staticmethod
+    def compose_ai_text(transcription: Optional[str], recording_notes: Optional[str]) -> str:
+        """Compose AI input text by merging transcription and user notes."""
+        transcription_text = (transcription or "").strip()
+        notes_text = (recording_notes or "").strip()
+
+        if transcription_text and notes_text:
+            return f"{transcription_text}\n\n[User notes]\n{notes_text}"
+        if notes_text:
+            return f"[User notes]\n{notes_text}"
+        return transcription_text
+
+    def get_record_ai_text(self, record_id: int) -> str:
+        """Get composed AI input text for a record."""
+        record = self.fetch_record(record_id)
+        if not record:
+            return ""
+        return self.compose_ai_text(record.get("transcription"), record.get("recording_notes"))
 
     def update_ai_content(self, record_id: int, summary: Optional[str] = None, cleaned_text: Optional[str] = None) -> None:
         """Update AI generated content for a record."""
@@ -664,12 +708,14 @@ class DBManager:
         with self.get_connection() as conn:
             cursor = conn.cursor()
             # First check by created_at timestamp
-            cursor.execute('SELECT transcription FROM records WHERE created_at = ?', (created_at,))
+            cursor.execute('SELECT transcription, recording_notes FROM records WHERE created_at = ?', (created_at,))
             rows = cursor.fetchall()
             
             for row in rows:
                 transcription = row['transcription'] or ''
-                existing_hash = hashlib.sha256(transcription.encode('utf-8')).hexdigest()
+                recording_notes = row['recording_notes'] or ''
+                combined_content = self.compose_ai_text(transcription, recording_notes)
+                existing_hash = hashlib.sha256(combined_content.encode('utf-8')).hexdigest()
                 if existing_hash == content_hash:
                     return True
             return False
@@ -704,15 +750,16 @@ class DBManager:
             cursor = conn.cursor()
             cursor.execute('''
                 INSERT INTO records (
-                    created_at, filename, duration, transcription, title, tags,
+                    created_at, filename, duration, transcription, recording_notes, title, tags,
                     summary, cleaned_text, is_favorite, is_diarized, transcription_model,
                     processing_attempts, last_error
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ''', (
                 record.get('created_at'),
                 record.get('filename', ''),
                 record.get('duration', 0),
                 record.get('transcription', ''),
+                record.get('recording_notes'),
                 record.get('title'),
                 record.get('tags'),
                 record.get('summary'),
@@ -829,6 +876,36 @@ class DBManager:
             row = cursor.fetchone()
             return dict(row) if row else None
 
+    def get_latest_recording_day_without_daily_summary(
+        self,
+        before_date: str,
+        tags_filter: Optional[str] = None,
+    ) -> Optional[str]:
+        """
+        Return the latest day before `before_date` that has recordings and lacks daily summary.
+        """
+        tags_value = tags_filter if tags_filter else ''
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                '''
+                SELECT date(r.created_at) AS day
+                FROM records r
+                WHERE r.type = 'recording' AND date(r.created_at) < ?
+                GROUP BY date(r.created_at)
+                HAVING NOT EXISTS (
+                    SELECT 1
+                    FROM daily_summaries ds
+                    WHERE ds.date = day AND ds.tags_filter = ?
+                )
+                ORDER BY day DESC
+                LIMIT 1
+                ''',
+                (before_date, tags_value),
+            )
+            row = cursor.fetchone()
+            return row["day"] if row else None
+
     def save_weekly_summary(self, week_date: str, summary: str, tags_filter: Optional[str] = None) -> int:
         """
         Save or update a weekly summary.
@@ -893,7 +970,10 @@ class DBManager:
             cursor = conn.cursor()
             query = '''
                 SELECT * FROM records 
-                WHERE transcription IS NOT NULL AND transcription != ''
+                WHERE (
+                    (transcription IS NOT NULL AND transcription != '')
+                    OR (recording_notes IS NOT NULL AND recording_notes != '')
+                )
                 AND (summary IS NULL OR summary = '')
                 ORDER BY created_at DESC
             '''
@@ -913,7 +993,10 @@ class DBManager:
             cursor = conn.cursor()
             query = '''
                 SELECT * FROM records 
-                WHERE transcription IS NOT NULL AND transcription != ''
+                WHERE (
+                    (transcription IS NOT NULL AND transcription != '')
+                    OR (recording_notes IS NOT NULL AND recording_notes != '')
+                )
                 AND NOT EXISTS (
                     SELECT 1 FROM tasks t WHERE t.record_id = records.id
                 )
@@ -960,7 +1043,10 @@ class DBManager:
             cursor.execute('''
                 SELECT DISTINCT date(created_at) as record_date
                 FROM records
-                WHERE transcription IS NOT NULL AND transcription != ''
+                WHERE (
+                    (transcription IS NOT NULL AND transcription != '')
+                    OR (recording_notes IS NOT NULL AND recording_notes != '')
+                )
                 ORDER BY record_date DESC
             ''')
             return [row['record_date'] for row in cursor.fetchall()]
@@ -979,7 +1065,10 @@ class DBManager:
                 SELECT DISTINCT 
                     date(created_at, 'weekday 0') as week_sunday
                 FROM records
-                WHERE transcription IS NOT NULL AND transcription != ''
+                WHERE (
+                    (transcription IS NOT NULL AND transcription != '')
+                    OR (recording_notes IS NOT NULL AND recording_notes != '')
+                )
                 ORDER BY week_sunday DESC
             ''')
             return [row['week_sunday'] for row in cursor.fetchall()]
@@ -1002,7 +1091,10 @@ class DBManager:
             query = '''
                 SELECT DISTINCT date(created_at) as record_date
                 FROM records
-                WHERE transcription IS NOT NULL AND transcription != ''
+                WHERE (
+                    (transcription IS NOT NULL AND transcription != '')
+                    OR (recording_notes IS NOT NULL AND recording_notes != '')
+                )
                 AND date(created_at) NOT IN (
                     SELECT date FROM daily_summaries WHERE tags_filter = ?
                 )
@@ -1079,7 +1171,10 @@ class DBManager:
                 SELECT DISTINCT 
                     date(created_at, 'weekday 0') as week_sunday
                 FROM records
-                WHERE transcription IS NOT NULL AND transcription != ''
+                WHERE (
+                    (transcription IS NOT NULL AND transcription != '')
+                    OR (recording_notes IS NOT NULL AND recording_notes != '')
+                )
                 AND date(created_at, 'weekday 0') NOT IN (
                     SELECT week_start FROM weekly_summaries WHERE tags_filter = ?
                 )
@@ -1144,7 +1239,7 @@ class DBManager:
 
     def save_task(self, record_id: Optional[int], content: str, tags: Optional[str] = None,
                   day_date: Optional[str] = None, week_start: Optional[str] = None,
-                  notes: Optional[str] = None) -> int:
+                  notes: Optional[str] = None, task_origin: Optional[str] = None) -> int:
         """
         Save a task with optional scope:
         - week only: week_start
@@ -1157,6 +1252,8 @@ class DBManager:
         resolved_record_id = record_id
         resolved_day_date = day_date
         resolved_week_start = week_start
+        resolved_tags = tags.strip() if isinstance(tags, str) and tags.strip() else None
+        resolved_origin = task_origin.strip() if isinstance(task_origin, str) and task_origin.strip() else None
 
         if resolved_record_id is not None:
             rec = self.fetch_record(resolved_record_id)
@@ -1164,6 +1261,8 @@ class DBManager:
                 raise ValueError(f"Recording {resolved_record_id} does not exist.")
             rec_day = str(rec.get("created_at", ""))[:10]
             rec_week = self._week_sunday(rec_day)
+            rec_tags = (rec.get("tags") or "").strip()
+            rec_title = (rec.get("title") or "").strip()
             if not resolved_day_date:
                 resolved_day_date = rec_day
             if not resolved_week_start:
@@ -1172,6 +1271,10 @@ class DBManager:
                 raise ValueError("Task day_date must match recording date.")
             if resolved_week_start != rec_week:
                 raise ValueError("Task week_start must match recording week.")
+            if not resolved_tags and rec_tags:
+                resolved_tags = rec_tags
+            if not resolved_origin and rec_title:
+                resolved_origin = rec_title
         else:
             if resolved_day_date and not resolved_week_start:
                 resolved_week_start = self._week_sunday(resolved_day_date)
@@ -1186,9 +1289,9 @@ class DBManager:
         with self.get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute('''
-                INSERT INTO tasks (record_id, day_date, week_start, content, notes, tags)
-                VALUES (?, ?, ?, ?, ?, ?)
-            ''', (resolved_record_id, resolved_day_date, resolved_week_start, content.strip(), notes, tags))
+                INSERT INTO tasks (record_id, day_date, week_start, content, task_origin, notes, tags)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+            ''', (resolved_record_id, resolved_day_date, resolved_week_start, content.strip(), resolved_origin, notes, resolved_tags))
             conn.commit()
             return cursor.lastrowid
 
@@ -1220,6 +1323,25 @@ class DBManager:
             cursor.execute('UPDATE tasks SET content = ?, notes = ? WHERE id = ?', (content, notes, task_id))
             conn.commit()
 
+    def update_task_tags(self, task_id: int, tags: Optional[str]) -> None:
+        """Update tags of an existing task."""
+        clean_tags = tags.strip() if isinstance(tags, str) and tags.strip() else None
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute('UPDATE tasks SET tags = ? WHERE id = ?', (clean_tags, task_id))
+            conn.commit()
+
+    def update_task_details(self, task_id: int, content: str, notes: Optional[str], tags: Optional[str]) -> None:
+        """Update content, notes and tags of an existing task."""
+        clean_tags = tags.strip() if isinstance(tags, str) and tags.strip() else None
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                'UPDATE tasks SET content = ?, notes = ?, tags = ? WHERE id = ?',
+                (content, notes, clean_tags, task_id),
+            )
+            conn.commit()
+
     def delete_tasks_by_record(self, record_id: int) -> None:
         """Delete all tasks associated with a record (e.g. before regenerating)."""
         with self.get_connection() as conn:
@@ -1231,7 +1353,17 @@ class DBManager:
         """Fetch all tasks for a specific recording."""
         with self.get_connection() as conn:
             cursor = conn.cursor()
-            cursor.execute('SELECT * FROM tasks WHERE record_id = ? ORDER BY created_at ASC', (record_id,))
+            cursor.execute('''
+                SELECT
+                    t.*,
+                    r.title as record_title,
+                    r.tags as record_tags,
+                    r.type as record_type
+                FROM tasks t
+                LEFT JOIN records r ON t.record_id = r.id
+                WHERE t.record_id = ?
+                ORDER BY t.created_at ASC
+            ''', (record_id,))
             return [dict(row) for row in cursor.fetchall()]
 
     def get_tasks_by_date(self, date_str: str, tags_filter: Optional[str] = None, order_mode: str = "date") -> List[Dict[str, Any]]:
@@ -1241,7 +1373,7 @@ class DBManager:
             query = '''
                 SELECT
                     t.*,
-                    COALESCE(r.title, 'Day Task') as record_title,
+                    r.title as record_title,
                     r.tags as record_tags,
                     r.type as record_type
                 FROM tasks t
@@ -1269,6 +1401,56 @@ class DBManager:
             cursor.execute(query, params)
             return [dict(row) for row in cursor.fetchall()]
 
+    def get_tasks_by_date_range(
+        self,
+        start_date: str,
+        end_date: str,
+        tags_filter: Optional[str] = None,
+        order_mode: str = "date",
+        include_completed: bool = False,
+    ) -> List[Dict[str, Any]]:
+        """Fetch tasks in a date range, including week-only tasks intersecting that range."""
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            start_week = self._week_sunday(start_date)
+            end_week = self._week_sunday(end_date)
+
+            query = '''
+                SELECT
+                    t.*,
+                    r.title as record_title,
+                    r.tags as record_tags,
+                    r.type as record_type
+                FROM tasks t
+                LEFT JOIN records r ON t.record_id = r.id
+                WHERE (
+                    (t.day_date IS NOT NULL AND t.day_date BETWEEN ? AND ?)
+                    OR (t.day_date IS NULL AND t.week_start BETWEEN ? AND ?)
+                )
+            '''
+            params: List[Any] = [start_date, end_date, start_week, end_week]
+
+            if not include_completed:
+                query += " AND t.is_completed = 0"
+
+            if tags_filter:
+                tags = [t.strip() for t in str(tags_filter).split(",") if t and t.strip()]
+                if tags:
+                    tag_conditions = []
+                    for tag in tags:
+                        tag_conditions.append("(COALESCE(r.tags, '') LIKE ? OR COALESCE(t.tags, '') LIKE ?)")
+                        params.append(f"%{tag}%")
+                        params.append(f"%{tag}%")
+                    query += " AND (" + " OR ".join(tag_conditions) + ")"
+
+            if order_mode == "custom":
+                query += " ORDER BY COALESCE(t.custom_order, 999999999), t.created_at DESC, t.id DESC"
+            else:
+                query += " ORDER BY t.created_at DESC, t.id DESC"
+
+            cursor.execute(query, params)
+            return [dict(row) for row in cursor.fetchall()]
+
     def get_tasks_by_week(self, week_start: str, tags_filter: Optional[str] = None) -> List[Dict[str, Any]]:
         """Fetch all tasks for a specific week (Sunday date), optionally filtered by tags."""
         with self.get_connection() as conn:
@@ -1276,7 +1458,7 @@ class DBManager:
             query = '''
                 SELECT
                     t.*,
-                    COALESCE(r.title, CASE WHEN t.day_date IS NOT NULL THEN 'Day Task' ELSE 'Week Task' END) as record_title,
+                    r.title as record_title,
                     r.tags as record_tags,
                     r.type as record_type
                 FROM tasks t
@@ -1297,6 +1479,122 @@ class DBManager:
             cursor.execute(query, params)
             return [dict(row) for row in cursor.fetchall()]
 
+    def get_weekly_task_snapshot(self, week_start: str, tags_filter: Optional[str] = None) -> Dict[str, List[Dict[str, Any]]]:
+        """
+        Return task groups for a week:
+        - created_this_week: created between Monday and Sunday
+        - completed_this_week: completed between Monday and Sunday
+        - pending_from_before: created before Monday and still pending
+        """
+        week_end = datetime.strptime(week_start, "%Y-%m-%d").date()
+        week_begin = week_end - timedelta(days=6)
+        monday = week_begin.isoformat()
+        sunday = week_end.isoformat()
+
+        base_select = '''
+            SELECT
+                t.*,
+                r.title AS record_title,
+                r.tags AS record_tags,
+                r.type AS record_type
+            FROM tasks t
+            LEFT JOIN records r ON t.record_id = r.id
+        '''
+
+        def _append_tags_filter(query: str, params: List[Any]) -> str:
+            if not tags_filter:
+                return query
+            tags = [t.strip() for t in str(tags_filter).split(",") if t and t.strip()]
+            if not tags:
+                return query
+            tag_conditions = []
+            for tag in tags:
+                tag_conditions.append("(COALESCE(r.tags, '') LIKE ? OR COALESCE(t.tags, '') LIKE ?)")
+                params.append(f"%{tag}%")
+                params.append(f"%{tag}%")
+            return query + " AND (" + " OR ".join(tag_conditions) + ")"
+
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+
+            created_query = base_select + " WHERE date(t.created_at) BETWEEN ? AND ?"
+            created_params: List[Any] = [monday, sunday]
+            created_query = _append_tags_filter(created_query, created_params)
+            created_query += " ORDER BY t.created_at DESC, t.id DESC"
+            cursor.execute(created_query, created_params)
+            created_this_week = [dict(row) for row in cursor.fetchall()]
+
+            completed_query = base_select + " WHERE t.is_completed = 1 AND t.completed_at IS NOT NULL AND date(t.completed_at) BETWEEN ? AND ?"
+            completed_params: List[Any] = [monday, sunday]
+            completed_query = _append_tags_filter(completed_query, completed_params)
+            completed_query += " ORDER BY t.completed_at DESC, t.id DESC"
+            cursor.execute(completed_query, completed_params)
+            completed_this_week = [dict(row) for row in cursor.fetchall()]
+
+            pending_query = base_select + " WHERE t.is_completed = 0 AND date(t.created_at) < ?"
+            pending_params: List[Any] = [monday]
+            pending_query = _append_tags_filter(pending_query, pending_params)
+            pending_query += " ORDER BY t.created_at DESC, t.id DESC"
+            cursor.execute(pending_query, pending_params)
+            pending_from_before = [dict(row) for row in cursor.fetchall()]
+
+        return {
+            "created_this_week": created_this_week,
+            "completed_this_week": completed_this_week,
+            "pending_from_before": pending_from_before,
+        }
+
+    def get_daily_task_snapshot(self, day_date: str, tags_filter: Optional[str] = None) -> Dict[str, List[Dict[str, Any]]]:
+        """
+        Return task groups for a day:
+        - created_this_day: tasks created on this date
+        - completed_this_day: tasks completed on this date
+        """
+        base_select = '''
+            SELECT
+                t.*,
+                r.title AS record_title,
+                r.tags AS record_tags,
+                r.type AS record_type
+            FROM tasks t
+            LEFT JOIN records r ON t.record_id = r.id
+        '''
+
+        def _append_tags_filter(query: str, params: List[Any]) -> str:
+            if not tags_filter:
+                return query
+            tags = [t.strip() for t in str(tags_filter).split(",") if t and t.strip()]
+            if not tags:
+                return query
+            tag_conditions = []
+            for tag in tags:
+                tag_conditions.append("(COALESCE(r.tags, '') LIKE ? OR COALESCE(t.tags, '') LIKE ?)")
+                params.append(f"%{tag}%")
+                params.append(f"%{tag}%")
+            return query + " AND (" + " OR ".join(tag_conditions) + ")"
+
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+
+            created_query = base_select + " WHERE date(t.created_at) = ?"
+            created_params: List[Any] = [day_date]
+            created_query = _append_tags_filter(created_query, created_params)
+            created_query += " ORDER BY t.created_at DESC, t.id DESC"
+            cursor.execute(created_query, created_params)
+            created_this_day = [dict(row) for row in cursor.fetchall()]
+
+            completed_query = base_select + " WHERE t.is_completed = 1 AND t.completed_at IS NOT NULL AND date(t.completed_at) = ?"
+            completed_params: List[Any] = [day_date]
+            completed_query = _append_tags_filter(completed_query, completed_params)
+            completed_query += " ORDER BY t.completed_at DESC, t.id DESC"
+            cursor.execute(completed_query, completed_params)
+            completed_this_day = [dict(row) for row in cursor.fetchall()]
+
+        return {
+            "created_this_day": created_this_day,
+            "completed_this_day": completed_this_day,
+        }
+
     def get_recent_incomplete_tasks(self, limit: Optional[int] = 20) -> List[Dict[str, Any]]:
         """Fetch latest incomplete tasks globally, newest first."""
         with self.get_connection() as conn:
@@ -1304,7 +1602,7 @@ class DBManager:
             query = '''
                 SELECT
                     t.*,
-                    COALESCE(r.title, CASE WHEN t.day_date IS NOT NULL THEN 'Day Task' ELSE 'Week Task' END) AS record_title,
+                    r.title AS record_title,
                     r.tags AS record_tags,
                     r.created_at AS record_created_at
                 FROM tasks t
@@ -1326,7 +1624,7 @@ class DBManager:
             query = '''
                 SELECT
                     t.*,
-                    COALESCE(r.title, CASE WHEN t.day_date IS NOT NULL THEN 'Day Task' ELSE 'Week Task' END) AS record_title,
+                    r.title AS record_title,
                     r.tags AS record_tags,
                     r.created_at AS record_created_at
                 FROM tasks t
@@ -1365,5 +1663,15 @@ class DBManager:
         """Toggle the completion status of a task."""
         with self.get_connection() as conn:
             cursor = conn.cursor()
-            cursor.execute('UPDATE tasks SET is_completed = ? WHERE id = ?', (1 if is_completed else 0, task_id))
+            if is_completed:
+                completed_at = datetime.now().isoformat(sep=' ', timespec='seconds')
+                cursor.execute(
+                    'UPDATE tasks SET is_completed = 1, completed_at = ? WHERE id = ?',
+                    (completed_at, task_id)
+                )
+            else:
+                cursor.execute(
+                    'UPDATE tasks SET is_completed = 0, completed_at = NULL WHERE id = ?',
+                    (task_id,)
+                )
             conn.commit()

@@ -15,17 +15,17 @@
 import os
 import re
 import shutil
+from datetime import date, timedelta
 from PyQt6.QtWidgets import (QMainWindow, QWidget, QVBoxLayout, 
                              QHBoxLayout, QListWidget, QPushButton, 
                              QLabel, QMessageBox, QListWidgetItem, QComboBox,
                              QTabWidget, QSplitter, QApplication, QStyle, QLineEdit, QTabBar,
-                             QCalendarWidget, QCheckBox, QFileDialog, QMenu, QProgressBar)
+                             QCalendarWidget, QCheckBox, QFileDialog, QMenu, QProgressBar, QDialog)
 from PyQt6.QtCore import Qt, QSettings, QUrl, QDate, QTimer
 from PyQt6.QtGui import QAction, QIcon, QDesktopServices, QTextCharFormat, QColor, QCursor
 
 from src.database import DBManager
 from src.notebook_database import NotebookDBManager
-from src.audio import Recorder
 from src.worker import SearchThread
 from src.ui.dialogs import SettingsWidget, SpeakerDialog
 from src.ui.welcome_widget import WelcomeWidget
@@ -36,7 +36,7 @@ from src.ui.chat_widget import ChatWidget
 from src.ui.collection_widget import CollectionWidget
 from src.ui.calendar_widget import CalendarWidget
 from src.ui.styles import LIST_WIDGET_STYLE, NEW_CHAT_BUTTON_STYLE, apply_theme
-from src.ui.components import RecordingListItemWidget, SummaryListItemWidget
+from src.ui.components import RecordingListItemWidget, SummaryListItemWidget, SidebarTaskCompactWidget
 
 from src.ui.batch_process_widget import BatchProcessWidget
 from src.ui.summary_viewer import SummaryViewerWidget
@@ -48,7 +48,9 @@ from src.ui.maintenance_widget import MaintenanceWidget
 from src.ui.tools_widget import ToolsWidget
 from src.ui.summary_task_queue import SummaryTaskQueueManager
 from src.ui.queue_management_widget import QueueManagementWidget
-from src.ui.tasks_list_widget import TasksListWidget
+from src.ui.tasks_list_widget import TasksListWidget, TaskEditDialog
+
+Recorder = None
 
 class MainWindow(QMainWindow):
     def __init__(self):
@@ -61,6 +63,10 @@ class MainWindow(QMainWindow):
 
         self.db = DBManager()
         self.notebook_db = NotebookDBManager()
+        global Recorder
+        if Recorder is None:
+            from src.audio import Recorder as _Recorder
+            Recorder = _Recorder
         self.recorder = Recorder()
         # We can connect global recorder signals here if needed, 
         # but RecordingWidget handles its own UI updates.
@@ -74,6 +80,10 @@ class MainWindow(QMainWindow):
         self._sidebar_refresh_timer = QTimer(self)
         self._sidebar_refresh_timer.setSingleShot(True)
         self._sidebar_refresh_timer.timeout.connect(self._apply_pending_sidebar_reload)
+        self._right_sidebar_sections = {}
+        self._active_right_section = None
+        self._right_sidebar_layout = None
+        self._right_sidebar_bottom_spacer_index = None
         
         apply_theme()
         
@@ -85,10 +95,65 @@ class MainWindow(QMainWindow):
         self.load_notebooks()
         self._setup_task_status_bar()
         self._connect_task_queue_signals()
+        self._enqueue_missing_previous_week_summary_if_enabled()
+        self._enqueue_missing_previous_daily_summary_if_enabled()
         
         # Show Welcome Tab
         self.show_welcome_screen()
         logging.info("MainWindow initialized.")
+
+    def _enqueue_missing_previous_week_summary_if_enabled(self):
+        settings = QSettings("Hectronic", "Secretario")
+        if not settings.value("startup_enqueue_last_weekly_summary", False, type=bool):
+            return
+
+        today = date.today()
+        current_week_monday = today - timedelta(days=today.weekday())
+        previous_week_monday = current_week_monday - timedelta(days=7)
+        previous_week_sunday = previous_week_monday + timedelta(days=6)
+        week_sunday_str = previous_week_sunday.isoformat()
+
+        existing = self.db.get_weekly_summary(week_sunday_str, tags_filter=None)
+        if existing:
+            return
+
+        start_str = previous_week_monday.isoformat()
+        end_str = previous_week_sunday.isoformat()
+        records = self.db.fetch_by_date_range(start_str, end_str, tags=None, favorites_only=False)
+        if not records:
+            return
+
+        full_text = ""
+        for rec in records:
+            title = rec.get("title") or "Untitled"
+            created_at = rec.get("created_at") or ""
+            composed = self.db.compose_ai_text(rec.get("transcription"), rec.get("recording_notes"))
+            if not composed.strip():
+                continue
+            full_text += f"\n\n--- Recording: {title} ({created_at}) ---\n"
+            full_text += composed
+
+        if not full_text.strip():
+            return
+
+        self.summary_task_queue.enqueue_weekly_summary(week_sunday_str, full_text, "")
+
+    def _enqueue_missing_previous_daily_summary_if_enabled(self):
+        settings = QSettings("Hectronic", "Secretario")
+        if not settings.value("startup_enqueue_previous_daily_summary", False, type=bool):
+            return
+
+        today_str = date.today().isoformat()
+        target_day = self.db.get_latest_recording_day_without_daily_summary(today_str, tags_filter=None)
+        if not target_day:
+            return
+
+        self.summary_task_queue.enqueue_daily_summary(
+            {
+                "date": target_day,
+                "tags_filter": "",
+            }
+        )
 
     def _setup_task_status_bar(self):
         status = self.statusBar()
@@ -174,7 +239,7 @@ class MainWindow(QMainWindow):
                     widget = self.central_tabs.widget(i)
                     try:
                         if isinstance(widget, RecordingWidget) and widget.current_record_id == record_id:
-                            widget.on_ai_finished("summary", task.get("result", ""))
+                            widget.refresh_from_background_queue(include_summary=True)
                     except (RuntimeError, AttributeError):
                         continue # Widget might have been deleted
                 self.request_sidebar_reload(include_history=True)
@@ -186,7 +251,7 @@ class MainWindow(QMainWindow):
                     widget = self.central_tabs.widget(i)
                     try:
                         if isinstance(widget, RecordingWidget) and widget.current_record_id == record_id:
-                            widget.on_ai_finished("task_extraction", "")
+                            widget.refresh_from_background_queue(include_tasks=True)
                     except (RuntimeError, AttributeError):
                         continue
                 # Also update CalendarWidget if open to show new tasks in daily view
@@ -320,22 +385,22 @@ class MainWindow(QMainWindow):
         self.prev_week_btn.setProperty("class", "calendar-nav-btn")
         self.prev_week_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self.prev_week_btn.setMinimumHeight(34)
+
+        self.reset_date_btn = QPushButton("all")
+        self.reset_date_btn.clicked.connect(self.reset_date_filter)
+        self.reset_date_btn.setProperty("class", "calendar-nav-btn")
+        self.reset_date_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.reset_date_btn.setMinimumHeight(34)
+
         self.next_week_btn = QPushButton("Next Week >>")
         self.next_week_btn.clicked.connect(self.next_week_sidebar)
         self.next_week_btn.setProperty("class", "calendar-nav-btn")
         self.next_week_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self.next_week_btn.setMinimumHeight(34)
         nav_layout.addWidget(self.prev_week_btn)
+        nav_layout.addWidget(self.reset_date_btn)
         nav_layout.addWidget(self.next_week_btn)
         left_layout.addLayout(nav_layout)
-
-        # Reset Date Filter Button
-        self.reset_date_btn = QPushButton("Show All Dates")
-        self.reset_date_btn.clicked.connect(self.reset_date_filter)
-        self.reset_date_btn.setProperty("class", "calendar-nav-btn")
-        self.reset_date_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.reset_date_btn.setMinimumHeight(34)
-        left_layout.addWidget(self.reset_date_btn)
         
         # Initialize date filter state
         self.current_date_filter = None # Single date (string) or None for week/all
@@ -396,41 +461,72 @@ class MainWindow(QMainWindow):
         self.central_tabs.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.central_tabs.customContextMenuRequested.connect(self.show_tab_context_menu)
         self.splitter.addWidget(self.central_tabs)
-        # --- Right Panel: Tasks, Chat History & Notebooks ---
+        # --- Right Panel: Accordion (Tasks, Chat History, Notebooks, Tags) ---
         right_panel = QWidget()
         right_layout = QVBoxLayout(right_panel)
+        self._right_sidebar_layout = right_layout
         right_panel.setMinimumWidth(300)
         right_layout.setContentsMargins(5, 5, 5, 5)
-        right_layout.setSpacing(10) # Small spacing between the 3 main blocks
+        right_layout.setSpacing(8)
         
-        # Helper to create section
-        def create_section(title, list_widget, button=None):
+        def create_section(section_key, title, list_widget=None, button=None):
             container = QWidget()
-            layout = QVBoxLayout(container)
-            layout.setContentsMargins(0, 0, 0, 0)
-            layout.setSpacing(0)
-            
-            lbl = QLabel(title)
-            lbl.setStyleSheet("font-weight: bold; font-size: 16px; color: #2196F3; margin: 0; padding: 5px 0px 5px 0px;")
-            layout.addWidget(lbl)
-            
-            list_widget.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
-            # list_widget.setStyleSheet(LIST_WIDGET_STYLE + "QListWidget { margin: 0; padding: 0; border: 1px solid #444; }")
-            list_widget.setProperty("class", "embedded-list")
-            list_widget.style().unpolish(list_widget)
-            list_widget.style().polish(list_widget)
-            layout.addWidget(list_widget)
+            container_layout = QVBoxLayout(container)
+            container_layout.setContentsMargins(0, 0, 0, 0)
+            container_layout.setSpacing(4)
+
+            header_btn = QPushButton(title)
+            header_btn.setCheckable(True)
+            header_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+            header_btn.setMinimumHeight(36)
+            header_btn.setProperty("class", "accordion-header-btn")
+            header_btn.setStyleSheet("""
+                QPushButton[class="accordion-header-btn"] {
+                    text-align: left;
+                    font-weight: 700;
+                    border: 1px solid #546E7A;
+                    border-radius: 12px;
+                    padding: 8px 12px;
+                    background-color: transparent;
+                }
+                QPushButton[class="accordion-header-btn"]:hover {
+                    background-color: rgba(84, 110, 122, 0.18);
+                }
+                QPushButton[class="accordion-header-btn"]:checked {
+                    background-color: rgba(33, 150, 243, 0.20);
+                    border-color: #2196F3;
+                }
+            """)
+            header_btn.clicked.connect(lambda _checked=False, key=section_key: self._on_right_section_header_clicked(key))
+            container_layout.addWidget(header_btn)
+
+            content_widget = QWidget()
+            content_layout = QVBoxLayout(content_widget)
+            content_layout.setContentsMargins(0, 0, 0, 0)
+            content_layout.setSpacing(6)
+            if list_widget is not None:
+                list_widget.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+                list_widget.setProperty("class", "embedded-list")
+                list_widget.style().unpolish(list_widget)
+                list_widget.style().polish(list_widget)
+                content_layout.addWidget(list_widget)
             
             if button:
-                # Remove custom styling to match left sidebar buttons
-                # button.setStyleSheet("margin-top: 0px; border-top-left-radius: 0; border-top-right-radius: 0;")
-                layout.addWidget(button)
-            
+                content_layout.addWidget(button)
+
+            container_layout.addWidget(content_widget, 1)
+            self._right_sidebar_sections[section_key] = {
+                "title": title,
+                "header": header_btn,
+                "content": content_widget,
+            }
             return container
 
         # 1. Tasks Section
         self.tasks_sidebar_list = QListWidget()
         self.tasks_sidebar_list.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.tasks_sidebar_list.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self.tasks_sidebar_list.customContextMenuRequested.connect(self.show_tasks_sidebar_context_menu)
 
         self.open_tasks_btn = QPushButton("View all")
         self.open_tasks_btn.setProperty("class", "calendar-nav-btn")
@@ -451,8 +547,9 @@ class MainWindow(QMainWindow):
         tasks_buttons_layout.addWidget(self.open_tasks_btn)
         tasks_buttons_layout.addWidget(self.create_task_btn)
 
-        tasks_section = create_section("✅ Tasks", self.tasks_sidebar_list, tasks_buttons)
-        right_layout.addWidget(tasks_section, stretch=1)
+        tasks_section = create_section("tasks", "✅ Tasks", self.tasks_sidebar_list, tasks_buttons)
+        right_layout.addWidget(tasks_section)
+        self._right_sidebar_sections["tasks"]["index"] = right_layout.indexOf(tasks_section)
 
         # 2. Chat History Section
         self.sessions_list = QListWidget()
@@ -465,8 +562,9 @@ class MainWindow(QMainWindow):
         self.delete_chat_session_btn.setMinimumHeight(34)
         self.delete_chat_session_btn.clicked.connect(self.delete_selected_chat_session)
         
-        chat_section = create_section("💬 Chat History", self.sessions_list, self.delete_chat_session_btn)
-        right_layout.addWidget(chat_section, stretch=1)
+        chat_section = create_section("chats", "💬 Chat History", self.sessions_list, self.delete_chat_session_btn)
+        right_layout.addWidget(chat_section)
+        self._right_sidebar_sections["chats"]["index"] = right_layout.indexOf(chat_section)
         
         # 3. Libretas (Notebooks) Section
         self.notebooks_list = QListWidget()
@@ -479,8 +577,40 @@ class MainWindow(QMainWindow):
         self.open_notebooks_btn.setMinimumHeight(34)
         self.open_notebooks_btn.clicked.connect(self.open_notebooks_list)
         
-        nb_section = create_section("📓 Notebooks", self.notebooks_list, self.open_notebooks_btn)
-        right_layout.addWidget(nb_section, stretch=1)
+        nb_section = create_section("notebooks", "📓 Notebooks", self.notebooks_list, self.open_notebooks_btn)
+        right_layout.addWidget(nb_section)
+        self._right_sidebar_sections["notebooks"]["index"] = right_layout.indexOf(nb_section)
+
+        # 4. Tags Section
+        self.collections_list = QListWidget()
+        self.collections_list.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.collections_list.itemClicked.connect(self.on_collection_clicked)
+        tags_section = create_section("tags", "🏷️ Tags", self.collections_list)
+        right_layout.addWidget(tags_section)
+        self._right_sidebar_sections["tags"]["index"] = right_layout.indexOf(tags_section)
+
+        right_layout.addStretch(1)
+        self._right_sidebar_bottom_spacer_index = right_layout.count() - 1
+
+        # Independent bottom section: Settings (outside accordion logic)
+        right_settings_section = QWidget()
+        right_settings_layout = QVBoxLayout(right_settings_section)
+        right_settings_layout.setContentsMargins(0, 6, 0, 0)
+        right_settings_layout.setSpacing(6)
+
+        self.right_settings_label = QLabel("⚙️ Settings")
+        self.right_settings_label.setStyleSheet("font-weight: bold; font-size: 15px; color: #2196F3;")
+        right_settings_layout.addWidget(self.right_settings_label)
+
+        self.right_settings_btn = QPushButton("Open Settings")
+        self.right_settings_btn.setProperty("class", "calendar-nav-btn")
+        self.right_settings_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.right_settings_btn.setMinimumHeight(34)
+        self.right_settings_btn.clicked.connect(self.open_settings_tab)
+        right_settings_layout.addWidget(self.right_settings_btn)
+
+        right_layout.addWidget(right_settings_section)
+        self._set_active_right_section("tasks")
         
         self.splitter.addWidget(right_panel)
 
@@ -504,6 +634,34 @@ class MainWindow(QMainWindow):
         except Exception as e:
             print(f"Failed to init RAG: {e}")
             self.rag = None
+
+    def _on_right_section_header_clicked(self, section_key):
+        if self._active_right_section == section_key:
+            self._set_active_right_section(None)
+        else:
+            self._set_active_right_section(section_key)
+
+    def _set_active_right_section(self, section_key):
+        if section_key is not None and section_key not in self._right_sidebar_sections:
+            return
+
+        self._active_right_section = section_key
+        for key, section in self._right_sidebar_sections.items():
+            is_active = section_key is not None and key == section_key
+            section["header"].blockSignals(True)
+            section["header"].setChecked(is_active)
+            prefix = "▾ " if is_active else "▸ "
+            section["header"].setText(f"{prefix}{section['title']}")
+            section["header"].blockSignals(False)
+            section["content"].setVisible(is_active)
+            idx = section.get("index")
+            if self._right_sidebar_layout is not None and idx is not None:
+                self._right_sidebar_layout.setStretch(idx, 1 if (section_key is not None and is_active) else 0)
+        if self._right_sidebar_layout is not None and self._right_sidebar_bottom_spacer_index is not None:
+            self._right_sidebar_layout.setStretch(
+                self._right_sidebar_bottom_spacer_index,
+                0 if section_key is not None else 1,
+            )
 
     def show_welcome_screen(self):
         self.welcome_widget = WelcomeWidget(self.db)
@@ -558,6 +716,9 @@ class MainWindow(QMainWindow):
         # Set device on recorder
         if config.get("device_index") is not None:
             self.recorder.set_device(config["device_index"])
+            
+        # Set system audio capture flag
+        self.recorder.set_capture_machine_audio(config.get("capture_system_audio", False))
         
         # New Recording Flow with config
         rec_widget = RecordingInProgressWidget(recorder=self.recorder, config=config)
@@ -638,13 +799,24 @@ class MainWindow(QMainWindow):
             filename = os.path.basename(file_path)
             # Use title from config, fallback to filename
             title = config.get("title") or filename
+            recording_notes = config.get("recording_notes", "")
+            pending_tasks = config.get("pending_tasks") or []
             # Create DB entry to get an ID
-            record_id = self.db.save(filename, "", 0.0, title=title)
+            record_id = self.db.save(filename, "", 0.0, title=title, recording_notes=recording_notes)
             
             # Update tags if provided
             tags = config.get("tags", "")
             if tags:
                 self.db.update_tags(record_id, tags)
+
+            # Persist quick tasks captured during recording.
+            for task_content in pending_tasks:
+                clean_task = str(task_content or "").strip()
+                if clean_task:
+                    try:
+                        self.db.save_task(record_id=record_id, content=clean_task, tags=tags or None)
+                    except Exception:
+                        pass
             
             # Refresh sidebar to show new recording with title
             self.request_sidebar_reload(include_tags=True, include_history=True)
@@ -713,6 +885,9 @@ class MainWindow(QMainWindow):
             widget = self.central_tabs.widget(i)
             if isinstance(widget, TasksListWidget):
                 self.central_tabs.setCurrentIndex(i)
+                tag = self.tag_filter_combo.currentText()
+                tags_filter = tag if tag != "All" else None
+                widget.set_global_filters(self.current_week_monday, self.current_date_filter, tags_filter)
                 widget.refresh()
                 if create_new:
                     widget.open_create_dialog()
@@ -721,6 +896,9 @@ class MainWindow(QMainWindow):
         tasks_widget = TasksListWidget(self.db, limit=None)
         tasks_widget.open_recording_requested.connect(self.open_recording_tab)
         tasks_widget.tasks_changed.connect(self.refresh_tasks_sidebar)
+        tag = self.tag_filter_combo.currentText()
+        tags_filter = tag if tag != "All" else None
+        tasks_widget.set_global_filters(self.current_week_monday, self.current_date_filter, tags_filter)
         index = self.central_tabs.addTab(tasks_widget, "✅ Tasks")
         self.central_tabs.setCurrentIndex(index)
         if create_new:
@@ -733,6 +911,10 @@ class MainWindow(QMainWindow):
         if isinstance(widget, WelcomeWidget):
              # Maybe don't allow closing welcome widget?
              return 
+        if isinstance(widget, RecordingInProgressWidget):
+            if getattr(widget, "recording_started", False):
+                widget.finish_recording()
+                return
         if isinstance(widget, RecordingWidget):
              # Check for unsaved changes? 
              # For now, RecordingWidget handles its own cleanup/saving via signals mostly.
@@ -953,8 +1135,15 @@ class MainWindow(QMainWindow):
         self.load_collections()
 
     def load_collections(self):
-        # Collections sidebar section was removed.
-        return
+        if not hasattr(self, "collections_list"):
+            return
+        self.collections_list.clear()
+        tags = self.db.get_all_tags()
+        if not tags:
+            self.collections_list.addItem("No tags.")
+            return
+        for tag in tags:
+            self.collections_list.addItem(tag)
 
     def load_notebooks(self):
         """Load notebooks into the sidebar list."""
@@ -973,6 +1162,8 @@ class MainWindow(QMainWindow):
 
     def on_collection_clicked(self, item):
         tag = item.text()
+        if not tag or tag == "No tags.":
+            return
         self.open_collection_tab(tag)
 
     def open_collection_tab(self, tag):
@@ -1016,7 +1207,7 @@ class MainWindow(QMainWindow):
 
     def on_tag_filter_changed(self, tag):
         self.request_sidebar_reload(include_history=True)
-        self.sync_week_details_tab()
+        self.sync_active_tabs()
 
     def on_tab_selection_sync(self, monday, date_str, tag=None):
         """Update sidebar calendar state when user navigates inside the Week Details tab."""
@@ -1044,6 +1235,7 @@ class MainWindow(QMainWindow):
 
         self.update_calendar_visuals()
         self.request_sidebar_reload(include_tags=True, include_history=True)
+        self.sync_active_tabs()
 
 
 
@@ -1164,16 +1356,29 @@ class MainWindow(QMainWindow):
             return
 
         for task in tasks:
-            title = (task.get("record_title") or "").strip() or f"Recording {task.get('record_id')}"
-            content = (task.get("content") or "").strip()
-            if len(content) > 80:
-                content = content[:77].rstrip() + "..."
-            
-            item = QListWidgetItem(f"[{title}] {content}")
-            item.setFlags(item.flags() | Qt.ItemFlag.ItemIsUserCheckable)
-            item.setCheckState(Qt.CheckState.Unchecked)
+            if isinstance(task.get("record_id"), int):
+                tags = (task.get("record_tags") or task.get("tags") or "").strip()
+            else:
+                tags = (task.get("tags") or task.get("record_tags") or "").strip()
+            content = (task.get("content") or "").strip() or "Untitled task"
+            if len(content) > 72:
+                content = content[:69].rstrip() + "..."
+
+            tag_values = [t.strip() for t in tags.split(",") if t.strip()]
+
+            item = QListWidgetItem()
             item.setData(Qt.ItemDataRole.UserRole, task)
             self.tasks_sidebar_list.addItem(item)
+            widget = SidebarTaskCompactWidget(
+                content,
+                tag_values,
+                task_id=task.get("id"),
+                is_completed=bool(task.get("is_completed")),
+                parent=self.tasks_sidebar_list,
+            )
+            widget.completion_toggled.connect(self._toggle_sidebar_task_completion)
+            item.setSizeHint(widget.sizeHint())
+            self.tasks_sidebar_list.setItemWidget(item, widget)
         
         # Connect signal if not already connected (though it's safer to check)
         try:
@@ -1182,6 +1387,12 @@ class MainWindow(QMainWindow):
             pass
         self.tasks_sidebar_list.itemChanged.connect(self.on_task_sidebar_item_changed)
         self.tasks_sidebar_list.blockSignals(False)
+
+    def _toggle_sidebar_task_completion(self, task_id, is_completed):
+        if not isinstance(task_id, int):
+            return
+        self.db.toggle_task_completion(task_id, bool(is_completed))
+        self.refresh_tasks_sidebar()
 
     def on_task_sidebar_item_changed(self, item):
         task = item.data(Qt.ItemDataRole.UserRole)
@@ -1203,6 +1414,45 @@ class MainWindow(QMainWindow):
         
         # We DON'T refresh immediately here, so the user can see it's checked.
         # It will disappear on next regular refresh.
+
+    def show_tasks_sidebar_context_menu(self, point):
+        item = self.tasks_sidebar_list.itemAt(point)
+        if not item:
+            return
+        task = item.data(Qt.ItemDataRole.UserRole)
+        if not isinstance(task, dict):
+            return
+
+        menu = QMenu(self)
+        is_completed = bool(task.get("is_completed"))
+        complete_action = menu.addAction("Mark as pending" if is_completed else "Mark as completed")
+        edit_action = menu.addAction("Edit")
+        delete_action = menu.addAction("Delete")
+        go_action = menu.addAction("Go to recording")
+        go_action.setEnabled(isinstance(task.get("record_id"), int))
+
+        chosen = menu.exec(self.tasks_sidebar_list.viewport().mapToGlobal(point))
+        if chosen is None:
+            return
+        if chosen == complete_action:
+            self.db.toggle_task_completion(task["id"], not is_completed)
+            self.refresh_tasks_sidebar()
+        elif chosen == edit_action:
+            dialog = TaskEditDialog(self.db, self, title="Edit Task", task_data=task)
+            if dialog.exec() == QDialog.DialogCode.Accepted:
+                self.db.update_task_details(
+                    task["id"],
+                    dialog.get_content(),
+                    dialog.get_notes(),
+                    dialog.get_tags(),
+                )
+                self.refresh_tasks_sidebar()
+        elif chosen == delete_action:
+            if QMessageBox.question(self, "Delete Task", "Delete this task?") == QMessageBox.StandardButton.Yes:
+                self.db.delete_task(task["id"])
+                self.refresh_tasks_sidebar()
+        elif chosen == go_action and isinstance(task.get("record_id"), int):
+            self.open_recording_tab(task["record_id"])
 
     def on_chat_session_clicked(self, item):
         session = item.data(Qt.ItemDataRole.UserRole)
@@ -1243,10 +1493,10 @@ class MainWindow(QMainWindow):
             
         self.update_calendar_visuals()
         self.request_sidebar_reload(include_tags=True, include_history=True)
-        self.sync_week_details_tab()
+        self.sync_active_tabs()
 
-    def sync_week_details_tab(self):
-        """Push current sidebar selection and tags to the Week Details tab if open."""
+    def sync_active_tabs(self):
+        """Push current sidebar selection and tags to active tabs (Calendar, Chat)."""
         tag = self.tag_filter_combo.currentText()
         tags_filter = tag if tag != "All" else None
         
@@ -1254,7 +1504,10 @@ class MainWindow(QMainWindow):
             widget = self.central_tabs.widget(i)
             if isinstance(widget, CalendarWidget):
                 widget.set_selection(self.current_week_monday, self.current_date_filter, tags_filter)
-                break
+            elif isinstance(widget, ChatWidget):
+                widget.update_from_global_selection(self.current_week_monday, self.current_date_filter, tags_filter or "")
+            elif isinstance(widget, TasksListWidget):
+                widget.set_global_filters(self.current_week_monday, self.current_date_filter, tags_filter)
 
     def prev_week_sidebar(self):
         """Move to previous week, showing full week by default (selecting Sunday)."""

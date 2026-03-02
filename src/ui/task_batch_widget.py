@@ -117,10 +117,11 @@ class TaskBatchWidget(QWidget):
         
         count = 0
         for rec in self.pending_records:
+            ai_text = self.db.compose_ai_text(rec.get('transcription', ''), rec.get('recording_notes', ''))
             # enqueue_task_extraction(self, record_id: int, text: str, tags: str)
             success = self.task_queue.enqueue_task_extraction(
                 rec['id'], 
-                rec.get('transcription', ''), 
+                ai_text, 
                 rec.get('tags', '') or '',
                 rec.get('title') or f"Recording {rec['id']}"
             )
