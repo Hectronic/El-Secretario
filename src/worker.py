@@ -22,6 +22,12 @@ import logging
 import multiprocessing as mp
 from importlib.metadata import PackageNotFoundError, version
 from types import SimpleNamespace
+
+# Common resilience flag for Windows to avoid native crashes when multiple 
+# libraries (torch, onnx, ctranslate2) bring conflicting OpenMP DLLs.
+if platform.system() == "Windows":
+    os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
+
 try:
     from pyannote.audio import Pipeline
     PYANNOTE_AVAILABLE = True
@@ -149,11 +155,25 @@ def _log_transcription_runtime_context(
 
 def _subprocess_transcribe_entry(payload: dict, result_queue):
     """Run faster-whisper in an isolated process to contain native crashes."""
+    # Environment tuning for Windows stability.
+    if platform.system() == "Windows":
+        os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
+        # Avoid potential crashes in native libs by limiting thread count if not on GPU.
+        if payload["device"] == "cpu":
+            os.environ["OMP_NUM_THREADS"] = "1"
+            os.environ["MKL_NUM_THREADS"] = "1"
+            # OMP_WAIT_POLICY=PASSIVE can help with some native library instability on Windows.
+            os.environ["OMP_WAIT_POLICY"] = "PASSIVE"
+
     try:
+        # Determine CPU threads for Windows CPU
+        cpu_threads = 1 if (platform.system() == "Windows" and payload["device"] == "cpu") else 4
+        
         model = WhisperModel(
             payload["model_size"],
             device=payload["device"],
             compute_type=payload["compute_type"],
+            cpu_threads=cpu_threads,
         )
         segments, _info = model.transcribe(
             payload["audio_path"],
@@ -234,12 +254,11 @@ class TranscriberThread(QThread):
             self.device = device
             self.compute_type = compute_type
 
-        # Protect Windows from unstable int8 backend combinations that may crash the process.
-        if platform.system() == "Windows" and self.compute_type == "int8":
-            if self.device == "cuda":
-                self.compute_type = "float16"
-            elif self.device == "cpu":
-                self.compute_type = "float32"
+        # Protect Windows from unstable backend combinations that may crash the process.
+        if platform.system() == "Windows" and self.device == "cpu":
+            # int8_float32 is often more stable than pure float32 on Windows CPU
+            # for preventing C0000005 Access Violations in ctranslate2.
+            self.compute_type = "int8_float32"
             
         self.language = language
         self.hf_token = hf_token
@@ -313,7 +332,14 @@ class TranscriberThread(QThread):
                 )
                 _flush_log_handlers()
                 try:
-                    model = WhisperModel(self.model_size, device=self.device, compute_type=self.compute_type)
+                    # Explicitly set cpu_threads=1 on Windows CPU to prevent native crashes.
+                    cpu_threads = 1 if (platform.system() == "Windows" and self.device == "cpu") else 4
+                    model = WhisperModel(
+                        self.model_size, 
+                        device=self.device, 
+                        compute_type=self.compute_type,
+                        cpu_threads=cpu_threads
+                    )
                     logging.info("Whisper checkpoint B: model initialized successfully.")
                     _flush_log_handlers()
                 except RuntimeError as e:

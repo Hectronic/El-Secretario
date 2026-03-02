@@ -54,8 +54,20 @@ class RAGEngine:
             self.client = chromadb.Client(settings=chroma_settings)
             self.is_persistent = False
         
-        # Use default embedding function (all-MiniLM-L6-v2)
-        self.embedding_fn = embedding_functions.DefaultEmbeddingFunction()
+        # Use SentenceTransformer if available, fallback to default.
+        # DefaultEmbeddingFunction (ONNX) can fail to load DLLs on some Windows setups.
+        try:
+            logging.info("Initializing embedding function (SentenceTransformer)...")
+            self.embedding_fn = embedding_functions.SentenceTransformerEmbeddingFunction(
+                model_name="all-MiniLM-L6-v2"
+            )
+        except Exception as e:
+            logging.warning(f"SentenceTransformer init failed, falling back to default: {e}")
+            try:
+                self.embedding_fn = embedding_functions.DefaultEmbeddingFunction()
+            except Exception as e2:
+                logging.error(f"All embedding functions failed to initialize: {e2}")
+                self.embedding_fn = None
         
         # Get or create collection
         self.collection = self.client.get_or_create_collection(
@@ -146,12 +158,20 @@ class RAGEngine:
             sid = str(doc_id)
             if self._safe_delete_mode:
                 # Windows workaround: avoid native rust delete path that can crash the process.
-                self.collection.upsert(
-                    ids=[sid],
-                    documents=[""],
-                    metadatas=[{"id": sid, "deleted": "1"}],
-                )
-                logging.info("RAG soft-delete applied for doc_id=%s (safe_delete_mode)", sid)
+                try:
+                    self.collection.upsert(
+                        ids=[sid],
+                        documents=[""],
+                        metadatas=[{"id": sid, "deleted": "1"}],
+                    )
+                    logging.info("RAG soft-delete applied for doc_id=%s (safe_delete_mode)", sid)
+                except Exception as upsert_error:
+                    logging.warning(
+                        "RAG soft-delete via upsert failed for doc_id=%s: %s. Falling back to direct delete.",
+                        sid, upsert_error
+                    )
+                    self.collection.delete(ids=[sid])
+                    logging.info("RAG hard-delete fallback applied for doc_id=%s", sid)
                 return
 
             self.collection.delete(ids=[sid])
