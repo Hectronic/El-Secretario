@@ -18,6 +18,8 @@ import os
 import platform
 import torch
 import gc
+import logging
+from importlib.metadata import PackageNotFoundError, version
 try:
     from pyannote.audio import Pipeline
     PYANNOTE_AVAILABLE = True
@@ -37,9 +39,15 @@ def get_optimal_device(force_cpu: bool = False, model_size: str = "base"):
     """
     is_windows = platform.system() == "Windows"
 
+    allow_windows_cuda = os.environ.get("EL_SECRETARIO_WINDOWS_CUDA", "").strip().lower() in {"1", "true", "yes"}
+
+    # On Windows, faster-whisper GPU initialization can trigger native access violations
+    # depending on driver/runtime combinations. Default to CPU unless explicitly enabled.
+    if is_windows and not force_cpu and not allow_windows_cuda:
+        return ("cpu", "float32")
+
     if not force_cpu and torch.cuda.is_available():
-        # On Windows, int8 GPU kernels can be unstable with some driver/runtime combos.
-        # Prefer float16 for safety; users can still override manually.
+        # If Windows CUDA is explicitly enabled, keep safer float16 default.
         if is_windows:
             return ("cuda", "float16")
 
@@ -61,6 +69,87 @@ def get_optimal_device(force_cpu: bool = False, model_size: str = "base"):
     if is_windows:
         return ("cpu", "float32")
     return ("cpu", "int8")
+
+
+def _pkg_version(name: str) -> str:
+    try:
+        return version(name)
+    except PackageNotFoundError:
+        return "<not-installed>"
+    except Exception:
+        return "<unknown>"
+
+
+def _flush_log_handlers():
+    root_logger = logging.getLogger()
+    for handler in root_logger.handlers:
+        try:
+            handler.flush()
+        except Exception:
+            pass
+
+
+def _log_transcription_runtime_context(
+    *,
+    audio_path: str,
+    model_size: str,
+    device: str,
+    compute_type: str,
+    force_cpu: bool,
+    enable_diarization: bool,
+    language: str,
+):
+    cuda_available = False
+    cuda_device_count = 0
+    cuda_device_name = "<none>"
+    cuda_total_mem_gb = None
+    cuda_error = None
+
+    try:
+        cuda_available = bool(torch.cuda.is_available())
+        if cuda_available:
+            cuda_device_count = int(torch.cuda.device_count())
+            if cuda_device_count > 0:
+                cuda_device_name = torch.cuda.get_device_name(0)
+                cuda_total_mem_gb = round(
+                    torch.cuda.get_device_properties(0).total_memory / (1024 ** 3), 2
+                )
+    except Exception as e:
+        cuda_error = str(e)
+
+    logging.info(
+        "Transcription runtime context: platform=%s release=%s python=%s torch=%s faster_whisper=%s ctranslate2=%s",
+        platform.system(),
+        platform.release(),
+        platform.python_version(),
+        torch.__version__,
+        _pkg_version("faster-whisper"),
+        _pkg_version("ctranslate2"),
+    )
+    logging.info(
+        "Transcription execution params: audio=%s model=%s device=%s compute_type=%s language=%s diarization=%s force_cpu=%s",
+        audio_path,
+        model_size,
+        device,
+        compute_type,
+        language,
+        enable_diarization,
+        force_cpu,
+    )
+    logging.info(
+        "CUDA context: available=%s device_count=%s device0=%s vram_gb=%s cuda_error=%s",
+        cuda_available,
+        cuda_device_count,
+        cuda_device_name,
+        cuda_total_mem_gb,
+        cuda_error,
+    )
+    logging.info(
+        "Env flags: EL_SECRETARIO_WINDOWS_CUDA=%s CUDA_VISIBLE_DEVICES=%s",
+        os.environ.get("EL_SECRETARIO_WINDOWS_CUDA", "<unset>"),
+        os.environ.get("CUDA_VISIBLE_DEVICES", "<unset>"),
+    )
+    _flush_log_handlers()
 
 
 class TranscriberThread(QThread):
@@ -99,15 +188,32 @@ class TranscriberThread(QThread):
     def run(self):
         try:
             import time
-            import logging
             start_time = time.time()
             
             logging.info(f"Starting transcription for {self.audio_path} (Model: {self.model_size}, Diarization: {self.enable_diarization})")
+            _log_transcription_runtime_context(
+                audio_path=self.audio_path,
+                model_size=self.model_size,
+                device=self.device,
+                compute_type=self.compute_type,
+                force_cpu=self.force_cpu,
+                enable_diarization=self.enable_diarization,
+                language=self.language,
+            )
 
             # Load Whisper model
             self.status_update.emit("Loading model...")
+            logging.info(
+                "Whisper checkpoint A: about to initialize model (model=%s device=%s compute_type=%s)",
+                self.model_size,
+                self.device,
+                self.compute_type,
+            )
+            _flush_log_handlers()
             try:
                 model = WhisperModel(self.model_size, device=self.device, compute_type=self.compute_type)
+                logging.info("Whisper checkpoint B: model initialized successfully.")
+                _flush_log_handlers()
             except RuntimeError as e:
                 if "out of memory" in str(e) and self.device == "cuda":
                     logging.warning("CUDA Out of Memory during model load. Fallback to CPU.")
@@ -115,12 +221,24 @@ class TranscriberThread(QThread):
                     self.device = "cpu"
                     self.compute_type = "float32" if platform.system() == "Windows" else "int8"
                     self.force_cpu = True
+                    logging.info(
+                        "Whisper checkpoint C: retrying model init after OOM (device=%s compute_type=%s)",
+                        self.device,
+                        self.compute_type,
+                    )
+                    _flush_log_handlers()
                     model = WhisperModel(self.model_size, device=self.device, compute_type=self.compute_type)
+                    logging.info("Whisper checkpoint D: model initialized after OOM fallback.")
+                    _flush_log_handlers()
                 else:
                     raise e
             
             self.status_update.emit("Transcribing...")
+            logging.info("Whisper checkpoint E: starting model.transcribe(...)")
+            _flush_log_handlers()
             segments, info = model.transcribe(self.audio_path, beam_size=5, language=self.language)
+            logging.info("Whisper checkpoint F: model.transcribe(...) returned successfully.")
+            _flush_log_handlers()
             
             whisper_segments = []
             for segment in segments:
