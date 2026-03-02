@@ -276,7 +276,7 @@ class SummaryTaskQueueManager(QObject):
                 settings = QSettings("Hectronic", "Secretario")
                 hf_token = settings.value("hf_token", "")
                 force_cpu = settings.value("force_cpu", False, type=bool)
-                compute_type = settings.value("compute_type", "int8")
+                compute_type = settings.value("compute_type", "auto")
                 if compute_type == "auto": compute_type = None
                 
                 # Get duration

@@ -111,11 +111,7 @@ class MainWindow(QMainWindow):
             value = settings.value(key)
             key_l = str(key).lower()
             if any(token in key_l for token in ("token", "password", "secret", "apikey", "api_key")):
-                value_text = str(value or "")
-                if value_text:
-                    snapshot[key] = f"<masked len={len(value_text)}>"
-                else:
-                    snapshot[key] = "<empty>"
+                snapshot[key] = "***"
             else:
                 snapshot[key] = value
         logging.info("User settings snapshot [%s]: %s", context, snapshot)

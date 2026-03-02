@@ -15,6 +15,7 @@
 from PyQt6.QtCore import QThread, pyqtSignal
 from faster_whisper import WhisperModel
 import os
+import platform
 import torch
 import gc
 try:
@@ -34,7 +35,14 @@ def get_optimal_device(force_cpu: bool = False, model_size: str = "base"):
     Returns:
         tuple: (device, compute_type) - e.g., ("cuda", "int8") or ("cpu", "int8")
     """
+    is_windows = platform.system() == "Windows"
+
     if not force_cpu and torch.cuda.is_available():
+        # On Windows, int8 GPU kernels can be unstable with some driver/runtime combos.
+        # Prefer float16 for safety; users can still override manually.
+        if is_windows:
+            return ("cuda", "float16")
+
         # Get available GPU memory
         try:
             gpu_mem_gb = torch.cuda.get_device_properties(0).total_memory / (1024**3)
@@ -49,6 +57,9 @@ def get_optimal_device(force_cpu: bool = False, model_size: str = "base"):
             pass
         # Default: use int8 for safety on most consumer GPUs
         return ("cuda", "int8")
+    # On Windows, prefer float32 on CPU to avoid rare int8 runtime crashes.
+    if is_windows:
+        return ("cpu", "float32")
     return ("cpu", "int8")
 
 
@@ -72,6 +83,13 @@ class TranscriberThread(QThread):
         else:
             self.device = device
             self.compute_type = compute_type
+
+        # Protect Windows from unstable int8 backend combinations that may crash the process.
+        if platform.system() == "Windows" and self.compute_type == "int8":
+            if self.device == "cuda":
+                self.compute_type = "float16"
+            elif self.device == "cpu":
+                self.compute_type = "float32"
             
         self.language = language
         self.hf_token = hf_token
@@ -95,7 +113,7 @@ class TranscriberThread(QThread):
                     logging.warning("CUDA Out of Memory during model load. Fallback to CPU.")
                     self.status_update.emit("CUDA OOM detected. Falling back to CPU...")
                     self.device = "cpu"
-                    self.compute_type = "int8"
+                    self.compute_type = "float32" if platform.system() == "Windows" else "int8"
                     self.force_cpu = True
                     model = WhisperModel(self.model_size, device=self.device, compute_type=self.compute_type)
                 else:
