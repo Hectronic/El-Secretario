@@ -1659,6 +1659,7 @@ class MainWindow(QMainWindow):
                                    "Are you sure you want to delete this recording? This cannot be undone.",
                                    QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
         if reply == QMessageBox.StandardButton.Yes:
+            logging.info("delete_recording requested for record_id=%s", record_id)
             filename = self.db.delete(record_id)
             
             # Delete file
@@ -1673,6 +1674,7 @@ class MainWindow(QMainWindow):
             # Delete from RAG
             if self.rag:
                 try:
+                    logging.info("delete_recording: deleting record_id=%s from RAG", record_id)
                     self.rag.delete_document(str(record_id))
                 except Exception as e:
                     print(f"Error deleting from RAG: {e}")

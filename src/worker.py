@@ -19,7 +19,9 @@ import platform
 import torch
 import gc
 import logging
+import multiprocessing as mp
 from importlib.metadata import PackageNotFoundError, version
+from types import SimpleNamespace
 try:
     from pyannote.audio import Pipeline
     PYANNOTE_AVAILABLE = True
@@ -39,15 +41,8 @@ def get_optimal_device(force_cpu: bool = False, model_size: str = "base"):
     """
     is_windows = platform.system() == "Windows"
 
-    allow_windows_cuda = os.environ.get("EL_SECRETARIO_WINDOWS_CUDA", "").strip().lower() in {"1", "true", "yes"}
-
-    # On Windows, faster-whisper GPU initialization can trigger native access violations
-    # depending on driver/runtime combinations. Default to CPU unless explicitly enabled.
-    if is_windows and not force_cpu and not allow_windows_cuda:
-        return ("cpu", "float32")
-
     if not force_cpu and torch.cuda.is_available():
-        # If Windows CUDA is explicitly enabled, keep safer float16 default.
+        # On Windows keep float16 default for CUDA.
         if is_windows:
             return ("cuda", "float16")
 
@@ -152,6 +147,72 @@ def _log_transcription_runtime_context(
     _flush_log_handlers()
 
 
+def _subprocess_transcribe_entry(payload: dict, result_queue):
+    """Run faster-whisper in an isolated process to contain native crashes."""
+    try:
+        model = WhisperModel(
+            payload["model_size"],
+            device=payload["device"],
+            compute_type=payload["compute_type"],
+        )
+        segments, _info = model.transcribe(
+            payload["audio_path"],
+            beam_size=payload.get("beam_size", 5),
+            language=payload.get("language"),
+        )
+        serialized_segments = [
+            {"start": float(s.start), "end": float(s.end), "text": str(s.text)}
+            for s in segments
+        ]
+        result_queue.put({"ok": True, "segments": serialized_segments})
+    except Exception as e:
+        result_queue.put({"ok": False, "error": str(e)})
+
+
+def _run_transcription_in_subprocess(
+    *,
+    audio_path: str,
+    model_size: str,
+    device: str,
+    compute_type: str,
+    language: str,
+    timeout_seconds: int = 1800,
+):
+    ctx = mp.get_context("spawn")
+    result_queue = ctx.Queue()
+    payload = {
+        "audio_path": audio_path,
+        "model_size": model_size,
+        "device": device,
+        "compute_type": compute_type,
+        "language": language,
+        "beam_size": 5,
+    }
+    proc = ctx.Process(target=_subprocess_transcribe_entry, args=(payload, result_queue), daemon=True)
+    proc.start()
+    proc.join(timeout=timeout_seconds)
+
+    if proc.is_alive():
+        proc.terminate()
+        proc.join(timeout=5)
+        raise RuntimeError("Transcription subprocess timed out.")
+
+    if proc.exitcode != 0:
+        raise RuntimeError(
+            f"Transcription subprocess crashed with exit code {proc.exitcode} "
+            f"(possible native crash in faster-whisper/ctranslate2)."
+        )
+
+    if result_queue.empty():
+        raise RuntimeError("Transcription subprocess finished without returning a result.")
+
+    result = result_queue.get()
+    if not result.get("ok"):
+        raise RuntimeError(result.get("error") or "Unknown subprocess transcription error.")
+
+    return result["segments"]
+
+
 class TranscriberThread(QThread):
     finished = pyqtSignal(dict) # Changed to emit dict with text and stats
     progress = pyqtSignal(int)
@@ -201,58 +262,110 @@ class TranscriberThread(QThread):
                 language=self.language,
             )
 
-            # Load Whisper model
-            self.status_update.emit("Loading model...")
-            logging.info(
-                "Whisper checkpoint A: about to initialize model (model=%s device=%s compute_type=%s)",
-                self.model_size,
-                self.device,
-                self.compute_type,
-            )
-            _flush_log_handlers()
-            try:
-                model = WhisperModel(self.model_size, device=self.device, compute_type=self.compute_type)
-                logging.info("Whisper checkpoint B: model initialized successfully.")
+            # On Windows, run faster-whisper in an isolated subprocess to avoid
+            # bringing down the whole app if native libraries crash.
+            use_subprocess_isolation = platform.system() == "Windows"
+            if use_subprocess_isolation:
+                self.status_update.emit("Loading model...")
+                logging.info(
+                    "Whisper checkpoint W1: subprocess isolation enabled (model=%s device=%s compute_type=%s)",
+                    self.model_size,
+                    self.device,
+                    self.compute_type,
+                )
                 _flush_log_handlers()
-            except RuntimeError as e:
-                if "out of memory" in str(e) and self.device == "cuda":
-                    logging.warning("CUDA Out of Memory during model load. Fallback to CPU.")
-                    self.status_update.emit("CUDA OOM detected. Falling back to CPU...")
-                    self.device = "cpu"
-                    self.compute_type = "float32" if platform.system() == "Windows" else "int8"
-                    self.force_cpu = True
-                    logging.info(
-                        "Whisper checkpoint C: retrying model init after OOM (device=%s compute_type=%s)",
-                        self.device,
-                        self.compute_type,
+                try:
+                    serialized_segments = _run_transcription_in_subprocess(
+                        audio_path=self.audio_path,
+                        model_size=self.model_size,
+                        device=self.device,
+                        compute_type=self.compute_type,
+                        language=self.language,
                     )
-                    _flush_log_handlers()
+                except RuntimeError as e:
+                    if self.device == "cuda":
+                        logging.warning("Whisper subprocess failed on CUDA. Falling back to CPU. Error: %s", e)
+                        self.status_update.emit("Whisper failed on GPU. Falling back to CPU...")
+                        self.device = "cpu"
+                        self.compute_type = "float32" if platform.system() == "Windows" else "int8"
+                        self.force_cpu = True
+                        _flush_log_handlers()
+                        serialized_segments = _run_transcription_in_subprocess(
+                            audio_path=self.audio_path,
+                            model_size=self.model_size,
+                            device=self.device,
+                            compute_type=self.compute_type,
+                            language=self.language,
+                        )
+                    else:
+                        raise
+                whisper_segments = [SimpleNamespace(**s) for s in serialized_segments]
+                logging.info("Whisper checkpoint W2: subprocess transcription completed.")
+                _flush_log_handlers()
+            else:
+                # Load Whisper model
+                self.status_update.emit("Loading model...")
+                logging.info(
+                    "Whisper checkpoint A: about to initialize model (model=%s device=%s compute_type=%s)",
+                    self.model_size,
+                    self.device,
+                    self.compute_type,
+                )
+                _flush_log_handlers()
+                try:
                     model = WhisperModel(self.model_size, device=self.device, compute_type=self.compute_type)
-                    logging.info("Whisper checkpoint D: model initialized after OOM fallback.")
+                    logging.info("Whisper checkpoint B: model initialized successfully.")
                     _flush_log_handlers()
-                else:
-                    raise e
+                except RuntimeError as e:
+                    if "out of memory" in str(e) and self.device == "cuda":
+                        logging.warning("CUDA Out of Memory during model load. Fallback to CPU.")
+                        self.status_update.emit("CUDA OOM detected. Falling back to CPU...")
+                        self.device = "cpu"
+                        self.compute_type = "float32" if platform.system() == "Windows" else "int8"
+                        self.force_cpu = True
+                        logging.info(
+                            "Whisper checkpoint C: retrying model init after OOM (device=%s compute_type=%s)",
+                            self.device,
+                            self.compute_type,
+                        )
+                        _flush_log_handlers()
+                        model = WhisperModel(self.model_size, device=self.device, compute_type=self.compute_type)
+                        logging.info("Whisper checkpoint D: model initialized after OOM fallback.")
+                        _flush_log_handlers()
+                    else:
+                        raise e
+                
+                self.status_update.emit("Transcribing...")
+                logging.info("Whisper checkpoint E: starting model.transcribe(...)")
+                _flush_log_handlers()
+                segments, info = model.transcribe(self.audio_path, beam_size=5, language=self.language)
+                logging.info("Whisper checkpoint F: model.transcribe(...) returned successfully.")
+                _flush_log_handlers()
+                whisper_segments = []
+                for segment in segments:
+                    if self.isInterruptionRequested():
+                        self.status_update.emit("Cancelled.")
+                        return
+                    whisper_segments.append(segment)
+                    if self.total_duration > 0:
+                        prog = int((segment.end / self.total_duration) * 100)
+                        # If diarization is enabled, cap transcription progress at 80%
+                        if self.enable_diarization:
+                            prog = int(prog * 0.8)
+                        self.progress.emit(min(prog, 100))
             
-            self.status_update.emit("Transcribing...")
-            logging.info("Whisper checkpoint E: starting model.transcribe(...)")
-            _flush_log_handlers()
-            segments, info = model.transcribe(self.audio_path, beam_size=5, language=self.language)
-            logging.info("Whisper checkpoint F: model.transcribe(...) returned successfully.")
-            _flush_log_handlers()
-            
-            whisper_segments = []
-            for segment in segments:
-                if self.isInterruptionRequested():
-                    self.status_update.emit("Cancelled.")
-                    return
-                whisper_segments.append(segment)
-                if self.total_duration > 0:
-                    prog = int((segment.end / self.total_duration) * 100)
-                    # If diarization is enabled, cap transcription progress at 80%
-                    if self.enable_diarization:
-                        prog = int(prog * 0.8)
-                    self.progress.emit(min(prog, 100))
-            
+            if use_subprocess_isolation:
+                self.status_update.emit("Transcribing...")
+                for segment in whisper_segments:
+                    if self.isInterruptionRequested():
+                        self.status_update.emit("Cancelled.")
+                        return
+                    if self.total_duration > 0:
+                        prog = int((segment.end / self.total_duration) * 100)
+                        if self.enable_diarization:
+                            prog = int(prog * 0.8)
+                        self.progress.emit(min(prog, 100))
+
             transcription = ""
 
             # Run Diarization if token is present, library available, AND enabled

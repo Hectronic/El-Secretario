@@ -12,24 +12,46 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-import chromadb
-from chromadb.utils import embedding_functions
 import os
+import platform
+import logging
 from typing import List, Dict, Any, Optional
+
+# Reduce odds of PostHog/background telemetry crashes in desktop environments.
+os.environ.setdefault("ANONYMIZED_TELEMETRY", "False")
+os.environ.setdefault("POSTHOG_DISABLED", "1")
+
+import chromadb
+from chromadb.config import Settings
+from chromadb.utils import embedding_functions
 
 class RAGEngine:
     def __init__(self, persist_directory: str = "chroma_db"):
-        import logging
         self.persist_directory = persist_directory
+        self._is_windows = platform.system() == "Windows"
+        # Enable safe delete by default on Windows due to native crashes in chroma rust delete path.
+        self._safe_delete_mode = (
+            self._is_windows
+            and os.environ.get("EL_SECRETARIO_CHROMA_SAFE_DELETE", "1").strip().lower() in {"1", "true", "yes"}
+        )
         os.makedirs(self.persist_directory, exist_ok=True)
+        chroma_settings = Settings(anonymized_telemetry=False)
+
+        logging.info(
+            "Initializing RAGEngine: persist_dir=%s windows=%s safe_delete_mode=%s telemetry_disabled=%s",
+            self.persist_directory,
+            self._is_windows,
+            self._safe_delete_mode,
+            True,
+        )
         # Initialize ChromaDB client. Fall back to in-memory client when
         # persistence is unavailable in the current environment.
         try:
-            self.client = chromadb.PersistentClient(path=persist_directory)
+            self.client = chromadb.PersistentClient(path=persist_directory, settings=chroma_settings)
             self.is_persistent = True
         except Exception as e:
             logging.warning(f"Persistent Chroma init failed, using in-memory fallback: {e}")
-            self.client = chromadb.Client()
+            self.client = chromadb.Client(settings=chroma_settings)
             self.is_persistent = False
         
         # Use default embedding function (all-MiniLM-L6-v2)
@@ -55,6 +77,7 @@ class RAGEngine:
         if metadata is None:
             metadata = {}
         metadata['id'] = str(doc_id)
+        metadata['deleted'] = "0"
 
         # ChromaDB upsert handles both add and update
         self.collection.upsert(
@@ -87,9 +110,12 @@ class RAGEngine:
             else:
                 final_where["id"] = {"$in": ids}
                 
-        # If no filters, set to None
-        if not final_where:
-            final_where = None
+        # Always ignore soft-deleted documents.
+        deleted_filter = {"deleted": {"$ne": "1"}}
+        if final_where:
+            final_where = {"$and": [final_where, deleted_filter]}
+        else:
+            final_where = deleted_filter
 
         results = self.collection.query(
             query_texts=[query],
@@ -101,10 +127,13 @@ class RAGEngine:
         parsed_results = []
         if results['ids']:
             for i in range(len(results['ids'][0])):
+                metadata = results['metadatas'][0][i] if results['metadatas'] else {}
+                if str((metadata or {}).get("deleted", "0")) == "1":
+                    continue
                 parsed_results.append({
                     'id': results['ids'][0][i],
                     'text': results['documents'][0][i],
-                    'metadata': results['metadatas'][0][i] if results['metadatas'] else {},
+                    'metadata': metadata,
                     'distance': results['distances'][0][i] if results['distances'] else 0.0
                 })
                 
@@ -114,6 +143,18 @@ class RAGEngine:
     def delete_document(self, doc_id: str) -> None:
         """Delete a document by ID."""
         try:
-            self.collection.delete(ids=[str(doc_id)])
+            sid = str(doc_id)
+            if self._safe_delete_mode:
+                # Windows workaround: avoid native rust delete path that can crash the process.
+                self.collection.upsert(
+                    ids=[sid],
+                    documents=[""],
+                    metadatas=[{"id": sid, "deleted": "1"}],
+                )
+                logging.info("RAG soft-delete applied for doc_id=%s (safe_delete_mode)", sid)
+                return
+
+            self.collection.delete(ids=[sid])
+            logging.info("RAG hard-delete applied for doc_id=%s", sid)
         except Exception as e:
-            print(f"Error deleting document {doc_id}: {e}")
+            logging.error("Error deleting document %s: %s", doc_id, e, exc_info=True)
