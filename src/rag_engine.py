@@ -65,9 +65,13 @@ class RAGEngine:
             logging.warning(f"SentenceTransformer init failed, falling back to default: {e}")
             try:
                 self.embedding_fn = embedding_functions.DefaultEmbeddingFunction()
+                logging.info("Fallback: Using DefaultEmbeddingFunction (ONNX).")
             except Exception as e2:
                 logging.error(f"All embedding functions failed to initialize: {e2}")
                 self.embedding_fn = None
+        
+        logging.info("RAG Engine embedding function initialized: %s", 
+                     type(self.embedding_fn).__name__ if self.embedding_fn else "None")
         
         # Get or create collection
         self.collection = self.client.get_or_create_collection(
