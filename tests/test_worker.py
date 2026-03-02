@@ -101,6 +101,32 @@ class TestTranscriberThread(unittest.TestCase):
         self.assertEqual(device, "cuda")
         self.assertEqual(compute_type, "int8")
 
+    @patch('src.worker.platform.system', return_value="Windows")
+    @patch('src.worker.torch.cuda.is_available', return_value=True)
+    def test_get_optimal_device_windows_cuda_prefers_float16(self, _mock_cuda, _mock_system):
+        from src.worker import get_optimal_device
+
+        device, compute_type = get_optimal_device(force_cpu=False, model_size="large-v3")
+        self.assertEqual(device, "cuda")
+        self.assertEqual(compute_type, "float16")
+
+    @patch('src.worker.platform.system', return_value="Windows")
+    @patch('src.worker.torch.cuda.is_available', return_value=False)
+    def test_get_optimal_device_windows_cpu_prefers_float32(self, _mock_cuda, _mock_system):
+        from src.worker import get_optimal_device
+
+        device, compute_type = get_optimal_device(force_cpu=False, model_size="base")
+        self.assertEqual(device, "cpu")
+        self.assertEqual(compute_type, "float32")
+
+    @patch('src.worker.platform.system', return_value="Windows")
+    def test_windows_remaps_int8_compute_type_in_thread_init(self, _mock_system):
+        thread_cuda = TranscriberThread("test.wav", device="cuda", compute_type="int8")
+        self.assertEqual(thread_cuda.compute_type, "float16")
+
+        thread_cpu = TranscriberThread("test.wav", device="cpu", compute_type="int8")
+        self.assertEqual(thread_cpu.compute_type, "float32")
+
 
 class TestSearchAndChatThreads(unittest.TestCase):
     def test_search_thread_success(self):

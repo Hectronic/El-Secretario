@@ -302,7 +302,7 @@ class RecordingWidget(QWidget):
         hf_token = settings.value("hf_token", "")
         enable_diarization = self.diarization_check.isChecked()
         force_cpu = settings.value("force_cpu", False, type=bool)
-        compute_type = settings.value("compute_type", "int8")
+        compute_type = settings.value("compute_type", "auto")
         if compute_type == "auto": compute_type = None
         duration = 0
         try:

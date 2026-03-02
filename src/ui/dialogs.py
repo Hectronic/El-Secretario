@@ -412,7 +412,7 @@ class AudioSettingsPanel(QWidget):
         lbl_compute.setStyleSheet("font-weight: bold;")
         self.compute_combo = QComboBox()
         self.compute_combo.addItems(["auto", "int8", "int8_float16", "float16", "float32"])
-        self.compute_combo.setCurrentText(self.settings.value("compute_type", "int8"))
+        self.compute_combo.setCurrentText(self.settings.value("compute_type", "auto"))
         self.compute_combo.setToolTip(
             "int8: Best for GPUs with limited VRAM (6-8GB), fastest\n"
             "int8_float16: Hybrid precision, good balance\n"
