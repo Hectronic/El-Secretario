@@ -115,7 +115,13 @@ class WelcomeWidget(QWidget):
 
         # Logo
         logo_label = QLabel()
-        logo_path = os.path.join(os.getcwd(), "logo.png")
+        # Robust logo path for PyInstaller or local dev
+        import sys
+        def get_resource_path(relative_path):
+            base_path = getattr(sys, '_MEIPASS', os.getcwd())
+            return os.path.join(base_path, relative_path)
+        
+        logo_path = get_resource_path("logo.png")
         if os.path.exists(logo_path):
             pixmap = QPixmap(logo_path)
             # Scale if too big, e.g., max height 150

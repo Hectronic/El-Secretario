@@ -17,7 +17,24 @@ import os
 os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
 os.environ["ANONYMIZED_TELEMETRY"] = "False"
 import sys
+
+def resource_path(relative_path):
+    """ Get absolute path to resource, works for dev and for PyInstaller """
+    try:
+        # PyInstaller creates a temp folder and stores path in _MEIPASS
+        base_path = sys._MEIPASS
+    except Exception:
+        base_path = os.path.abspath(".")
+    return os.path.join(base_path, relative_path)
+
+# Automatically add bundled FFmpeg binaries to path if they exist
+if getattr(sys, 'frozen', False):
+    ffmpeg_bin = resource_path("bin")
+    if os.path.exists(ffmpeg_bin):
+        os.environ["PATH"] += os.pathsep + ffmpeg_bin
+
 from PyQt6.QtWidgets import QApplication
+from PyQt6.QtGui import QIcon
 from src.ui.main_window import MainWindow
 from src.logging_config import setup_logging
 import logging
@@ -26,6 +43,11 @@ if __name__ == "__main__":
     setup_logging()
     logging.info("Application starting...")
     app = QApplication(sys.argv)
+    
+    # Use the helper to find the icon
+    app_icon = QIcon(resource_path("logo.png"))
+    app.setWindowIcon(app_icon)
+    
     window = MainWindow()
     window.show()
     exit_code = app.exec()
