@@ -211,6 +211,8 @@ class TestDBManager(unittest.TestCase):
         legacy_db = "test_legacy_db.sqlite"
         migrated = None
         try:
+            if os.path.exists(legacy_db):
+                os.remove(legacy_db)
             with sqlite3.connect(legacy_db) as conn:
                 c = conn.cursor()
                 c.execute('''
