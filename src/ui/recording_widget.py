@@ -14,6 +14,7 @@
 
 import os
 import re
+import logging
 import soundfile as sf
 from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QTextEdit, 
                              QPushButton, QLabel, QComboBox, QFormLayout, 
@@ -303,29 +304,55 @@ class RecordingWidget(QWidget):
         enable_diarization = self.diarization_check.isChecked()
         force_cpu = settings.value("force_cpu", False, type=bool)
         compute_type = settings.value("compute_type", "auto")
+        transcription_backend = settings.value("transcription_backend", "auto")
         if compute_type == "auto": compute_type = None
         duration = 0
         try:
             f = sf.SoundFile(audio_path)
             duration = len(f) / f.samplerate
         except: pass
-        self.transcriber_thread = TranscriberThread(audio_path, model_size=model_size, compute_type=compute_type, language=language_code, hf_token=hf_token, enable_diarization=enable_diarization, total_duration=duration, force_cpu=force_cpu)
+        self.transcriber_thread = TranscriberThread(
+            audio_path,
+            model_size=model_size,
+            compute_type=compute_type,
+            language=language_code,
+            hf_token=hf_token,
+            enable_diarization=enable_diarization,
+            total_duration=duration,
+            force_cpu=force_cpu,
+            backend_preference=transcription_backend,
+        )
         self.transcriber_thread.finished.connect(self.on_transcription_finished)
         self.transcriber_thread.progress.connect(self.progress_changed.emit)
-        self.transcriber_thread.status_update.connect(self.status_changed.emit)
+        self.transcriber_thread.status_update.connect(self._on_transcriber_status_update)
         self.transcriber_thread.error.connect(self.on_transcription_error)
         self.transcriber_thread.finished.connect(self._clear_transcriber_thread_ref)
         self.transcriber_thread.error.connect(self._clear_transcriber_thread_ref)
         self.transcriber_thread.start()
 
     def on_transcription_finished(self, result):
+        logging.info("Post-transcription checkpoint P1: entered on_transcription_finished record_id=%s", self.current_record_id)
+        if self.summary_task_queue and hasattr(self.summary_task_queue, "add_external_trace"):
+            backend = result.get("backend", "unknown")
+            model_name = result.get("model_name", "unknown")
+            device = result.get("device", "unknown")
+            compute_type = result.get("compute_type", "unknown")
+            self.summary_task_queue.add_external_trace(
+                f"Direct transcription finished: backend={backend}, model={model_name}, device={device}, compute={compute_type}",
+                {"type": "transcription", "record_id": self.current_record_id or -1},
+                event="finished",
+            )
+        logging.info("Post-transcription checkpoint P2: queue trace emitted")
         self.status_changed.emit("Saved.")
         self.progress_changed.emit(-2)
         self.retranscribe_btn.setEnabled(True)
+        logging.info("Post-transcription checkpoint P3: UI status/progress updated")
         text = result["text"]
         self.text_display.setText(text)
+        logging.info("Post-transcription checkpoint P4: text set in editor (len=%s)", len(text))
         if self.current_record_id:
              self.db.log_transcription(model_name=result["model_name"], audio_duration=result["audio_duration"], audio_size_bytes=result["audio_size_bytes"], transcription_time_seconds=result["transcription_time"], record_id=self.current_record_id)
+        logging.info("Post-transcription checkpoint P5: transcription metrics logged")
         duration = result["audio_duration"]
         filename = os.path.basename(self.current_recording_path)
         if self.current_record_id:
@@ -334,19 +361,46 @@ class RecordingWidget(QWidget):
         else:
             self.current_record_id = self.db.save(filename, text, duration, is_diarized=result.get("is_diarized", False), transcription_model=result.get("model_name"))
             self.db.log_transcription(model_name=result["model_name"], audio_duration=result["audio_duration"], audio_size_bytes=result["audio_size_bytes"], transcription_time_seconds=result["transcription_time"], record_id=self.current_record_id)
+        logging.info("Post-transcription checkpoint P6: DB updated and record_id=%s", self.current_record_id)
         self.load_record(self.current_record_id)
+        logging.info("Post-transcription checkpoint P7: load_record completed")
         self.recording_saved.emit()
+        logging.info("Post-transcription checkpoint P8: recording_saved emitted")
         if self.auto_summarize_after_transcription and text.strip():
             self._enqueue_post_transcription_ai_tasks()
+            logging.info("Post-transcription checkpoint P9: post-transcription AI tasks enqueued")
         if self.rag:
-            ai_text = self.db.get_record_ai_text(self.current_record_id)
-            self.rag.add_document(self.current_record_id, ai_text, {"title": filename, "date": self.date_label.text()})
+            settings = QSettings("Hectronic", "Secretario")
+            if self._should_auto_index_rag(settings):
+                logging.info("Post-transcription checkpoint P10: RAG auto-index enabled")
+                ai_text = self.db.get_record_ai_text(self.current_record_id)
+                logging.info("Post-transcription checkpoint P11: fetched ai_text (len=%s)", len(ai_text or ""))
+                self.rag.add_document(self.current_record_id, ai_text, {"title": filename, "date": self.date_label.text()})
+                logging.info("Post-transcription checkpoint P12: rag.add_document completed")
+            else:
+                self.status_changed.emit("RAG auto-index skipped (auto_index_rag=false).")
+                logging.info("Post-transcription checkpoint P10b: RAG auto-index skipped by settings")
 
     def on_transcription_error(self, err):
+        if self.summary_task_queue and hasattr(self.summary_task_queue, "add_external_trace"):
+            self.summary_task_queue.add_external_trace(
+                f"Direct transcription failed: {err}",
+                {"type": "transcription", "record_id": self.current_record_id or -1},
+                event="failed",
+            )
         self.status_changed.emit("Failed.")
         self.progress_changed.emit(-2)
         self.retranscribe_btn.setEnabled(True)
         QMessageBox.critical(self, "Error", err)
+
+    def _on_transcriber_status_update(self, message):
+        self.status_changed.emit(message)
+        if self.summary_task_queue and hasattr(self.summary_task_queue, "add_external_trace"):
+            self.summary_task_queue.add_external_trace(
+                message,
+                {"type": "transcription", "record_id": self.current_record_id or -1},
+                event="trace",
+            )
 
     def save_all_changes(self):
         if self.current_record_id:
@@ -360,8 +414,10 @@ class RecordingWidget(QWidget):
             self.db.update_recording_notes(self.current_record_id, new_notes)
             self.db.update_tags(self.current_record_id, new_tags)
             if self.rag:
-                ai_text = self.db.compose_ai_text(new_text, new_notes)
-                self.rag.add_document(self.current_record_id, ai_text, {"title": new_title, "date": self.date_label.text(), "tags": new_tags})
+                settings = QSettings("Hectronic", "Secretario")
+                if self._should_auto_index_rag(settings):
+                    ai_text = self.db.compose_ai_text(new_text, new_notes)
+                    self.rag.add_document(self.current_record_id, ai_text, {"title": new_title, "date": self.date_label.text(), "tags": new_tags})
             self.recording_saved.emit()
             self.status_changed.emit("Saved.")
 
@@ -435,6 +491,10 @@ class RecordingWidget(QWidget):
         if isinstance(value, str):
             return value.strip().lower() in {"1", "true", "yes", "y", "on"}
         return bool(value)
+
+    @staticmethod
+    def _should_auto_index_rag(settings: QSettings) -> bool:
+        return settings.value("auto_index_rag", True, type=bool)
 
     def on_ai_finished(self, task_type, result):
         self.status_changed.emit("AI Task Done.")

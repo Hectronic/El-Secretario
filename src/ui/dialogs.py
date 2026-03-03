@@ -421,6 +421,29 @@ class AudioSettingsPanel(QWidget):
             "auto: Let the app decide based on your GPU"
         )
         form_layout.addRow(lbl_compute, self.compute_combo)
+
+        # Transcription Backend
+        lbl_backend = QLabel("Transcription Backend:")
+        lbl_backend.setStyleSheet("font-weight: bold;")
+        self.backend_combo = QComboBox()
+        self.backend_combo.addItems(["auto", "faster-whisper", "openai-whisper"])
+        self.backend_combo.setCurrentText(self.settings.value("transcription_backend", "auto"))
+        self.backend_combo.setToolTip(
+            "auto: Try faster-whisper and fallback if needed\n"
+            "faster-whisper: Prefer ctranslate2 backend\n"
+            "openai-whisper: Torch backend, slower but stable on some Windows setups"
+        )
+        form_layout.addRow(lbl_backend, self.backend_combo)
+
+        # RAG auto-index
+        lbl_rag_index = QLabel("Auto-index to RAG:")
+        lbl_rag_index.setStyleSheet("font-weight: bold;")
+        self.rag_auto_index_check = QCheckBox("Index new/updated notes and transcriptions in RAG")
+        self.rag_auto_index_check.setChecked(self.settings.value("auto_index_rag", True, type=bool))
+        self.rag_auto_index_check.setToolTip(
+            "When enabled, newly saved content is indexed for semantic search/chat."
+        )
+        form_layout.addRow(lbl_rag_index, self.rag_auto_index_check)
         
         layout.addLayout(form_layout)
         
@@ -452,6 +475,8 @@ class AudioSettingsPanel(QWidget):
         self.settings.setValue("whisper_model", self.whisper_combo.currentText())
         self.settings.setValue("force_cpu", self.force_cpu_check.isChecked())
         self.settings.setValue("compute_type", self.compute_combo.currentText())
+        self.settings.setValue("transcription_backend", self.backend_combo.currentText())
+        self.settings.setValue("auto_index_rag", self.rag_auto_index_check.isChecked())
 
 
 class PromptsSettingsPanel(QWidget):

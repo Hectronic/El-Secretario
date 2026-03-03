@@ -39,6 +39,7 @@ class SummaryTaskQueueManager(QObject):
         self._wait_timer.timeout.connect(self._tick_wait_timer)
         self._session_history: Deque[Dict[str, Any]] = deque(maxlen=300)
         self._current_task_had_error = False
+        self._last_status_message = ""
 
     @property
     def current_worker(self):
@@ -166,6 +167,16 @@ class SummaryTaskQueueManager(QObject):
         }
         return self._enqueue_unique_task(task)
 
+    def add_external_trace(self, message: str, task: Optional[Dict] = None, event: str = "trace"):
+        msg = str(message or "").strip()
+        if not msg:
+            return
+        payload = dict(task or {})
+        if not payload:
+            payload = {"type": "transcription"}
+        self._append_history(event, payload, msg)
+        self.task_status_update.emit(msg)
+
     def _enqueue_unique_task(self, task: Dict) -> bool:
         dedupe_key = self._task_key(task)
 
@@ -277,6 +288,7 @@ class SummaryTaskQueueManager(QObject):
                 hf_token = settings.value("hf_token", "")
                 force_cpu = settings.value("force_cpu", False, type=bool)
                 compute_type = settings.value("compute_type", "auto")
+                transcription_backend = settings.value("transcription_backend", "auto")
                 if compute_type == "auto": compute_type = None
                 
                 # Get duration
@@ -295,11 +307,12 @@ class SummaryTaskQueueManager(QObject):
                     hf_token=hf_token, 
                     enable_diarization=task["diarization"], 
                     total_duration=duration, 
-                    force_cpu=force_cpu
+                    force_cpu=force_cpu,
+                    backend_preference=transcription_backend,
                 )
                 worker.finished.connect(self._on_worker_completed)
                 worker.progress.connect(self.task_progress.emit)
-                worker.status_update.connect(self.task_status_update.emit)
+                worker.status_update.connect(self._on_worker_status_update)
             else:
                 worker = AIAssistant("", task_type, task.get("text", ""))
                 worker.task_completed.connect(lambda t_type, result: self._on_worker_completed(result))
@@ -308,8 +321,8 @@ class SummaryTaskQueueManager(QObject):
             self._current_worker = worker
             worker.error.connect(self._on_worker_error)
             worker.finished.connect(self._on_worker_completely_finished)
-            if hasattr(worker, "status_update"):
-                worker.status_update.connect(self.task_status_update.emit)
+            if hasattr(worker, "status_update") and task_type != "transcription":
+                worker.status_update.connect(self._on_worker_status_update)
             if hasattr(worker, "retry_wait"):
                 worker.retry_wait.connect(self._on_worker_retry_wait)
             
@@ -377,11 +390,26 @@ class SummaryTaskQueueManager(QObject):
         self._append_history("failed", task, str(error_msg or "Unknown error"))
         self.task_failed.emit(task, str(error_msg or "Unknown error"))
 
+    def _on_worker_status_update(self, message: str):
+        msg = str(message or "").strip()
+        if not msg:
+            return
+        self.task_status_update.emit(msg)
+        current_task = self._current_task or {}
+        if not current_task:
+            return
+        # Avoid adding the same status line repeatedly.
+        if msg == self._last_status_message:
+            return
+        self._last_status_message = msg
+        self._append_history("trace", current_task, msg)
+
     def _on_worker_completely_finished(self):
         task = self._current_task
         worker = self._current_worker
         self._current_worker = None
         self._current_task = None
+        self._last_status_message = ""
         self._clear_wait_state()
         if task:
             if not self._current_task_had_error:

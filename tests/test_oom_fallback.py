@@ -40,6 +40,7 @@ def test_transcriber_thread_oom_fallback(app, tmp_path):
     
     # Force TranscriberThread to start with cuda (mocking torch.cuda.is_available)
     with patch("torch.cuda.is_available", return_value=True), \
+         patch("src.worker.platform.system", return_value="Linux"), \
          patch("src.worker.WhisperModel", side_effect=MockWhisperModel), \
          patch("src.worker.os.path.getsize", return_value=100):
         

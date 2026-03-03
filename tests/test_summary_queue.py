@@ -132,5 +132,28 @@ class TestSummaryQueue(unittest.TestCase):
             self.assertIn("queued", events)
             self.assertIn("started", events)
 
+    def test_external_trace_is_added_to_session_history(self):
+        self.queue_manager.add_external_trace(
+            "Retrying transcription with safer profile",
+            {"type": "transcription", "record_id": 99},
+            event="trace",
+        )
+        history = self.queue_manager.get_session_history()
+        self.assertGreaterEqual(len(history), 1)
+        self.assertEqual(history[0].get("event"), "trace")
+        self.assertIn("Retrying transcription", history[0].get("message", ""))
+
+    def test_worker_status_updates_append_trace_once_for_duplicates(self):
+        self.queue_manager._current_task = {"type": "transcription", "record_id": 77}
+        self.queue_manager._on_worker_status_update("Retrying 1")
+        self.queue_manager._on_worker_status_update("Retrying 1")
+        self.queue_manager._on_worker_status_update("Retrying 2")
+
+        history = self.queue_manager.get_session_history()
+        traces = [h for h in history if h.get("event") == "trace"]
+        messages = [h.get("message") for h in traces]
+        self.assertEqual(messages.count("Retrying 1"), 1)
+        self.assertEqual(messages.count("Retrying 2"), 1)
+
 if __name__ == '__main__':
     unittest.main()

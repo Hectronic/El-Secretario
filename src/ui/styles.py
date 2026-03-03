@@ -273,7 +273,7 @@ DARK_STYLESHEET = """
     QPushButton[class="rec-btn"] {
         background-color: #f44336;
         color: white;
-        border-radius: 42px;
+        border-radius: 999px;
         border: 5px solid #ffffff;
     }
 
@@ -554,7 +554,7 @@ LIGHT_STYLESHEET = """
     QPushButton[class="rec-btn"] {
         background-color: #f44336;
         color: white;
-        border-radius: 42px;
+        border-radius: 999px;
         border: 5px solid #ffffff;
     }
 
@@ -790,6 +790,7 @@ SNES_STYLESHEET = """
     }
     QPushButton[class="rec-btn"] {
         background-color: #E60012;
+        border-radius: 999px;
         border: 5px solid #FFFFFF;
     }
     QPushButton[class="big-btn-chat"] {

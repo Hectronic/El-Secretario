@@ -204,6 +204,7 @@ class BatchProcessWidget(QWidget):
         hf_token = settings.value("hf_token", "")
         force_cpu = settings.value("force_cpu", False, type=bool)
         compute_type = settings.value("compute_type", "auto")
+        transcription_backend = settings.value("transcription_backend", "auto")
         if compute_type == "auto":
             compute_type = None
         
@@ -215,7 +216,8 @@ class BatchProcessWidget(QWidget):
             hf_token=hf_token, 
             enable_diarization=True,
             total_duration=record['duration'],
-            force_cpu=force_cpu
+            force_cpu=force_cpu,
+            backend_preference=transcription_backend,
         )
         
         self.thread.finished.connect(self.on_file_finished)

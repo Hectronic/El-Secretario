@@ -16,6 +16,8 @@
 import unittest
 import os
 import sqlite3
+import time
+import gc
 from datetime import date
 from src.database import DBManager
 
@@ -207,6 +209,7 @@ class TestDBManager(unittest.TestCase):
 
     def test_legacy_tasks_schema_is_migrated_on_startup(self):
         legacy_db = "test_legacy_db.sqlite"
+        migrated = None
         try:
             with sqlite3.connect(legacy_db) as conn:
                 c = conn.cursor()
@@ -270,8 +273,15 @@ class TestDBManager(unittest.TestCase):
                 self.assertEqual(row[2], "2026-02-15")
                 self.assertEqual(row[3], "Legacy task")
         finally:
+            migrated = None
+            gc.collect()
             if os.path.exists(legacy_db):
-                os.remove(legacy_db)
+                for _ in range(5):
+                    try:
+                        os.remove(legacy_db)
+                        break
+                    except PermissionError:
+                        time.sleep(0.2)
 
     def test_toggle_completion_sets_and_clears_completed_at(self):
         today = date.today().isoformat()

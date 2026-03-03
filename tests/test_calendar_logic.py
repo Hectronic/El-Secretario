@@ -19,6 +19,8 @@ from unittest.mock import MagicMock, patch
 from datetime import datetime
 import tempfile
 import shutil
+import time
+import gc
 
 from src.database import DBManager
 from src.rag_engine import RAGEngine
@@ -26,6 +28,11 @@ from src.rag_engine import RAGEngine
 
 class TestCalendarLogic(unittest.TestCase):
     def setUp(self):
+        self._prev_subprocess_upsert = os.environ.get("EL_SECRETARIO_RAG_SUBPROCESS_UPSERT")
+        self._prev_subprocess_query = os.environ.get("EL_SECRETARIO_RAG_SUBPROCESS_QUERY")
+        os.environ["EL_SECRETARIO_RAG_SUBPROCESS_UPSERT"] = "0"
+        os.environ["EL_SECRETARIO_RAG_SUBPROCESS_QUERY"] = "0"
+
         # Create a temp directory
         self.test_dir = tempfile.mkdtemp()
         self.db_path = os.path.join(self.test_dir, "test_db.sqlite")
@@ -56,7 +63,25 @@ class TestCalendarLogic(unittest.TestCase):
             conn.commit()
 
     def tearDown(self):
-        shutil.rmtree(self.test_dir)
+        self.rag = None
+        self.db = None
+        gc.collect()
+
+        for _ in range(5):
+            try:
+                shutil.rmtree(self.test_dir)
+                break
+            except PermissionError:
+                time.sleep(0.2)
+
+        if self._prev_subprocess_upsert is None:
+            os.environ.pop("EL_SECRETARIO_RAG_SUBPROCESS_UPSERT", None)
+        else:
+            os.environ["EL_SECRETARIO_RAG_SUBPROCESS_UPSERT"] = self._prev_subprocess_upsert
+        if self._prev_subprocess_query is None:
+            os.environ.pop("EL_SECRETARIO_RAG_SUBPROCESS_QUERY", None)
+        else:
+            os.environ["EL_SECRETARIO_RAG_SUBPROCESS_QUERY"] = self._prev_subprocess_query
 
     def test_fetch_by_date_range(self):
         # Test fetching for 2023-01-01

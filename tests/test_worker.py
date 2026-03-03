@@ -13,16 +13,22 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 import unittest
+import sys
+import types
 from unittest.mock import MagicMock, patch
 from src.worker import TranscriberThread, SearchThread, ChatThread
 import os
+import numpy as np
 
 class TestTranscriberThread(unittest.TestCase):
     @patch('src.worker.WhisperModel')
     @patch('os.path.getsize')
-    def test_transcription(self, mock_getsize, MockWhisper):
+    @patch('src.worker.platform.system', return_value="Linux")
+    @patch('src.worker._get_pyannote_pipeline_class')
+    def test_transcription(self, mock_get_pyannote, _mock_system, mock_getsize, MockWhisper):
         # Setup Mock
         mock_getsize.return_value = 1024
+        mock_get_pyannote.return_value = None
         mock_model = MockWhisper.return_value
         Segment = MagicMock()
         Segment.start = 0.0
@@ -46,10 +52,12 @@ class TestTranscriberThread(unittest.TestCase):
         result = args[0]
         self.assertIsInstance(result, dict)
         self.assertEqual(result['text'], "Hello world")
+        mock_get_pyannote.assert_not_called()
 
     @patch('src.worker.torch.cuda.is_available')
     @patch('src.worker.torch.cuda.get_device_properties')
-    def test_get_optimal_device_with_cuda(self, mock_props, mock_cuda):
+    @patch('src.worker.platform.system', return_value="Linux")
+    def test_get_optimal_device_with_cuda(self, _mock_system, mock_props, mock_cuda):
         from src.worker import get_optimal_device
         
         # Mock GPU with 6GB VRAM
@@ -72,7 +80,8 @@ class TestTranscriberThread(unittest.TestCase):
         self.assertEqual(compute_type, "int8")
     
     @patch('src.worker.torch.cuda.is_available')
-    def test_get_optimal_device_without_cuda(self, mock_cuda):
+    @patch('src.worker.platform.system', return_value="Linux")
+    def test_get_optimal_device_without_cuda(self, _mock_system, mock_cuda):
         from src.worker import get_optimal_device
         
         mock_cuda.return_value = False
@@ -93,7 +102,8 @@ class TestTranscriberThread(unittest.TestCase):
 
     @patch('src.worker.torch.cuda.is_available')
     @patch('src.worker.torch.cuda.get_device_properties', side_effect=RuntimeError("gpu err"))
-    def test_get_optimal_device_cuda_properties_error_defaults_int8(self, _mock_props, mock_cuda):
+    @patch('src.worker.platform.system', return_value="Linux")
+    def test_get_optimal_device_cuda_properties_error_defaults_int8(self, _mock_system, _mock_props, mock_cuda):
         from src.worker import get_optimal_device
 
         mock_cuda.return_value = True
@@ -131,6 +141,235 @@ class TestTranscriberThread(unittest.TestCase):
 
         thread_cpu_explicit = TranscriberThread("test.wav", device="cpu", compute_type="float32")
         self.assertEqual(thread_cpu_explicit.compute_type, "int8_float32")
+
+    @patch("src.worker.platform.system", return_value="Windows")
+    @patch("src.worker.os.path.getsize", return_value=100)
+    @patch("src.worker._run_transcription_in_subprocess")
+    @patch("src.worker.torch.cuda.is_available", return_value=False)
+    def test_windows_subprocess_native_crash_retries_cpu_profiles(
+        self, _mock_cuda_available, _mock_run_subprocess, _mock_getsize, _mock_system
+    ):
+        crash_error = RuntimeError(
+            "Transcription subprocess crashed with exit code 3221225477 "
+            "(possible native crash in faster-whisper/ctranslate2)."
+        )
+        _mock_run_subprocess.side_effect = [
+            crash_error,
+            [{"start": 0.0, "end": 1.0, "text": "Recovered"}],
+        ]
+
+        thread = TranscriberThread("test.wav", device="cpu", compute_type="int8_float32")
+        thread.finished = MagicMock()
+        thread.progress = MagicMock()
+        thread.status_update = MagicMock()
+        thread.error = MagicMock()
+
+        thread.run()
+
+        first_call = _mock_run_subprocess.call_args_list[0].kwargs
+        second_call = _mock_run_subprocess.call_args_list[1].kwargs
+        self.assertEqual(first_call["device"], "cpu")
+        self.assertEqual(first_call["compute_type"], "int8_float32")
+        self.assertEqual(second_call["device"], "cpu")
+        self.assertEqual(second_call["compute_type"], "float32")
+        self.assertEqual(thread.device, "cpu")
+        self.assertEqual(thread.compute_type, "float32")
+        thread.finished.emit.assert_called_once()
+        thread.error.emit.assert_not_called()
+
+    @patch("src.worker.platform.system", return_value="Windows")
+    @patch("src.worker.os.path.getsize", return_value=100)
+    @patch("src.worker._run_transcription_in_subprocess")
+    @patch("src.worker.torch.cuda.is_available", return_value=False)
+    def test_windows_subprocess_cuda_failure_falls_back_to_cpu(
+        self, _mock_cuda_available, _mock_run_subprocess, _mock_getsize, _mock_system
+    ):
+        _mock_run_subprocess.side_effect = [
+            RuntimeError("out of memory"),
+            [{"start": 0.0, "end": 1.0, "text": "Recovered from CUDA failure"}],
+        ]
+
+        thread = TranscriberThread("test.wav", device="cuda", compute_type="float16")
+        thread.finished = MagicMock()
+        thread.progress = MagicMock()
+        thread.status_update = MagicMock()
+        thread.error = MagicMock()
+
+        thread.run()
+
+        first_call = _mock_run_subprocess.call_args_list[0].kwargs
+        second_call = _mock_run_subprocess.call_args_list[1].kwargs
+        self.assertEqual(first_call["device"], "cuda")
+        self.assertEqual(second_call["device"], "cpu")
+        self.assertEqual(second_call["compute_type"], "int8_float32")
+        self.assertTrue(thread.force_cpu)
+        thread.finished.emit.assert_called_once()
+        thread.error.emit.assert_not_called()
+
+    @patch("src.worker.platform.system", return_value="Windows")
+    @patch("src.worker.os.path.getsize", return_value=100)
+    @patch("src.worker._run_transcription_in_subprocess")
+    @patch("src.worker.torch.cuda.is_available", return_value=False)
+    def test_windows_native_crash_falls_back_to_smaller_model(
+        self, _mock_cuda_available, _mock_run_subprocess, _mock_getsize, _mock_system
+    ):
+        native_crash = RuntimeError(
+            "Transcription subprocess crashed with exit code 3221225477 "
+            "(possible native crash in faster-whisper/ctranslate2)."
+        )
+        _mock_run_subprocess.side_effect = [
+            native_crash,
+            native_crash,
+            native_crash,
+            [{"start": 0.0, "end": 1.0, "text": "Recovered with medium"}],
+        ]
+
+        thread = TranscriberThread("test.wav", model_size="large-v3", device="cpu", compute_type="int8_float32")
+        thread.finished = MagicMock()
+        thread.progress = MagicMock()
+        thread.status_update = MagicMock()
+        thread.error = MagicMock()
+
+        thread.run()
+
+        calls = _mock_run_subprocess.call_args_list
+        self.assertEqual(calls[0].kwargs["model_size"], "large-v3")
+        self.assertEqual(calls[1].kwargs["model_size"], "large-v3")
+        self.assertEqual(calls[2].kwargs["model_size"], "large-v3")
+        self.assertEqual(calls[3].kwargs["model_size"], "medium")
+        self.assertEqual(thread.model_size, "medium")
+        thread.finished.emit.assert_called_once()
+        thread.error.emit.assert_not_called()
+
+    @patch("src.worker.platform.system", return_value="Windows")
+    @patch("src.worker.os.path.getsize", return_value=100)
+    @patch("src.worker._run_openai_whisper_fallback")
+    @patch("src.worker._run_transcription_in_subprocess")
+    @patch("src.worker.torch.cuda.is_available", return_value=False)
+    def test_windows_native_crash_uses_openai_whisper_compat_fallback(
+        self,
+        _mock_cuda_available,
+        _mock_run_subprocess,
+        _mock_openai_fallback,
+        _mock_getsize,
+        _mock_system,
+    ):
+        native_crash = RuntimeError(
+            "Transcription subprocess crashed with exit code 3221225477 "
+            "(possible native crash in faster-whisper/ctranslate2)."
+        )
+        _mock_run_subprocess.side_effect = [native_crash] * 9
+        _mock_openai_fallback.return_value = [
+            {"start": 0.0, "end": 1.0, "text": "Recovered with openai-whisper"}
+        ]
+
+        thread = TranscriberThread("test.wav", model_size="large-v3", device="cpu", compute_type="int8_float32")
+        thread.finished = MagicMock()
+        thread.progress = MagicMock()
+        thread.status_update = MagicMock()
+        thread.error = MagicMock()
+
+        thread.run()
+
+        _mock_openai_fallback.assert_called_once()
+        thread.finished.emit.assert_called_once()
+        thread.error.emit.assert_not_called()
+
+    def test_openai_whisper_fallback_prefers_local_audio_loading(self):
+        from src.worker import _run_openai_whisper_fallback
+
+        fake_model = MagicMock()
+        fake_model.transcribe.return_value = {
+            "segments": [{"start": 0.0, "end": 1.0, "text": "ok"}]
+        }
+        fake_whisper_module = types.SimpleNamespace(load_model=MagicMock(return_value=fake_model))
+        prepared_audio = np.array([0.1, -0.2, 0.3], dtype=np.float32)
+
+        with patch.dict(sys.modules, {"whisper": fake_whisper_module}), \
+             patch("src.worker._prepare_audio_for_openai_whisper", return_value=prepared_audio):
+            segments = _run_openai_whisper_fallback(
+                audio_path="test.wav",
+                model_size="large-v3",
+                language=None,
+            )
+
+        fake_whisper_module.load_model.assert_called_once_with("large")
+        transcribe_arg = fake_model.transcribe.call_args[0][0]
+        self.assertIsInstance(transcribe_arg, np.ndarray)
+        self.assertEqual(segments[0]["text"], "ok")
+
+    def test_openai_whisper_fallback_uses_path_mode_when_local_load_fails(self):
+        from src.worker import _run_openai_whisper_fallback
+
+        fake_model = MagicMock()
+        fake_model.transcribe.return_value = {
+            "segments": [{"start": 0.0, "end": 1.0, "text": "ok"}]
+        }
+        fake_whisper_module = types.SimpleNamespace(load_model=MagicMock(return_value=fake_model))
+
+        with patch.dict(sys.modules, {"whisper": fake_whisper_module}), \
+             patch("src.worker._prepare_audio_for_openai_whisper", side_effect=RuntimeError("audio decode failed")):
+            segments = _run_openai_whisper_fallback(
+                audio_path="test.wav",
+                model_size="base",
+                language="es",
+            )
+
+        transcribe_arg = fake_model.transcribe.call_args[0][0]
+        self.assertEqual(transcribe_arg, "test.wav")
+        self.assertEqual(segments[0]["text"], "ok")
+
+    def test_openai_whisper_fallback_raises_clear_error_when_ffmpeg_missing(self):
+        from src.worker import _run_openai_whisper_fallback
+
+        fake_model = MagicMock()
+        fake_model.transcribe.side_effect = FileNotFoundError("[WinError 2] missing executable")
+        fake_whisper_module = types.SimpleNamespace(load_model=MagicMock(return_value=fake_model))
+
+        with patch.dict(sys.modules, {"whisper": fake_whisper_module}), \
+             patch("src.worker._prepare_audio_for_openai_whisper", side_effect=RuntimeError("audio decode failed")):
+            with self.assertRaises(RuntimeError) as ctx:
+                _run_openai_whisper_fallback(
+                    audio_path="test.wav",
+                    model_size="base",
+                    language=None,
+                )
+
+        self.assertIn("FFmpeg is not installed", str(ctx.exception))
+
+    @patch("src.worker.QSettings")
+    @patch("src.worker.os.path.getsize", return_value=100)
+    @patch("src.worker._run_transcription_in_subprocess")
+    @patch("src.worker._run_openai_whisper_fallback")
+    def test_backend_preference_openai_persists_working_settings(
+        self, _mock_openai_fallback, _mock_run_subprocess, _mock_getsize, MockQSettings
+    ):
+        _mock_openai_fallback.return_value = [
+            {"start": 0.0, "end": 1.0, "text": "openai backend ok"}
+        ]
+        settings_instance = MagicMock()
+        MockQSettings.return_value = settings_instance
+
+        thread = TranscriberThread(
+            "test.wav",
+            model_size="base",
+            device="cpu",
+            compute_type="int8_float32",
+            backend_preference="openai-whisper",
+        )
+        thread.finished = MagicMock()
+        thread.progress = MagicMock()
+        thread.status_update = MagicMock()
+        thread.error = MagicMock()
+
+        thread.run()
+
+        _mock_run_subprocess.assert_not_called()
+        self.assertEqual(thread.effective_backend, "openai-whisper")
+        settings_instance.setValue.assert_any_call("transcription_backend", "openai-whisper")
+        settings_instance.setValue.assert_any_call("whisper_model", thread.model_size)
+        settings_instance.setValue.assert_any_call("rec_config/model", thread.model_size)
+        thread.finished.emit.assert_called_once()
 
 
 class TestSearchAndChatThreads(unittest.TestCase):

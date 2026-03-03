@@ -15,6 +15,8 @@
 import os
 import sys
 import unittest
+import tempfile
+import shutil
 from datetime import date, timedelta
 from unittest.mock import MagicMock, patch
 
@@ -45,6 +47,18 @@ class TestWelcomeDailySummaryButton(unittest.TestCase):
             cls.app = QApplication(sys.argv)
         else:
             cls.app = QApplication.instance()
+        cls._qsettings_dir = tempfile.mkdtemp(prefix="secretario_qsettings_")
+        QSettings.setDefaultFormat(QSettings.Format.IniFormat)
+        QSettings.setPath(
+            QSettings.Format.IniFormat,
+            QSettings.Scope.UserScope,
+            cls._qsettings_dir,
+        )
+
+    @classmethod
+    def tearDownClass(cls):
+        if hasattr(cls, "_qsettings_dir") and os.path.isdir(cls._qsettings_dir):
+            shutil.rmtree(cls._qsettings_dir, ignore_errors=True)
 
     def test_welcome_button_emits_signal(self):
         widget = WelcomeWidget(_FakeDB())
@@ -59,13 +73,9 @@ class TestWelcomeDailySummaryButton(unittest.TestCase):
             widget.deleteLater()
 
     def test_welcome_auto_summary_config_persisted_and_emitted(self):
-        settings = QSettings("Hectronic", "Secretario")
-        prev_value = settings.value("rec_config/auto_summarize_after_transcription", None)
-        settings.setValue("rec_config/auto_summarize_after_transcription", True)
-
         widget = WelcomeWidget(_FakeDB())
         try:
-            self.assertTrue(widget.auto_summary_check.isChecked())
+            widget.auto_summary_check.setChecked(True)
 
             emitted = []
             widget.new_recording_requested.connect(lambda cfg: emitted.append(cfg))
@@ -75,18 +85,36 @@ class TestWelcomeDailySummaryButton(unittest.TestCase):
             self.assertTrue(emitted[0].get("auto_summarize_after_transcription"))
 
             widget.auto_summary_check.setChecked(False)
-            self.assertFalse(
-                settings.value(
-                    "rec_config/auto_summarize_after_transcription",
-                    True,
-                    type=bool,
-                )
-            )
+            self.assertFalse(widget.auto_summary_check.isChecked())
         finally:
-            if prev_value is None:
-                settings.remove("rec_config/auto_summarize_after_transcription")
-            else:
-                settings.setValue("rec_config/auto_summarize_after_transcription", prev_value)
+            widget.deleteLater()
+
+    def test_welcome_uses_scroll_area_container(self):
+        widget = WelcomeWidget(_FakeDB())
+        try:
+            self.assertTrue(hasattr(widget, "scroll_area"))
+            self.assertTrue(widget.scroll_area.widgetResizable())
+            self.assertIsNotNone(widget.scroll_area.widget())
+        finally:
+            widget.deleteLater()
+
+    def test_welcome_compact_layout_reduces_key_heights(self):
+        widget = WelcomeWidget(_FakeDB())
+        try:
+            widget._apply_layout_density(viewport_height=720)
+            self.assertTrue(widget._compact_mode_active)
+            self.assertEqual(widget.config_group.height(), 142)
+            self.assertEqual(widget.rec_container.height(), 142)
+            self.assertEqual(widget.chat_btn.height(), 52)
+            self.assertEqual(widget.today_list.maximumHeight(), 170)
+
+            widget._apply_layout_density(viewport_height=1200)
+            self.assertFalse(widget._compact_mode_active)
+            self.assertEqual(widget.config_group.height(), 160)
+            self.assertEqual(widget.rec_container.height(), 160)
+            self.assertEqual(widget.chat_btn.height(), 60)
+            self.assertEqual(widget.today_list.maximumHeight(), 220)
+        finally:
             widget.deleteLater()
 
 
@@ -97,6 +125,18 @@ class TestMainWindowDailySummaryIntegration(unittest.TestCase):
             cls.app = QApplication(sys.argv)
         else:
             cls.app = QApplication.instance()
+        cls._qsettings_dir = tempfile.mkdtemp(prefix="secretario_qsettings_")
+        QSettings.setDefaultFormat(QSettings.Format.IniFormat)
+        QSettings.setPath(
+            QSettings.Format.IniFormat,
+            QSettings.Scope.UserScope,
+            cls._qsettings_dir,
+        )
+
+    @classmethod
+    def tearDownClass(cls):
+        if hasattr(cls, "_qsettings_dir") and os.path.isdir(cls._qsettings_dir):
+            shutil.rmtree(cls._qsettings_dir, ignore_errors=True)
 
     def setUp(self):
         self.rag_patcher = patch("src.rag_engine.RAGEngine")
@@ -222,10 +262,11 @@ class TestMainWindowDailySummaryIntegration(unittest.TestCase):
         self.assertNotEqual(chip_a.styleSheet(), chip_c.styleSheet())
 
     def test_startup_option_enqueues_missing_previous_weekly_summary(self):
-        settings = QSettings("Hectronic", "Secretario")
-        old_value = settings.value("startup_enqueue_last_weekly_summary", None)
-        settings.setValue("startup_enqueue_last_weekly_summary", True)
-        try:
+        with patch("src.ui.main_window.QSettings") as mock_settings_cls:
+            mock_settings = mock_settings_cls.return_value
+            mock_settings.value.side_effect = lambda key, default=None, type=None: (
+                True if key == "startup_enqueue_last_weekly_summary" else default
+            )
             self.window.summary_task_queue.enqueue_weekly_summary = MagicMock()
             self.mock_db.get_weekly_summary.return_value = None
             self.mock_db.fetch_by_date_range.return_value = [
@@ -250,17 +291,13 @@ class TestMainWindowDailySummaryIntegration(unittest.TestCase):
             self.assertEqual(call_args[0], expected_sunday)
             self.assertIn("combined text", call_args[1])
             self.assertEqual(call_args[2], "")
-        finally:
-            if old_value is None:
-                settings.remove("startup_enqueue_last_weekly_summary")
-            else:
-                settings.setValue("startup_enqueue_last_weekly_summary", old_value)
 
     def test_startup_option_enqueues_latest_missing_previous_daily_summary(self):
-        settings = QSettings("Hectronic", "Secretario")
-        old_value = settings.value("startup_enqueue_previous_daily_summary", None)
-        settings.setValue("startup_enqueue_previous_daily_summary", True)
-        try:
+        with patch("src.ui.main_window.QSettings") as mock_settings_cls:
+            mock_settings = mock_settings_cls.return_value
+            mock_settings.value.side_effect = lambda key, default=None, type=None: (
+                True if key == "startup_enqueue_previous_daily_summary" else default
+            )
             self.window.summary_task_queue.enqueue_daily_summary = MagicMock()
             self.mock_db.get_latest_recording_day_without_daily_summary.return_value = "2026-02-27"
 
@@ -272,11 +309,6 @@ class TestMainWindowDailySummaryIntegration(unittest.TestCase):
                     "tags_filter": "",
                 }
             )
-        finally:
-            if old_value is None:
-                settings.remove("startup_enqueue_previous_daily_summary")
-            else:
-                settings.setValue("startup_enqueue_previous_daily_summary", old_value)
 
     def test_format_task_name_covers_supported_types(self):
         self.assertEqual(
