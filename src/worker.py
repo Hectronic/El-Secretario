@@ -164,6 +164,9 @@ def _subprocess_transcribe_entry(payload: dict, result_queue):
             os.environ["MKL_NUM_THREADS"] = "1"
             # OMP_WAIT_POLICY=PASSIVE can help with some native library instability on Windows.
             os.environ["OMP_WAIT_POLICY"] = "PASSIVE"
+            # Force more stable compute type for Windows CPU if it's default
+            if payload["compute_type"] == "float32":
+                payload["compute_type"] = "int8_float32"
 
     try:
         # Determine CPU threads for Windows CPU
