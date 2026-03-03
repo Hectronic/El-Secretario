@@ -72,6 +72,20 @@ To fully utilize the features of El Secretario, you will need to configure the A
 3.  **Import Audio**: Use the import button to add existing audio files.
 4.  **Chat**: Open a recording or a collection to start chatting with your data.
 
+## Windows Transcription Stability
+
+- On Windows, transcription now retries automatically with safer backend profiles when the isolated Whisper subprocess crashes (for example exit code `3221225477`).
+- If a CUDA profile fails, El Secretario falls back to CPU profiles automatically before reporting an error.
+- If native crashes persist, El Secretario retries automatically with smaller Whisper models (`large-v3` -> `medium` -> `base`).
+- Dependencies pin `ctranslate2<4.7` on Windows to avoid known native crashes in newer builds.
+- If all faster-whisper attempts crash on Windows, El Secretario uses an `openai-whisper` compatibility fallback.
+- Transcription backend is configurable in Settings (`auto`, `faster-whisper`, `openai-whisper`).
+- When a fallback path succeeds, El Secretario stores the working transcription configuration in Settings automatically.
+- RAG auto-indexing is configurable in Settings (`auto_index_rag`) and enabled by default (`true`).
+- On Windows, RAG indexing/search operations are isolated in subprocesses by default to reduce native Chroma crashes.
+- The Welcome tab now adapts better to low-height Windows screens with an automatic compact layout and vertical scrolling when needed.
+- The Recording in Progress tab now also adapts to low-height screens with vertical scrolling and an automatic compact mode.
+
 ## Data Export/Import
 
 El Secretario allows you to export all your data (recordings, transcriptions, notebooks, chat sessions) to a JSON file and import it back on another installation.

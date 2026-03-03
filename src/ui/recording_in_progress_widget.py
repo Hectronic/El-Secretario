@@ -12,10 +12,12 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
+import platform
+
 from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QPushButton, 
                              QLabel, QProgressBar, QComboBox, QSpacerItem, QSizePolicy,
                              QLineEdit, QFormLayout, QGroupBox, QCheckBox, QTextEdit,
-                             QListWidget, QListWidgetItem, QSplitter)
+                             QListWidget, QListWidgetItem, QSplitter, QScrollArea, QFrame)
 from PyQt6.QtCore import Qt, QTimer, pyqtSignal, QSettings
 import logging
 from src.database import DBManager
@@ -29,6 +31,8 @@ class RecordingInProgressWidget(QWidget):
 
     def __init__(self, recorder=None, config=None, parent=None):
         super().__init__(parent)
+        self._is_windows = platform.system() == "Windows"
+        self._compact_mode_active = False
         if recorder is not None:
             self.recorder = recorder
         else:
@@ -62,8 +66,22 @@ class RecordingInProgressWidget(QWidget):
         self.start_recording()
 
     def init_ui(self):
-        layout = QVBoxLayout(self)
+        root_layout = QVBoxLayout(self)
+        root_layout.setContentsMargins(0, 0, 0, 0)
+
+        self.scroll_area = QScrollArea()
+        self.scroll_area.setWidgetResizable(True)
+        self.scroll_area.setFrameShape(QFrame.Shape.NoFrame)
+        self.scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        root_layout.addWidget(self.scroll_area)
+
+        content = QWidget()
+        self.scroll_area.setWidget(content)
+        layout = QVBoxLayout(content)
+        layout.setContentsMargins(20, 14, 20, 14)
         layout.setSpacing(14)
+        layout.setAlignment(Qt.AlignmentFlag.AlignTop)
+        self.main_content_layout = layout
 
         # Status Label
         self.status_label = QLabel("Recording in Progress...")
@@ -94,8 +112,8 @@ class RecordingInProgressWidget(QWidget):
         layout.addWidget(self.vu_meter, alignment=Qt.AlignmentFlag.AlignHCenter)
 
         # Recording Options Group
-        options_group = QGroupBox("Recording Options")
-        options_group.setStyleSheet("""
+        self.options_group = QGroupBox("Recording Options")
+        self.options_group.setStyleSheet("""
             QGroupBox {
                 font-size: 14px;
                 font-weight: bold;
@@ -153,22 +171,22 @@ class RecordingInProgressWidget(QWidget):
         self.diarization_check.toggled.connect(self._save_last_run_config)
         self.auto_summary_check.toggled.connect(self._save_last_run_config)
 
-        options_group.setLayout(options_layout)
-        layout.addWidget(options_group)
+        self.options_group.setLayout(options_layout)
+        layout.addWidget(self.options_group)
 
-        workspace_split = QSplitter(Qt.Orientation.Horizontal)
+        self.workspace_split = QSplitter(Qt.Orientation.Horizontal)
 
-        notes_group = QGroupBox("Notes")
-        notes_layout = QVBoxLayout(notes_group)
+        self.notes_group = QGroupBox("Notes")
+        notes_layout = QVBoxLayout(self.notes_group)
         self.notes_input = QTextEdit()
         self.notes_input.setPlaceholderText("Write important context while recording...")
         self.notes_input.setMinimumHeight(220)
         self.notes_input.setStyleSheet("font-size: 14px; line-height: 1.4;")
         notes_layout.addWidget(self.notes_input)
-        workspace_split.addWidget(notes_group)
+        self.workspace_split.addWidget(self.notes_group)
 
-        tasks_group = QGroupBox("Quick Tasks")
-        tasks_layout = QVBoxLayout(tasks_group)
+        self.tasks_group = QGroupBox("Quick Tasks")
+        tasks_layout = QVBoxLayout(self.tasks_group)
         quick_add = QHBoxLayout()
         self.task_input = QLineEdit()
         self.task_input.setPlaceholderText("Add actionable task and press Add...")
@@ -193,10 +211,10 @@ class RecordingInProgressWidget(QWidget):
         quick_actions.addWidget(self.clear_tasks_btn)
         quick_actions.addStretch()
         tasks_layout.addLayout(quick_actions)
-        workspace_split.addWidget(tasks_group)
+        self.workspace_split.addWidget(self.tasks_group)
 
-        workspace_split.setSizes([1, 1])
-        layout.addWidget(workspace_split, 1)
+        self.workspace_split.setSizes([1, 1])
+        layout.addWidget(self.workspace_split, 1)
 
         # Controls
         controls_layout = QHBoxLayout()
@@ -222,6 +240,46 @@ class RecordingInProgressWidget(QWidget):
         self.cancel_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self.cancel_btn.clicked.connect(self.cancel_recording)
         layout.addWidget(self.cancel_btn, alignment=Qt.AlignmentFlag.AlignCenter)
+        self._apply_layout_density()
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        self._apply_layout_density()
+
+    def _apply_layout_density(self, viewport_height=None):
+        if viewport_height is None:
+            if hasattr(self, "scroll_area") and self.scroll_area.viewport():
+                viewport_height = self.scroll_area.viewport().height()
+            else:
+                viewport_height = self.height()
+
+        compact_threshold = 900 if self._is_windows else 780
+        compact_mode = viewport_height > 0 and viewport_height < compact_threshold
+
+        if compact_mode == self._compact_mode_active:
+            return
+        self._compact_mode_active = compact_mode
+
+        if compact_mode:
+            self.main_content_layout.setContentsMargins(14, 8, 14, 8)
+            self.main_content_layout.setSpacing(10)
+            self.status_label.setStyleSheet("font-size: 20px; color: #f44336; font-weight: bold;")
+            self.timer_label.setStyleSheet("font-size: 48px; font-weight: bold; color: #eeeeee;")
+            self.vu_meter.setFixedSize(320, 16)
+            self.notes_input.setMinimumHeight(160)
+            self.pause_btn.setFixedSize(108, 44)
+            self.stop_btn.setFixedSize(108, 44)
+            self.workspace_split.setOrientation(Qt.Orientation.Vertical)
+        else:
+            self.main_content_layout.setContentsMargins(20, 14, 20, 14)
+            self.main_content_layout.setSpacing(14)
+            self.status_label.setStyleSheet("font-size: 24px; color: #f44336; font-weight: bold;")
+            self.timer_label.setStyleSheet("font-size: 64px; font-weight: bold; color: #eeeeee;")
+            self.vu_meter.setFixedSize(400, 20)
+            self.notes_input.setMinimumHeight(220)
+            self.pause_btn.setFixedSize(120, 50)
+            self.stop_btn.setFixedSize(120, 50)
+            self.workspace_split.setOrientation(Qt.Orientation.Horizontal)
 
     def add_quick_task(self):
         text = self.task_input.text().strip()

@@ -12,7 +12,7 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-from PyQt6.QtCore import QThread, pyqtSignal
+from PyQt6.QtCore import QThread, pyqtSignal, QSettings
 from faster_whisper import WhisperModel
 import os
 import platform
@@ -22,17 +22,15 @@ import logging
 import multiprocessing as mp
 from importlib.metadata import PackageNotFoundError, version
 from types import SimpleNamespace
+from src.whisper_subprocess import subprocess_transcribe_entry
 
 # Common resilience flag for Windows to avoid native crashes when multiple 
 # libraries (torch, onnx, ctranslate2) bring conflicting OpenMP DLLs.
 if platform.system() == "Windows":
     os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
 
-try:
-    from pyannote.audio import Pipeline
-    PYANNOTE_AVAILABLE = True
-except ImportError:
-    PYANNOTE_AVAILABLE = False
+_PYANNOTE_PIPELINE_CLS = None
+_PYANNOTE_IMPORT_ATTEMPTED = False
 
 
 def get_optimal_device(force_cpu: bool = False, model_size: str = "base"):
@@ -79,6 +77,27 @@ def _pkg_version(name: str) -> str:
         return "<not-installed>"
     except Exception:
         return "<unknown>"
+
+
+def _get_pyannote_pipeline_class():
+    """
+    Lazy import pyannote only when diarization is explicitly requested.
+    This reduces DLL/OpenMP conflicts on Windows for plain transcription.
+    """
+    global _PYANNOTE_PIPELINE_CLS, _PYANNOTE_IMPORT_ATTEMPTED
+    if _PYANNOTE_IMPORT_ATTEMPTED:
+        return _PYANNOTE_PIPELINE_CLS
+
+    _PYANNOTE_IMPORT_ATTEMPTED = True
+    try:
+        from pyannote.audio import Pipeline as ImportedPipeline
+
+        _PYANNOTE_PIPELINE_CLS = ImportedPipeline
+    except Exception as e:
+        logging.warning("pyannote.audio is not available for diarization: %s", e)
+        _PYANNOTE_PIPELINE_CLS = None
+
+    return _PYANNOTE_PIPELINE_CLS
 
 
 def _flush_log_handlers():
@@ -153,50 +172,6 @@ def _log_transcription_runtime_context(
     _flush_log_handlers()
 
 
-def _subprocess_transcribe_entry(payload: dict, result_queue):
-    """Run faster-whisper in an isolated process to contain native crashes."""
-    # Environment tuning for Windows stability.
-    if platform.system() == "Windows":
-        os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
-        # Avoid potential crashes in native libs by limiting thread count if not on GPU.
-        if payload["device"] == "cpu":
-            os.environ["OMP_NUM_THREADS"] = "1"
-            os.environ["MKL_NUM_THREADS"] = "1"
-            # OMP_WAIT_POLICY=PASSIVE can help with some native library instability on Windows.
-            os.environ["OMP_WAIT_POLICY"] = "PASSIVE"
-            # Force more stable compute type for Windows CPU if it's default
-            if payload["compute_type"] == "float32":
-                payload["compute_type"] = "int8_float32"
-
-    try:
-        # Determine CPU threads for Windows CPU
-        cpu_threads = 1 if (platform.system() == "Windows" and payload["device"] == "cpu") else 4
-        
-        logging.info(
-            "Subprocess transcription starting: model=%s device=%s compute_type=%s cpu_threads=%s",
-            payload["model_size"], payload["device"], payload["compute_type"], cpu_threads
-        )
-        
-        model = WhisperModel(
-            payload["model_size"],
-            device=payload["device"],
-            compute_type=payload["compute_type"],
-            cpu_threads=cpu_threads,
-        )
-        segments, _info = model.transcribe(
-            payload["audio_path"],
-            beam_size=payload.get("beam_size", 5),
-            language=payload.get("language"),
-        )
-        serialized_segments = [
-            {"start": float(s.start), "end": float(s.end), "text": str(s.text)}
-            for s in segments
-        ]
-        result_queue.put({"ok": True, "segments": serialized_segments})
-    except Exception as e:
-        result_queue.put({"ok": False, "error": str(e)})
-
-
 def _run_transcription_in_subprocess(
     *,
     audio_path: str,
@@ -216,7 +191,8 @@ def _run_transcription_in_subprocess(
         "language": language,
         "beam_size": 5,
     }
-    proc = ctx.Process(target=_subprocess_transcribe_entry, args=(payload, result_queue), daemon=True)
+    # Keep daemon disabled on Windows for better native library stability.
+    proc = ctx.Process(target=subprocess_transcribe_entry, args=(payload, result_queue), daemon=False)
     proc.start()
     proc.join(timeout=timeout_seconds)
 
@@ -241,17 +217,142 @@ def _run_transcription_in_subprocess(
     return result["segments"]
 
 
+def _is_subprocess_native_crash(error: RuntimeError) -> bool:
+    message = str(error).lower()
+    return "subprocess crashed with exit code" in message
+
+
+def _is_subprocess_timeout(error: RuntimeError) -> bool:
+    return "subprocess timed out" in str(error).lower()
+
+
+def _windows_subprocess_fallback_profiles(device: str, compute_type: str):
+    """
+    Return fallback profiles ordered from safer to most compatible for Windows.
+    """
+    candidates = []
+    if device == "cuda":
+        candidates.extend(
+            [
+                ("cpu", "int8_float32"),
+                ("cpu", "float32"),
+                ("cpu", "int8"),
+            ]
+        )
+    else:
+        candidates.extend(
+            [
+                ("cpu", "float32"),
+                ("cpu", "int8_float32"),
+                ("cpu", "int8"),
+            ]
+        )
+
+    unique = []
+    for cand in candidates:
+        if cand == (device, compute_type):
+            continue
+        if cand not in unique:
+            unique.append(cand)
+    return unique
+
+
+def _windows_model_fallback_order(model_size: str):
+    candidates = [model_size]
+    if model_size == "large-v3":
+        candidates.extend(["medium", "base"])
+    elif model_size == "large":
+        candidates.extend(["medium", "base"])
+    elif model_size == "medium":
+        candidates.append("base")
+    return candidates
+
+
+def _normalize_openai_whisper_model_name(model_size: str) -> str:
+    # Keep mapping conservative for compatibility with openai-whisper names.
+    if model_size in ("large-v3", "large-v2"):
+        return "large"
+    return model_size
+
+
+def _prepare_audio_for_openai_whisper(audio_path: str):
+    """
+    Load audio without ffmpeg when possible (especially for WAV files).
+    Returns a float32 mono waveform at 16 kHz.
+    """
+    import numpy as np
+    import soundfile as sf
+
+    audio, sample_rate = sf.read(audio_path, always_2d=False)
+    audio = np.asarray(audio, dtype=np.float32)
+
+    # Convert multi-channel audio to mono.
+    if audio.ndim > 1:
+        audio = np.mean(audio, axis=1).astype(np.float32)
+
+    # Resample to 16kHz expected by Whisper.
+    target_sr = 16000
+    if int(sample_rate) != target_sr:
+        if audio.size == 0:
+            return audio
+        duration_seconds = len(audio) / float(sample_rate)
+        target_len = max(1, int(round(duration_seconds * target_sr)))
+        src_x = np.linspace(0.0, duration_seconds, num=len(audio), endpoint=False)
+        dst_x = np.linspace(0.0, duration_seconds, num=target_len, endpoint=False)
+        audio = np.interp(dst_x, src_x, audio).astype(np.float32)
+
+    return audio
+
+
+def _run_openai_whisper_fallback(*, audio_path: str, model_size: str, language: str):
+    """
+    Compatibility fallback for Windows when faster-whisper crashes natively.
+    Uses openai-whisper backend (torch-based) which does not depend on ctranslate2.
+    """
+    import whisper
+
+    fallback_model = _normalize_openai_whisper_model_name(model_size)
+    model = whisper.load_model(fallback_model)
+    try:
+        audio_data = _prepare_audio_for_openai_whisper(audio_path)
+        result = model.transcribe(audio_data, language=language)
+    except Exception as audio_prepare_error:
+        logging.warning(
+            "openai-whisper local audio loading failed (%s). Falling back to ffmpeg path mode.",
+            audio_prepare_error,
+        )
+        try:
+            result = model.transcribe(audio_path, language=language)
+        except FileNotFoundError as ffmpeg_missing_error:
+            raise RuntimeError(
+                "FFmpeg is not installed or not available in PATH. "
+                "Install FFmpeg system-wide (for example C:\\ffmpeg\\bin in PATH) "
+                "and retry transcription."
+            ) from ffmpeg_missing_error
+    segments = result.get("segments") or []
+    return [
+        {
+            "start": float(s.get("start", 0.0)),
+            "end": float(s.get("end", 0.0)),
+            "text": str(s.get("text", "")),
+        }
+        for s in segments
+    ]
+
+
 class TranscriberThread(QThread):
     finished = pyqtSignal(dict) # Changed to emit dict with text and stats
     progress = pyqtSignal(int)
     status_update = pyqtSignal(str)
     error = pyqtSignal(str)
 
-    def __init__(self, audio_path, model_size="base", device=None, compute_type=None, language=None, hf_token=None, enable_diarization=False, total_duration=0, force_cpu=False):
+    def __init__(self, audio_path, model_size="base", device=None, compute_type=None, language=None, hf_token=None, enable_diarization=False, total_duration=0, force_cpu=False, backend_preference="auto"):
         super().__init__()
         self.audio_path = audio_path
         self.model_size = model_size
         self.force_cpu = force_cpu
+        self.backend_preference = backend_preference or "auto"
+        self.effective_backend = "faster-whisper"
         
         # Auto-detect optimal device if not explicitly provided
         if device is None or compute_type is None:
@@ -277,6 +378,35 @@ class TranscriberThread(QThread):
         self.enable_diarization = enable_diarization
         self.total_duration = total_duration
 
+    def _persist_working_transcription_settings(self):
+        try:
+            settings = QSettings("Hectronic", "Secretario")
+            settings.setValue("transcription_backend", self.effective_backend)
+            settings.setValue("whisper_model", self.model_size)
+            settings.setValue("rec_config/model", self.model_size)
+            settings.setValue("force_cpu", self.device == "cpu" or self.force_cpu)
+            if self.effective_backend == "faster-whisper":
+                settings.setValue("compute_type", self.compute_type or "auto")
+            settings.sync()
+        except Exception as e:
+            logging.warning("Could not persist working transcription settings: %s", e)
+
+    def _get_subprocess_attempt_timeout_seconds(self) -> int:
+        """
+        Per-attempt timeout. Keep it shorter on Windows to avoid long silent hangs.
+        """
+        default_timeout = 120 if platform.system() == "Windows" else 1800
+        try:
+            settings = QSettings("Hectronic", "Secretario")
+            configured = settings.value(
+                "transcription_attempt_timeout_seconds",
+                default_timeout,
+                type=int,
+            )
+            return max(30, int(configured))
+        except Exception:
+            return default_timeout
+
     def run(self):
         try:
             import time
@@ -295,9 +425,22 @@ class TranscriberThread(QThread):
 
             # On Windows, run faster-whisper in an isolated subprocess to avoid
             # bringing down the whole app if native libraries crash.
-            use_subprocess_isolation = platform.system() == "Windows"
-            if use_subprocess_isolation:
+            use_subprocess_isolation = (
+                platform.system() == "Windows"
+                and self.backend_preference != "openai-whisper"
+            )
+            if self.backend_preference == "openai-whisper":
                 self.status_update.emit("Loading model...")
+                self.effective_backend = "openai-whisper"
+                serialized_segments = _run_openai_whisper_fallback(
+                    audio_path=self.audio_path,
+                    model_size=self.model_size,
+                    language=self.language,
+                )
+                whisper_segments = [SimpleNamespace(**s) for s in serialized_segments]
+            elif use_subprocess_isolation:
+                self.status_update.emit("Loading model...")
+                self.effective_backend = "faster-whisper"
                 logging.info(
                     "Whisper checkpoint W1: subprocess isolation enabled (model=%s device=%s compute_type=%s)",
                     self.model_size,
@@ -305,31 +448,117 @@ class TranscriberThread(QThread):
                     self.compute_type,
                 )
                 _flush_log_handlers()
-                try:
-                    serialized_segments = _run_transcription_in_subprocess(
-                        audio_path=self.audio_path,
-                        model_size=self.model_size,
-                        device=self.device,
-                        compute_type=self.compute_type,
-                        language=self.language,
-                    )
-                except RuntimeError as e:
-                    if self.device == "cuda":
-                        logging.warning("Whisper subprocess failed on CUDA. Falling back to CPU. Error: %s", e)
-                        self.status_update.emit("Whisper failed on GPU. Falling back to CPU...")
-                        self.device = "cpu"
-                        self.compute_type = "float32" if platform.system() == "Windows" else "int8"
-                        self.force_cpu = True
-                        _flush_log_handlers()
-                        serialized_segments = _run_transcription_in_subprocess(
-                            audio_path=self.audio_path,
-                            model_size=self.model_size,
-                            device=self.device,
-                            compute_type=self.compute_type,
-                            language=self.language,
+                is_windows = platform.system() == "Windows"
+                base_device = self.device
+                base_compute_type = self.compute_type
+                attempt_models = (
+                    _windows_model_fallback_order(self.model_size)
+                    if is_windows
+                    else [self.model_size]
+                )
+                serialized_segments = None
+                last_error = None
+                total_models = len(attempt_models)
+                per_attempt_timeout = self._get_subprocess_attempt_timeout_seconds()
+                for model_idx, attempt_model_size in enumerate(attempt_models):
+                    self.model_size = attempt_model_size
+                    attempt_profiles = [(base_device, base_compute_type)]
+                    if is_windows:
+                        attempt_profiles.extend(
+                            _windows_subprocess_fallback_profiles(base_device, base_compute_type)
                         )
+                    total_profiles = len(attempt_profiles)
+
+                    for attempt_idx, (attempt_device, attempt_compute_type) in enumerate(attempt_profiles):
+                        self.device = attempt_device
+                        self.compute_type = attempt_compute_type
+                        self.force_cpu = attempt_device == "cpu"
+                        self.status_update.emit(
+                            f"Attempt {attempt_idx + 1}/{total_profiles}, model {model_idx + 1}/{total_models}: "
+                            f"backend=faster-whisper model={self.model_size} device={self.device} compute={self.compute_type}"
+                        )
+                        try:
+                            serialized_segments = _run_transcription_in_subprocess(
+                                audio_path=self.audio_path,
+                                model_size=self.model_size,
+                                device=self.device,
+                                compute_type=self.compute_type,
+                                language=self.language,
+                                timeout_seconds=per_attempt_timeout,
+                            )
+                            break
+                        except RuntimeError as e:
+                            last_error = e
+                            has_next_profile = attempt_idx < (len(attempt_profiles) - 1)
+                            has_next_model = model_idx < (len(attempt_models) - 1)
+                            native_crash = _is_subprocess_native_crash(e)
+                            timeout_error = _is_subprocess_timeout(e)
+                            should_retry_profile = has_next_profile and (
+                                self.device == "cuda" or (is_windows and (native_crash or timeout_error))
+                            )
+                            if should_retry_profile:
+                                logging.warning(
+                                    "Whisper subprocess failed on profile model=%s device=%s compute_type=%s. Retrying with safer profile. Error: %s",
+                                    self.model_size,
+                                    self.device,
+                                    self.compute_type,
+                                    e,
+                                )
+                                self.status_update.emit(
+                                    f"Retrying after crash: model={self.model_size}, device={self.device}, compute={self.compute_type}"
+                                )
+                                _flush_log_handlers()
+                                continue
+
+                            if has_next_model and is_windows and (native_crash or timeout_error):
+                                next_model = attempt_models[model_idx + 1]
+                                logging.warning(
+                                    "Whisper kept failing on model=%s. Retrying with smaller model=%s.",
+                                    self.model_size,
+                                    next_model,
+                                )
+                                self.status_update.emit(
+                                    f"Switching model after repeated crashes: {self.model_size} -> {next_model}"
+                                )
+                                _flush_log_handlers()
+                                break
+
+                            if is_windows and (native_crash or timeout_error):
+                                # Exhausted profiles/models. Defer failure to compatibility fallback.
+                                break
+
+                            raise
+
+                    if serialized_segments is not None:
+                        break
+
+                if serialized_segments is None and last_error is not None:
+                    if is_windows and _is_subprocess_native_crash(last_error):
+                        logging.warning(
+                            "All faster-whisper subprocess attempts crashed natively. "
+                            "Trying compatibility fallback with openai-whisper."
+                        )
+                        self.status_update.emit(
+                            "faster-whisper unstable. Trying openai-whisper compatibility fallback..."
+                        )
+                        _flush_log_handlers()
+                        try:
+                            serialized_segments = _run_openai_whisper_fallback(
+                                audio_path=self.audio_path,
+                                model_size=self.model_size,
+                                language=self.language,
+                            )
+                            self.effective_backend = "openai-whisper"
+                        except Exception as fallback_error:
+                            logging.error(
+                                "Compatibility fallback (openai-whisper) failed: %s",
+                                fallback_error,
+                                exc_info=True,
+                            )
+                            raise
                     else:
-                        raise
+                        raise last_error
+
                 whisper_segments = [SimpleNamespace(**s) for s in serialized_segments]
                 logging.info("Whisper checkpoint W2: subprocess transcription completed.")
                 _flush_log_handlers()
@@ -406,9 +635,14 @@ class TranscriberThread(QThread):
 
             transcription = ""
 
-            # Run Diarization if token is present, library available, AND enabled
+            # Run Diarization if token is present and enabled.
             diarization = None
-            if self.enable_diarization and self.hf_token and PYANNOTE_AVAILABLE:
+            pipeline_cls = (
+                _get_pyannote_pipeline_class()
+                if (self.enable_diarization and self.hf_token)
+                else None
+            )
+            if self.enable_diarization and self.hf_token and pipeline_cls:
                 self.status_update.emit("Diarizing (this may take a while)...")
                 logging.info("Starting diarization...")
                 # Bump progress to 80% to show we are moving to next phase
@@ -417,7 +651,7 @@ class TranscriberThread(QThread):
                     if self.isInterruptionRequested():
                         self.status_update.emit("Cancelled.")
                         return
-                    pipeline = Pipeline.from_pretrained("pyannote/speaker-diarization-3.1", use_auth_token=self.hf_token)
+                    pipeline = pipeline_cls.from_pretrained("pyannote/speaker-diarization-3.1", use_auth_token=self.hf_token)
                     if pipeline:
                         # Move pipeline to GPU if CUDA available and not forced to CPU
                         if torch.cuda.is_available() and not self.force_cpu:
@@ -430,6 +664,8 @@ class TranscriberThread(QThread):
                     print(f"Diarization failed: {e}")
                     import traceback
                     traceback.print_exc()
+            elif self.enable_diarization and self.hf_token and not pipeline_cls:
+                logging.warning("Diarization requested but pyannote.audio is unavailable.")
             
             # Merge results
             self.status_update.emit("Merging results...")
@@ -472,11 +708,16 @@ class TranscriberThread(QThread):
             result = {
                 "text": transcription.strip(),
                 "model_name": self.model_size,
+                "backend": self.effective_backend,
+                "device": self.device,
+                "compute_type": self.compute_type,
                 "transcription_time": transcription_time,
                 "audio_duration": self.total_duration,
                 "audio_size_bytes": os.path.getsize(self.audio_path),
                 "is_diarized": self.enable_diarization
             }
+
+            self._persist_working_transcription_settings()
 
             logging.info(f"Transcription finished in {transcription_time:.2f}s")
             self.progress.emit(100)

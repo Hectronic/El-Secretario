@@ -240,6 +240,32 @@ python main.py
 
 📌 This is a project bug, not a user error.
 
+### ❌ Error
+
+`Transcription subprocess crashed with exit code 3221225477`
+
+### ✅ Solution (ctranslate2 regression on Windows)
+
+Run inside the project venv:
+
+```powershell
+pip uninstall -y ctranslate2
+pip install "ctranslate2<4.7"
+pip install -r requirements.txt
+```
+
+Then run again:
+
+```powershell
+python main.py
+```
+
+### ⚙ Settings recommended for stable Windows operation
+
+- `Audio Settings -> Auto-index to RAG`: enabled by default (`true`).
+- `Audio Settings -> Transcription Backend`: keep `auto` unless you want to force `openai-whisper`.
+- If faster-whisper crashes continue, switch to `openai-whisper` in Settings. The app can persist the working backend automatically after successful fallback.
+
 ## 🧩 9. Warnings that are NOT Errors
 
 These messages can be ignored:

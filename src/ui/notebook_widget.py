@@ -295,11 +295,18 @@ class NotebookWidget(QWidget):
         settings = QSettings("Hectronic", "Secretario")
         force_cpu = settings.value("force_cpu", False, type=bool)
         compute_type = settings.value("compute_type", "auto")
+        transcription_backend = settings.value("transcription_backend", "auto")
         if compute_type == "auto":
             compute_type = None
 
         self._cleanup_transcriber_thread()
-        self.transcriber_thread = TranscriberThread(file_path, model_size="base", compute_type=compute_type, force_cpu=force_cpu)
+        self.transcriber_thread = TranscriberThread(
+            file_path,
+            model_size="base",
+            compute_type=compute_type,
+            force_cpu=force_cpu,
+            backend_preference=transcription_backend,
+        )
         self.transcriber_thread.finished.connect(lambda res: self.on_transcription_finished(entry_id, res))
         self.transcriber_thread.error.connect(lambda err: self.on_transcription_error(entry_id, err))
         self.transcriber_thread.finished.connect(self._clear_transcriber_thread_ref)

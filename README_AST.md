@@ -70,6 +70,20 @@ Pa utilizar dafechu les funciones d'El Secretario, deberás configurar los token
 3.  **Importar Audio**: Usa'l botón d'importar p'añader archivos d'audio esistentes.
 4.  **Chat**: Abre una grabación o una coleición pa entamar a charrar colos tos datos.
 
+## Estabilidá de trescripción en Windows
+
+- En Windows, la trescripción agora reintenta automáticamente con perfiles de backend más seguros cuando'l subprocesu aisláu de Whisper se cai (por exemplu, códigu de salida `3221225477`).
+- Si falla un perfil CUDA, El Secretario camuda automáticamente a perfiles de CPU enantes de reportar error.
+- Si los fallos nativos persisten, El Secretario reintenta automáticamente con modelos Whisper más pequeños (`large-v3` -> `medium` -> `base`).
+- Les dependencies fixen `ctranslate2<4.7` en Windows pa evitar crashes nativos conocíos en versiones más nueves.
+- Si tolos intentos con faster-whisper se cayen en Windows, El Secretario usa un fallback de compatibilidá con `openai-whisper`.
+- El backend de trescripción pue configurase en Ajustes (`auto`, `faster-whisper`, `openai-whisper`).
+- Cuando un fallback funciona, El Secretario guarda automáticamente nos Ajustes la configuración de trescripción que funcionó.
+- L'autoindexáu RAG pue configurase n'Ajustes (`auto_index_rag`) y ta activáu por defeutu (`true`).
+- En Windows, les operaciones d'indexáu/gueta RAG aíllense en subprocesos por defeutu pa amenorgar crashes nativos de Chroma.
+- La pestaña Welcome agora adáptase meyor a pantalles de Windows con poca altura, con mou compactu automáticu y scroll vertical cuando fai falta.
+- La pestaña Recording in Progress agora tamién s'adapta a pantalles con poca altura con scroll vertical y mou compactu automáticu.
+
 ## Esportación/Importación de Datos
 
 El Secretario permítete esportar tolos tos datos (grabaciones, trescripciones, cuadernos, sesiones de chat) a un archivu JSON ya importarlos n'otra instalación.

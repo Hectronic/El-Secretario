@@ -12,10 +12,11 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-from PyQt6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLabel, QSpacerItem, QSizePolicy, QLineEdit, QListWidget, QListWidgetItem, QComboBox, QCheckBox, QGroupBox, QFormLayout, QProgressBar, QTextBrowser
+import platform
+
+from PyQt6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLabel, QSpacerItem, QSizePolicy, QLineEdit, QListWidget, QListWidgetItem, QComboBox, QCheckBox, QGroupBox, QFormLayout, QProgressBar, QTextBrowser, QScrollArea, QFrame
 from PyQt6.QtCore import Qt, pyqtSignal, QTimer, QSettings
 from PyQt6.QtGui import QPixmap
-from src.ui.styles import LIST_WIDGET_STYLE
 from src.ui.styles import LIST_WIDGET_STYLE
 import numpy as np
 import os
@@ -42,6 +43,8 @@ class WelcomeWidget(QWidget):
     def __init__(self, db, parent=None):
         super().__init__(parent)
         self.db = db
+        self._is_windows = platform.system() == "Windows"
+        self._compact_mode_active = False
         self.favorites_page = 0
         self.test_stream = None
         self.test_timer = QTimer()
@@ -109,9 +112,22 @@ class WelcomeWidget(QWidget):
         self.status_message_requested.emit("Recording configuration saved.")
 
     def init_ui(self):
-        layout = QVBoxLayout(self)
-        layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        layout.setSpacing(20)
+        root_layout = QVBoxLayout(self)
+        root_layout.setContentsMargins(0, 0, 0, 0)
+
+        self.scroll_area = QScrollArea()
+        self.scroll_area.setWidgetResizable(True)
+        self.scroll_area.setFrameShape(QFrame.Shape.NoFrame)
+        self.scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        root_layout.addWidget(self.scroll_area)
+
+        content = QWidget()
+        self.scroll_area.setWidget(content)
+        layout = QVBoxLayout(content)
+        layout.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignHCenter)
+        layout.setContentsMargins(24, 12, 24, 12)
+        layout.setSpacing(14)
+        self.main_content_layout = layout
 
         # Logo
         logo_label = QLabel()
@@ -161,25 +177,24 @@ class WelcomeWidget(QWidget):
         rec_config_row.addStretch()
 
         # REC Button Container (bordered, rounded left side)
-        rec_container = QWidget()
-        rec_container.setObjectName("rec_container")
-        rec_container.setProperty("class", "welcome-rec-container")
-        rec_container.setFixedSize(110, 160)
-        rec_container_layout = QVBoxLayout(rec_container)
+        self.rec_container = QWidget()
+        self.rec_container.setObjectName("rec_container")
+        self.rec_container.setProperty("class", "welcome-rec-container")
+        rec_container_layout = QVBoxLayout(self.rec_container)
         rec_container_layout.setContentsMargins(0, 0, 0, 0)
         rec_container_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.rec_btn = self.create_round_button("REC", "#f44336", self.on_new_recording, size=85, class_name="rec-btn")
         rec_container_layout.addWidget(self.rec_btn, 0, Qt.AlignmentFlag.AlignCenter)
-        rec_config_row.addWidget(rec_container)
+        rec_config_row.addWidget(self.rec_container)
 
         # Config area (Modern card style with title inside)
-        config_group = QGroupBox()
-        config_group.setObjectName("config_group")
-        config_group.setProperty("class", "welcome-config-group")
-        config_group.setFixedWidth(450)
-        config_group.setFixedHeight(160)
+        self.config_group = QGroupBox()
+        self.config_group.setObjectName("config_group")
+        self.config_group.setProperty("class", "welcome-config-group")
+        self.config_group.setFixedWidth(450)
+        self.config_group.setFixedHeight(160)
         
-        inner_config_layout = QVBoxLayout(config_group)
+        inner_config_layout = QVBoxLayout(self.config_group)
         inner_config_layout.setContentsMargins(5, 10, 5, 10)
         inner_config_layout.setSpacing(0)
 
@@ -294,7 +309,7 @@ class WelcomeWidget(QWidget):
         config_layout.addRow(check_row)
 
         inner_config_layout.addLayout(config_layout)
-        rec_config_row.addWidget(config_group)
+        rec_config_row.addWidget(self.config_group)
 
         # NOTE Button (right side, rounded right corners)
         self.new_note_top_btn = self.create_squircle_button("NOTE", "#2196F3", self.new_note_requested.emit, width=110, height=160, class_name="new-note-btn")
@@ -334,7 +349,8 @@ class WelcomeWidget(QWidget):
         fav_container.addWidget(self.fav_label)
         
         self.fav_list = QListWidget()
-        self.fav_list.setFixedHeight(180)
+        self.fav_list.setMinimumHeight(140)
+        self.fav_list.setMaximumHeight(220)
         self.fav_list.setStyleSheet(LIST_WIDGET_STYLE)
         self.fav_list.itemClicked.connect(self.on_fav_clicked)
         fav_container.addWidget(self.fav_list)
@@ -362,7 +378,8 @@ class WelcomeWidget(QWidget):
         today_container.addWidget(self.today_label)
         
         self.today_list = QListWidget()
-        self.today_list.setFixedHeight(180)
+        self.today_list.setMinimumHeight(140)
+        self.today_list.setMaximumHeight(220)
         self.today_list.setStyleSheet(LIST_WIDGET_STYLE)
         self.today_list.itemClicked.connect(self.on_today_clicked)
         today_container.addWidget(self.today_list)
@@ -401,6 +418,67 @@ class WelcomeWidget(QWidget):
         
         # Add some space at the bottom
         layout.addSpacerItem(QSpacerItem(20, 40, QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Expanding))
+        self._apply_layout_density()
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        self._apply_layout_density()
+
+    def _apply_layout_density(self, viewport_height=None):
+        """
+        Adapt welcome layout to low-height viewports.
+        On Windows we switch earlier because DPI scaling frequently reduces usable height.
+        """
+        if viewport_height is None:
+            if hasattr(self, "scroll_area") and self.scroll_area.viewport():
+                viewport_height = self.scroll_area.viewport().height()
+            else:
+                viewport_height = self.height()
+
+        compact_threshold = 980 if self._is_windows else 860
+        compact_mode = viewport_height > 0 and viewport_height < compact_threshold
+
+        if compact_mode == self._compact_mode_active:
+            return
+        self._compact_mode_active = compact_mode
+
+        if compact_mode:
+            self.main_content_layout.setContentsMargins(18, 8, 18, 8)
+            self.main_content_layout.setSpacing(10)
+            self.search_input.setMinimumWidth(340)
+            self.search_input.setMaximumWidth(760)
+            self.rec_container.setFixedSize(96, 142)
+            self._set_rec_button_size(72)
+            self.new_note_top_btn.setFixedSize(96, 142)
+            self.config_group.setFixedWidth(410)
+            self.config_group.setFixedHeight(142)
+            for btn in (self.chat_btn, self.import_btn, self.tools_btn, self.settings_btn):
+                btn.setFixedSize(145, 52)
+            self.fav_list.setMinimumHeight(120)
+            self.fav_list.setMaximumHeight(170)
+            self.today_list.setMinimumHeight(120)
+            self.today_list.setMaximumHeight(170)
+        else:
+            self.main_content_layout.setContentsMargins(24, 12, 24, 12)
+            self.main_content_layout.setSpacing(14)
+            self.search_input.setMinimumWidth(400)
+            self.search_input.setMaximumWidth(900)
+            self.rec_container.setFixedSize(110, 160)
+            self._set_rec_button_size(85)
+            self.new_note_top_btn.setFixedSize(110, 160)
+            self.config_group.setFixedWidth(450)
+            self.config_group.setFixedHeight(160)
+            for btn in (self.chat_btn, self.import_btn, self.tools_btn, self.settings_btn):
+                btn.setFixedSize(160, 60)
+            self.fav_list.setMinimumHeight(140)
+            self.fav_list.setMaximumHeight(220)
+            self.today_list.setMinimumHeight(140)
+            self.today_list.setMaximumHeight(220)
+
+    def _set_rec_button_size(self, size):
+        """Keep REC visually circular regardless of active theme and compact mode."""
+        self.rec_btn.setFixedSize(size, size)
+        self.rec_btn.setStyleSheet(f"border-radius: {size // 2}px;")
 
     def populate_mics(self):
         """Populate the microphone combo box with available devices."""

@@ -1,5 +1,7 @@
 PyQt6
 faster-whisper
+openai-whisper
+ctranslate2<4.7; platform_system=="Windows"
 sounddevice
 soundfile
 numpy<2.0

@@ -156,7 +156,9 @@ class NoteWidget(QWidget):
             self.load_note(self.current_record_id)
             
         if self.rag:
-            self.rag.add_document(self.current_record_id, content, {"title": title, "type": "note", "tags": tags})
+            settings = QSettings("Hectronic", "Secretario")
+            if settings.value("auto_index_rag", True, type=bool):
+                self.rag.add_document(self.current_record_id, content, {"title": title, "type": "note", "tags": tags})
             
         self.note_saved.emit()
         self.status_changed.emit("Note saved.")

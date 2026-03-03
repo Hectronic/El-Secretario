@@ -1,17 +1,24 @@
 
 import pytest
+import shutil
+import tempfile
 from PyQt6.QtCore import QSettings
 from src.ui.dialogs import SettingsWidget
 
 @pytest.fixture
-def clean_settings():
+def clean_settings(monkeypatch):
     """Ensure clean settings before test."""
-    settings = QSettings("Hectronic", "Secretario")
+    temp_dir = tempfile.mkdtemp(prefix="secretario_settings_")
+    settings_file = f"{temp_dir}/settings.ini"
+    settings = QSettings(settings_file, QSettings.Format.IniFormat)
+    monkeypatch.setattr("src.ui.dialogs.QSettings", lambda *args, **kwargs: settings)
     old_hf = settings.value("hf_token")
     old_gemini = settings.value("gemini_key")
     old_theme = settings.value("app_theme")
     old_startup_weekly = settings.value("startup_enqueue_last_weekly_summary")
     old_startup_daily = settings.value("startup_enqueue_previous_daily_summary")
+    old_transcription_backend = settings.value("transcription_backend")
+    old_auto_index_rag = settings.value("auto_index_rag")
     
     yield settings
     
@@ -34,6 +41,19 @@ def clean_settings():
         settings.setValue("startup_enqueue_previous_daily_summary", old_startup_daily)
     else:
         settings.remove("startup_enqueue_previous_daily_summary")
+
+    if old_transcription_backend is not None:
+        settings.setValue("transcription_backend", old_transcription_backend)
+    else:
+        settings.remove("transcription_backend")
+
+    if old_auto_index_rag is not None:
+        settings.setValue("auto_index_rag", old_auto_index_rag)
+    else:
+        settings.remove("auto_index_rag")
+
+    settings.sync()
+    shutil.rmtree(temp_dir, ignore_errors=True)
 
 def test_settings_load(qtbot, clean_settings):
     """Test that settings are loaded correctly into the widget."""
@@ -142,3 +162,21 @@ def test_prompts_panel_save(qtbot, clean_settings):
     
     # Clean up
     clean_settings.remove("prompt_summary")
+
+
+def test_audio_panel_defaults_and_save(qtbot, clean_settings):
+    clean_settings.remove("transcription_backend")
+    clean_settings.remove("auto_index_rag")
+
+    widget = SettingsWidget()
+    qtbot.addWidget(widget)
+
+    assert widget.audio_panel.backend_combo.currentText() == "auto"
+    assert widget.audio_panel.rag_auto_index_check.isChecked() is True
+
+    widget.audio_panel.backend_combo.setCurrentText("openai-whisper")
+    widget.audio_panel.rag_auto_index_check.setChecked(False)
+    widget.save_settings()
+
+    assert clean_settings.value("transcription_backend") == "openai-whisper"
+    assert clean_settings.value("auto_index_rag", True, type=bool) is False

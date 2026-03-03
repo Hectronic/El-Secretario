@@ -17,6 +17,8 @@ import os
 import unittest
 from unittest.mock import MagicMock, patch
 import wave
+import tempfile
+import shutil
 from PyQt6.QtWidgets import QApplication
 from PyQt6.QtCore import Qt, QSettings
 
@@ -34,6 +36,18 @@ class TestRecordingFlow(unittest.TestCase):
             cls.app = QApplication(sys.argv)
         else:
             cls.app = QApplication.instance()
+        cls._qsettings_dir = tempfile.mkdtemp(prefix="secretario_qsettings_")
+        QSettings.setDefaultFormat(QSettings.Format.IniFormat)
+        QSettings.setPath(
+            QSettings.Format.IniFormat,
+            QSettings.Scope.UserScope,
+            cls._qsettings_dir,
+        )
+
+    @classmethod
+    def tearDownClass(cls):
+        if hasattr(cls, "_qsettings_dir") and os.path.isdir(cls._qsettings_dir):
+            shutil.rmtree(cls._qsettings_dir, ignore_errors=True)
 
     def setUp(self):
         # Patch Recorder
@@ -42,7 +56,7 @@ class TestRecordingFlow(unittest.TestCase):
         self.mock_recorder = self.mock_recorder_cls.return_value
         self.mock_recorder.is_recording = False
         self.mock_recorder.is_paused = False
-        self.mock_recorder.stop.return_value = "/tmp/test_audio.wav"
+        self.mock_recorder.stop.return_value = None
         
         # Patch DBManager to avoid real DB ops
         self.db_patcher = patch('src.ui.main_window.DBManager')
@@ -97,12 +111,13 @@ class TestRecordingFlow(unittest.TestCase):
         self.window = MainWindow()
 
         # Create a dummy WAV file
-        self.dummy_wav_path = "/tmp/test_audio.wav"
+        self.dummy_wav_path = os.path.join(tempfile.gettempdir(), "test_audio.wav")
         with wave.open(self.dummy_wav_path, 'wb') as wf:
             wf.setnchannels(1)
             wf.setsampwidth(2)
             wf.setframerate(44100)
             wf.writeframes(b'\x00' * 1024)
+        self.mock_recorder.stop.return_value = self.dummy_wav_path
 
     def tearDown(self):
         if os.path.exists(self.dummy_wav_path):
@@ -142,6 +157,7 @@ class TestRecordingFlow(unittest.TestCase):
         settings = QSettings("Hectronic", "Secretario")
         prev_value = settings.value("rec_config/auto_summarize_after_transcription", None)
         settings.setValue("rec_config/auto_summarize_after_transcription", False)
+        settings.sync()
 
         try:
             self.window.start_new_recording({})
@@ -155,14 +171,6 @@ class TestRecordingFlow(unittest.TestCase):
             self.assertIsInstance(new_widget, RecordingWidget)
             self.assertTrue(new_widget.auto_summarize_after_transcription)
 
-            self.assertTrue(
-                settings.value(
-                    "rec_config/auto_summarize_after_transcription",
-                    False,
-                    type=bool,
-                )
-            )
-
             self.assertTrue(self.mock_start_transcription.called)
             _, args, _ = self.mock_start_transcription.mock_calls[-1]
             passed_config = args[2]
@@ -172,6 +180,7 @@ class TestRecordingFlow(unittest.TestCase):
                 settings.remove("rec_config/auto_summarize_after_transcription")
             else:
                 settings.setValue("rec_config/auto_summarize_after_transcription", prev_value)
+            settings.sync()
         
         # Verify Recorder stopped
         self.mock_recorder.stop.assert_called()

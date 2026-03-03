@@ -70,6 +70,20 @@ Para utilizar plenamente las funciones de El Secretario, deberás configurar los
 3.  **Importar Audio**: Usa el botón de importar para añadir archivos de audio existentes.
 4.  **Chat**: Abre una grabación o una colección para comenzar a chatear con tus datos.
 
+## Estabilidad de transcripción en Windows
+
+- En Windows, la transcripción ahora reintenta automáticamente con perfiles de backend más seguros cuando el subproceso aislado de Whisper se cae (por ejemplo, código de salida `3221225477`).
+- Si falla un perfil CUDA, El Secretario cambia automáticamente a perfiles de CPU antes de reportar error.
+- Si los fallos nativos persisten, El Secretario reintenta automáticamente con modelos Whisper más pequeños (`large-v3` -> `medium` -> `base`).
+- Las dependencias fijan `ctranslate2<4.7` en Windows para evitar crashes nativos conocidos en versiones más nuevas.
+- Si todos los intentos con faster-whisper se caen en Windows, El Secretario usa un fallback de compatibilidad con `openai-whisper`.
+- El backend de transcripción se puede configurar en Ajustes (`auto`, `faster-whisper`, `openai-whisper`).
+- Cuando un fallback funciona, El Secretario guarda automáticamente en Ajustes la configuración de transcripción que funcionó.
+- El autoindexado RAG se puede configurar en Ajustes (`auto_index_rag`) y está activado por defecto (`true`).
+- En Windows, las operaciones de indexado/búsqueda RAG se aíslan en subprocesos por defecto para reducir crashes nativos de Chroma.
+- La pestaña Welcome ahora se adapta mejor a pantallas de Windows con poca altura, con modo compacto automático y scroll vertical cuando hace falta.
+- La pestaña Recording in Progress ahora también se adapta a pantallas con poca altura con scroll vertical y modo compacto automático.
+
 ## Exportación/Importación de Datos
 
 El Secretario te permite exportar todos tus datos (grabaciones, transcripciones, libretas, sesiones de chat) a un archivo JSON e importarlos en otra instalación.
