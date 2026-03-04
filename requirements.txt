@@ -1,4 +1,6 @@
 PyQt6
+pytest
+pytest-qt
 faster-whisper
 openai-whisper
 ctranslate2<4.7; platform_system=="Windows"

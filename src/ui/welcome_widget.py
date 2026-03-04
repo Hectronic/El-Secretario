@@ -59,13 +59,23 @@ class WelcomeWidget(QWidget):
 
     def _load_saved_config(self):
         saved_mic = self.settings.value("rec_config/mic", None)
+        prefer_index = self.settings.value("audio_prefer_device_index", False, type=bool)
         if saved_mic is None:
-            # Try global default from settings
-            saved_mic_name = self.settings.value("default_mic_name", "")
-            if saved_mic_name:
-                index = self.mic_combo.findText(saved_mic_name)
+            # Try global default from settings.
+            if prefer_index:
+                saved_mic_index = self.settings.value("default_mic_index", None)
+                try:
+                    index = self.mic_combo.findData(int(saved_mic_index)) if saved_mic_index is not None else -1
+                except (TypeError, ValueError):
+                    index = -1
                 if index >= 0:
                     self.mic_combo.setCurrentIndex(index)
+            if self.mic_combo.currentIndex() <= 0:
+                saved_mic_name = self.settings.value("default_mic_name", "")
+                if saved_mic_name:
+                    index = self.mic_combo.findText(saved_mic_name)
+                    if index >= 0:
+                        self.mic_combo.setCurrentIndex(index)
         elif saved_mic:
             index = self.mic_combo.findData(saved_mic)
             if index >= 0:
@@ -160,7 +170,6 @@ class WelcomeWidget(QWidget):
                 font-size: 16px;
                 border: 2px solid #ddd;
                 border-radius: 10px;
-                min-width: 400px;
             }
             QLineEdit:focus {
                 border-color: #2196F3;
@@ -173,7 +182,6 @@ class WelcomeWidget(QWidget):
         rec_config_row = QHBoxLayout()
         rec_config_row.setSpacing(0)
         rec_config_row.setContentsMargins(40, 10, 40, 10)
-
         rec_config_row.addStretch()
 
         # REC Button Container (bordered, rounded left side)
@@ -205,9 +213,27 @@ class WelcomeWidget(QWidget):
         # Mic Selector with Test Button
         mic_row = QHBoxLayout()
         self.mic_combo = QComboBox()
-        self.mic_combo.setMinimumWidth(250)
+        self.mic_combo.setMinimumWidth(180)
         self.populate_mics()
         mic_row.addWidget(self.mic_combo)
+
+        self.rescan_mics_btn = QPushButton("🔄 Re-scan")
+        self.rescan_mics_btn.setFixedWidth(95)
+        self.rescan_mics_btn.setToolTip("Re-scan USB and system recording devices")
+        self.rescan_mics_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #607D8B;
+                color: white;
+                border-radius: 5px;
+                padding: 5px;
+                font-weight: bold;
+            }
+            QPushButton:hover {
+                background-color: #546E7A;
+            }
+        """)
+        self.rescan_mics_btn.clicked.connect(self.on_rescan_mics_clicked)
+        mic_row.addWidget(self.rescan_mics_btn)
         
         self.test_mic_btn = QPushButton("🎤 Test")
         self.test_mic_btn.setFixedWidth(80)
@@ -314,7 +340,6 @@ class WelcomeWidget(QWidget):
         # NOTE Button (right side, rounded right corners)
         self.new_note_top_btn = self.create_squircle_button("NOTE", "#2196F3", self.new_note_requested.emit, width=110, height=160, class_name="new-note-btn")
         rec_config_row.addWidget(self.new_note_top_btn)
-
         rec_config_row.addStretch()
 
         layout.addLayout(rec_config_row)
@@ -438,50 +463,58 @@ class WelcomeWidget(QWidget):
         compact_threshold = 980 if self._is_windows else 860
         compact_mode = viewport_height > 0 and viewport_height < compact_threshold
 
-        if compact_mode == self._compact_mode_active:
-            return
-        self._compact_mode_active = compact_mode
+        if compact_mode != self._compact_mode_active:
+            self._compact_mode_active = compact_mode
+
+        viewport_width = self.scroll_area.viewport().width() if hasattr(self, "scroll_area") and self.scroll_area.viewport() else self.width()
 
         if compact_mode:
             self.main_content_layout.setContentsMargins(18, 8, 18, 8)
             self.main_content_layout.setSpacing(10)
-            self.search_input.setMinimumWidth(340)
-            self.search_input.setMaximumWidth(760)
             self.rec_container.setFixedSize(96, 142)
             self._set_rec_button_size(72)
             self.new_note_top_btn.setFixedSize(96, 142)
-            self.config_group.setFixedWidth(410)
             self.config_group.setFixedHeight(142)
-            for btn in (self.chat_btn, self.import_btn, self.tools_btn, self.settings_btn):
-                btn.setFixedSize(145, 52)
             self.fav_list.setMinimumHeight(120)
             self.fav_list.setMaximumHeight(170)
             self.today_list.setMinimumHeight(120)
             self.today_list.setMaximumHeight(170)
+            search_min_width = 520
         else:
             self.main_content_layout.setContentsMargins(24, 12, 24, 12)
             self.main_content_layout.setSpacing(14)
-            self.search_input.setMinimumWidth(400)
-            self.search_input.setMaximumWidth(900)
             self.rec_container.setFixedSize(110, 160)
             self._set_rec_button_size(85)
             self.new_note_top_btn.setFixedSize(110, 160)
-            self.config_group.setFixedWidth(450)
             self.config_group.setFixedHeight(160)
-            for btn in (self.chat_btn, self.import_btn, self.tools_btn, self.settings_btn):
-                btn.setFixedSize(160, 60)
             self.fav_list.setMinimumHeight(140)
             self.fav_list.setMaximumHeight(220)
             self.today_list.setMinimumHeight(140)
             self.today_list.setMaximumHeight(220)
+            search_min_width = 760
+
+        max_search_width = max(search_min_width, min(1280, viewport_width - 60))
+        self.search_input.setMinimumWidth(search_min_width)
+        self.search_input.setMaximumWidth(max_search_width)
+
+        target_config_width = 410 if compact_mode else 450
+        available_width = max(320, viewport_width - 360)
+        self.config_group.setFixedWidth(min(target_config_width, available_width))
+
+        btn_width = 145 if compact_mode else 160
+        btn_height = 52 if compact_mode else 60
+        for btn in (self.chat_btn, self.import_btn, self.tools_btn, self.settings_btn):
+            btn.setFixedSize(btn_width, btn_height)
 
     def _set_rec_button_size(self, size):
         """Keep REC visually circular regardless of active theme and compact mode."""
         self.rec_btn.setFixedSize(size, size)
         self.rec_btn.setStyleSheet(f"border-radius: {size // 2}px;")
 
-    def populate_mics(self):
+    def populate_mics(self, keep_current=False):
         """Populate the microphone combo box with available devices."""
+        previous_data = self.mic_combo.currentData() if keep_current else None
+        previous_text = self.mic_combo.currentText() if keep_current else ""
         if os.environ.get("EL_SECRETARIO_SKIP_AUDIO_ENUM", "").strip().lower() in {"1", "true", "yes"}:
             self.mic_combo.clear()
             self.mic_combo.addItem("Default (Auto)", None)
@@ -496,6 +529,24 @@ class WelcomeWidget(QWidget):
         self.mic_combo.addItem("Default (Auto)", None)
         for idx, name in devices:
             self.mic_combo.addItem(name, idx)
+        if keep_current:
+            if previous_data is not None:
+                idx_by_data = self.mic_combo.findData(previous_data)
+                if idx_by_data >= 0:
+                    self.mic_combo.setCurrentIndex(idx_by_data)
+                    return
+            if previous_text:
+                idx_by_text = self.mic_combo.findText(previous_text)
+                if idx_by_text >= 0:
+                    self.mic_combo.setCurrentIndex(idx_by_text)
+
+    def on_rescan_mics_clicked(self):
+        self.populate_mics(keep_current=True)
+        detected = max(0, self.mic_combo.count() - 1)
+        if detected > 0:
+            self.status_message_requested.emit(f"Audio re-scan complete: {detected} input device(s) detected.")
+        else:
+            self.status_message_requested.emit("Audio re-scan complete: no input devices detected, using default.")
 
     def toggle_mic_test(self):
         """Toggle microphone testing on/off."""
@@ -620,11 +671,15 @@ class WelcomeWidget(QWidget):
 
     def on_new_recording(self):
         """Emit new recording signal with configuration."""
+        if self.settings.value("audio_rescan_before_capture", True, type=bool):
+            self.populate_mics(keep_current=True)
         config = self.get_recording_config()
         self.new_recording_requested.emit(config)
 
     def on_import_audio(self):
         """Emit import audio signal with configuration."""
+        if self.settings.value("audio_rescan_before_capture", True, type=bool):
+            self.populate_mics(keep_current=True)
         config = self.get_recording_config()
         self.import_audio_requested.emit(config)
 

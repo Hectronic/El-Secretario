@@ -8,6 +8,7 @@ This document contains useful information and strict rules for AI agents working
     *   **Always** verify generated or modified code with tests.
     *   **Every new feature must include new tests** (unit or integration as appropriate).
     *   Never assume code works without testing it.
+    *   **Always run tests with the project virtual environment** (`./venv/bin/python -m pytest` or `./run_with_test.sh`). Do not run tests with the global/system Python.
 
 2.  **Documentation Updates**:
     *   **Documentation must be kept up to date.**
@@ -17,6 +18,10 @@ This document contains useful information and strict rules for AI agents working
 3.  **Project Context**:
     *   This project uses a logging system in `log/app.log`. Use it for debugging.
     *   The project structure separates source code in `src/` and tests in `tests/`.
+
+4.  **Platforms**:
+    *   This project is being used in Ubuntu and Windows, sometimes there are diferent implemetations, bear it in mind and don't break other systems
+
 
 ## Recommended Workflow
 

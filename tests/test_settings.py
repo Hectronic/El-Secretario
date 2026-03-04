@@ -167,16 +167,24 @@ def test_prompts_panel_save(qtbot, clean_settings):
 def test_audio_panel_defaults_and_save(qtbot, clean_settings):
     clean_settings.remove("transcription_backend")
     clean_settings.remove("auto_index_rag")
+    clean_settings.remove("audio_rescan_before_capture")
+    clean_settings.remove("audio_prefer_device_index")
 
     widget = SettingsWidget()
     qtbot.addWidget(widget)
 
     assert widget.audio_panel.backend_combo.currentText() == "auto"
     assert widget.audio_panel.rag_auto_index_check.isChecked() is True
+    assert widget.audio_panel.rescan_before_capture_check.isChecked() is True
+    assert widget.audio_panel.prefer_index_check.isChecked() is False
 
     widget.audio_panel.backend_combo.setCurrentText("openai-whisper")
     widget.audio_panel.rag_auto_index_check.setChecked(False)
+    widget.audio_panel.rescan_before_capture_check.setChecked(False)
+    widget.audio_panel.prefer_index_check.setChecked(True)
     widget.save_settings()
 
     assert clean_settings.value("transcription_backend") == "openai-whisper"
     assert clean_settings.value("auto_index_rag", True, type=bool) is False
+    assert clean_settings.value("audio_rescan_before_capture", True, type=bool) is False
+    assert clean_settings.value("audio_prefer_device_index", False, type=bool) is True
