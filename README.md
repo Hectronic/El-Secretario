@@ -72,6 +72,21 @@ To fully utilize the features of El Secretario, you will need to configure the A
 3.  **Import Audio**: Use the import button to add existing audio files.
 4.  **Chat**: Open a recording or a collection to start chatting with your data.
 
+## Running Tests
+
+Run tests with the project virtual environment to avoid global Python mismatches:
+
+```bash
+./venv/bin/pip install -r requirements.txt
+./venv/bin/python -m pytest -q
+```
+
+You can also use:
+
+```bash
+./run_with_test.sh
+```
+
 ## Windows Transcription Stability
 
 - On Windows, transcription now retries automatically with safer backend profiles when the isolated Whisper subprocess crashes (for example exit code `3221225477`).

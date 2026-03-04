@@ -366,17 +366,43 @@ class AudioSettingsPanel(QWidget):
         # Default Microphone
         lbl_mic = QLabel("Default Microphone:")
         lbl_mic.setStyleSheet("font-weight: bold;")
+        mic_row = QHBoxLayout()
+        mic_row.setContentsMargins(0, 0, 0, 0)
+        mic_row.setSpacing(8)
+
         self.mic_combo = QComboBox()
         self._populate_mics()
+        mic_row.addWidget(self.mic_combo, 1)
+
+        self.rescan_mics_btn = QPushButton("🔄 Re-scan")
+        self.rescan_mics_btn.setToolTip("Re-scan USB and system recording devices")
+        self.rescan_mics_btn.clicked.connect(self._on_rescan_mics_clicked)
+        mic_row.addWidget(self.rescan_mics_btn)
         
         # Select saved mic
+        saved_mic_index = self.settings.value("default_mic_index", None)
         saved_mic_name = self.settings.value("default_mic_name", "")
-        if saved_mic_name:
+        prefer_index = self.settings.value("audio_prefer_device_index", False, type=bool)
+        if prefer_index and saved_mic_index is not None:
+            try:
+                mic_index = int(saved_mic_index)
+                index = self.mic_combo.findData(mic_index)
+                if index >= 0:
+                    self.mic_combo.setCurrentIndex(index)
+            except (TypeError, ValueError):
+                pass
+        if self.mic_combo.currentIndex() <= 0 and saved_mic_name:
             index = self.mic_combo.findText(saved_mic_name)
             if index >= 0:
                 self.mic_combo.setCurrentIndex(index)
         
-        form_layout.addRow(lbl_mic, self.mic_combo)
+        mic_row_widget = QWidget()
+        mic_row_widget.setLayout(mic_row)
+        form_layout.addRow(lbl_mic, mic_row_widget)
+
+        self.mic_status_label = QLabel("")
+        self.mic_status_label.setStyleSheet("color: gray; font-size: 12px;")
+        form_layout.addRow("", self.mic_status_label)
         
         # System Audio Loopback
         lbl_sys_audio = QLabel("System Audio Capture:")
@@ -444,6 +470,33 @@ class AudioSettingsPanel(QWidget):
             "When enabled, newly saved content is indexed for semantic search/chat."
         )
         form_layout.addRow(lbl_rag_index, self.rag_auto_index_check)
+
+        # --- Advanced Device Detection ---
+        advanced_label = QLabel("🛠 Advanced Device Detection")
+        advanced_label.setStyleSheet("font-size: 18px; font-weight: bold; color: #607D8B; margin-top: 20px;")
+        form_layout.addRow(advanced_label)
+
+        lbl_rescan_before_capture = QLabel("Pre-capture Re-scan:")
+        lbl_rescan_before_capture.setStyleSheet("font-weight: bold;")
+        self.rescan_before_capture_check = QCheckBox("Re-scan audio inputs before recording/import")
+        self.rescan_before_capture_check.setToolTip(
+            "Recommended on Windows when USB microphones are not detected consistently."
+        )
+        self.rescan_before_capture_check.setChecked(
+            self.settings.value("audio_rescan_before_capture", True, type=bool)
+        )
+        form_layout.addRow(lbl_rescan_before_capture, self.rescan_before_capture_check)
+
+        lbl_prefer_index = QLabel("Device Match Strategy:")
+        lbl_prefer_index.setStyleSheet("font-weight: bold;")
+        self.prefer_index_check = QCheckBox("Prefer saved microphone index over name")
+        self.prefer_index_check.setToolTip(
+            "Useful when USB device names change or duplicate names exist."
+        )
+        self.prefer_index_check.setChecked(
+            self.settings.value("audio_prefer_device_index", False, type=bool)
+        )
+        form_layout.addRow(lbl_prefer_index, self.prefer_index_check)
         
         layout.addLayout(form_layout)
         
@@ -456,27 +509,58 @@ class AudioSettingsPanel(QWidget):
     def _populate_mics(self):
         """Populate microphone list."""
         import os
+        previous_data = self.mic_combo.currentData() if hasattr(self, "mic_combo") else None
+        previous_text = self.mic_combo.currentText() if hasattr(self, "mic_combo") else ""
         self.mic_combo.clear()
-        self.mic_combo.addItem("System Default", "")
+        self.mic_combo.addItem("System Default", None)
         if os.environ.get("EL_SECRETARIO_SKIP_AUDIO_ENUM", "").strip().lower() in {"1", "true", "yes"}:
+            self._restore_mic_selection(previous_data, previous_text)
             return
         try:
             from src.audio import Recorder
             devices = Recorder.get_input_devices()
             for idx, name in devices:
-                self.mic_combo.addItem(name, name) # Store name as data to be more portable
+                self.mic_combo.addItem(name, idx)
         except Exception:
             pass
+        self._restore_mic_selection(previous_data, previous_text)
+
+    def _restore_mic_selection(self, preferred_data, preferred_text):
+        if preferred_data is not None:
+            by_data_idx = self.mic_combo.findData(preferred_data)
+            if by_data_idx >= 0:
+                self.mic_combo.setCurrentIndex(by_data_idx)
+                return
+        if preferred_text:
+            by_text_idx = self.mic_combo.findText(preferred_text)
+            if by_text_idx >= 0:
+                self.mic_combo.setCurrentIndex(by_text_idx)
+
+    def _on_rescan_mics_clicked(self):
+        before = self.mic_combo.count()
+        self._populate_mics()
+        after = self.mic_combo.count()
+        if after > 1:
+            self.mic_status_label.setText(f"Detected {after - 1} input device(s).")
+            self.mic_status_label.setStyleSheet("color: #4CAF50; font-size: 12px;")
+        else:
+            self.mic_status_label.setText("No input devices found (using System Default).")
+            self.mic_status_label.setStyleSheet("color: #FF9800; font-size: 12px;")
+        if before != after:
+            QTimer.singleShot(4000, lambda: self.mic_status_label.setText(""))
 
     def save(self):
         """Save audio settings."""
-        self.settings.setValue("default_mic_name", self.mic_combo.currentData())
+        self.settings.setValue("default_mic_name", self.mic_combo.currentText() if self.mic_combo.currentData() is not None else "")
+        self.settings.setValue("default_mic_index", self.mic_combo.currentData())
         self.settings.setValue("capture_system_audio", self.sys_audio_check.isChecked())
         self.settings.setValue("whisper_model", self.whisper_combo.currentText())
         self.settings.setValue("force_cpu", self.force_cpu_check.isChecked())
         self.settings.setValue("compute_type", self.compute_combo.currentText())
         self.settings.setValue("transcription_backend", self.backend_combo.currentText())
         self.settings.setValue("auto_index_rag", self.rag_auto_index_check.isChecked())
+        self.settings.setValue("audio_rescan_before_capture", self.rescan_before_capture_check.isChecked())
+        self.settings.setValue("audio_prefer_device_index", self.prefer_index_check.isChecked())
 
 
 class PromptsSettingsPanel(QWidget):
@@ -594,6 +678,8 @@ class SettingsWidget(QWidget):
         scroll_general.setWidget(self.general_panel)
         scroll_general.setWidgetResizable(True)
         scroll_general.setFrameShape(QScrollArea.Shape.NoFrame)
+        scroll_general.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        scroll_general.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
         self.tab_widget.addTab(scroll_general, "🔧 General")
         
         # Audio Settings Panel
@@ -602,6 +688,8 @@ class SettingsWidget(QWidget):
         scroll_audio.setWidget(self.audio_panel)
         scroll_audio.setWidgetResizable(True)
         scroll_audio.setFrameShape(QScrollArea.Shape.NoFrame)
+        scroll_audio.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        scroll_audio.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
         self.tab_widget.addTab(scroll_audio, "🔊 Audio")
         
         # Prompts Settings Panel
@@ -610,6 +698,8 @@ class SettingsWidget(QWidget):
         scroll_prompts.setWidget(self.prompts_panel)
         scroll_prompts.setWidgetResizable(True)
         scroll_prompts.setFrameShape(QScrollArea.Shape.NoFrame)
+        scroll_prompts.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        scroll_prompts.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
         self.tab_widget.addTab(scroll_prompts, "💬 Prompts")
         
         layout.addWidget(self.tab_widget)

@@ -60,7 +60,7 @@ class MainWindow(QMainWindow):
         logging.info("Initializing MainWindow...")
         self.setWindowTitle("El Secretario")
         self.setWindowIcon(QIcon("logo.png"))
-        self.resize(1300, 800)
+        self.resize(1450, 860)
 
         self.db = DBManager()
         self.notebook_db = NotebookDBManager()
