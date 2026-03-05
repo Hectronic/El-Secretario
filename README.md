@@ -44,6 +44,7 @@ Read this in [Español](README_ES.md) | [Asturianu](README_AST.md)
     ```
 
     > **Windows Users:** Please refer to the [Windows Installation Guide](docs/INSTALL_WINDOWS.md).
+    > Use Python `3.12` (recommended) or `3.11`. Python `3.14` is currently not compatible with pinned ML dependencies such as `torch==2.5.1`.
 
 ## Configuration
 

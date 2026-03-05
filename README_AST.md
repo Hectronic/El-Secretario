@@ -42,6 +42,7 @@ El Secretario ye una ferramienta intelixente de trescripción y organización d'
     ```
 
     > **Usuarios de Windows:** Por favor consultái la [Guía d'Instalación pa Windows](docs/INSTALL_WINDOWS_AST.md).
+    > Usái Python `3.12` (recomendáu) o `3.11`. Python `3.14` nun ye compatible anguaño con dependencies de ML fixaes como `torch==2.5.1`.
 
 ## Configuración
 
