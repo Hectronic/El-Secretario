@@ -16,7 +16,7 @@ from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QFormLayout, QLineEdit,
                              QDialogButtonBox, QLabel, QWidget, QPushButton, QCompleter,
                              QDateEdit, QListWidget, QListWidgetItem, QCheckBox, QComboBox,
                              QHBoxLayout, QApplication, QTabWidget, QTextEdit, QScrollArea)
-from PyQt6.QtCore import QSettings, QStringListModel, Qt, QDate, QTimer
+from PyQt6.QtCore import QSettings, QStringListModel, Qt, QDate, QTimer, pyqtSignal
 from src.ui.styles import apply_theme
 
 # Default prompts for AI tasks
@@ -654,7 +654,87 @@ class PromptsSettingsPanel(QWidget):
             self.settings.setValue(f"prompt_{prompt_key}", editor.toPlainText())
 
 
+class RAGSettingsPanel(QWidget):
+    """Panel for RAG engine runtime settings."""
+
+    def __init__(self, settings, parent=None):
+        super().__init__(parent)
+        self.settings = settings
+        self._setup_ui()
+
+    def _setup_ui(self):
+        layout = QVBoxLayout(self)
+        layout.setAlignment(Qt.AlignmentFlag.AlignTop)
+        layout.setContentsMargins(20, 20, 20, 20)
+        layout.setSpacing(15)
+
+        form_layout = QFormLayout()
+        form_layout.setSpacing(15)
+
+        section_label = QLabel("🧠 RAG Engine Runtime")
+        section_label.setStyleSheet("font-size: 18px; font-weight: bold; color: #607D8B; margin-top: 10px;")
+        form_layout.addRow(section_label)
+
+        self.rag_enabled_check = QCheckBox("Enable RAG engine")
+        self.rag_enabled_check.setChecked(self.settings.value("rag_enabled", True, type=bool))
+        self.rag_enabled_check.setToolTip("If disabled, semantic chat/search based on RAG will be unavailable.")
+        form_layout.addRow("RAG Enabled:", self.rag_enabled_check)
+
+        self.persist_dir_input = QLineEdit()
+        self.persist_dir_input.setText(self.settings.value("rag_persist_directory", "chroma_db"))
+        self.persist_dir_input.setPlaceholderText("chroma_db")
+        self.persist_dir_input.setToolTip("Directory where the vector database is stored.")
+        form_layout.addRow("Persist Directory:", self.persist_dir_input)
+
+        self.safe_delete_check = QCheckBox("Use safe delete mode")
+        self.safe_delete_check.setChecked(self.settings.value("rag_safe_delete_mode", True, type=bool))
+        self.safe_delete_check.setToolTip("Recommended on Windows to avoid native delete crashes.")
+        form_layout.addRow("Safe Delete:", self.safe_delete_check)
+
+        self.subprocess_upsert_check = QCheckBox("Use subprocess for upsert")
+        self.subprocess_upsert_check.setChecked(self.settings.value("rag_subprocess_upsert_mode", True, type=bool))
+        self.subprocess_upsert_check.setToolTip("Performs upserts in a subprocess for stability on some systems.")
+        form_layout.addRow("Subprocess Upsert:", self.subprocess_upsert_check)
+
+        self.subprocess_query_check = QCheckBox("Use subprocess for query")
+        self.subprocess_query_check.setChecked(self.settings.value("rag_subprocess_query_mode", True, type=bool))
+        self.subprocess_query_check.setToolTip("Performs vector queries in a subprocess for stability on some systems.")
+        form_layout.addRow("Subprocess Query:", self.subprocess_query_check)
+
+        layout.addLayout(form_layout)
+
+        info_label = QLabel(
+            "Initialize starts RAG using current options.\n"
+            "Reload recreates the engine and reapplies runtime flags."
+        )
+        info_label.setStyleSheet("color: gray; font-size: 13px;")
+        layout.addWidget(info_label)
+        layout.addStretch()
+
+    def get_rag_config(self):
+        persist_directory = self.persist_dir_input.text().strip() or "chroma_db"
+        return {
+            "enabled": self.rag_enabled_check.isChecked(),
+            "persist_directory": persist_directory,
+            "safe_delete_mode": self.safe_delete_check.isChecked(),
+            "subprocess_upsert_mode": self.subprocess_upsert_check.isChecked(),
+            "subprocess_query_mode": self.subprocess_query_check.isChecked(),
+        }
+
+    def save(self):
+        cfg = self.get_rag_config()
+        self.settings.setValue("rag_enabled", cfg["enabled"])
+        self.settings.setValue("rag_persist_directory", cfg["persist_directory"])
+        self.settings.setValue("rag_safe_delete_mode", cfg["safe_delete_mode"])
+        self.settings.setValue("rag_subprocess_upsert_mode", cfg["subprocess_upsert_mode"])
+        self.settings.setValue("rag_subprocess_query_mode", cfg["subprocess_query_mode"])
+
+
 class SettingsWidget(QWidget):
+    rag_initialize_requested = pyqtSignal(dict)
+    rag_reload_requested = pyqtSignal(dict)
+    rag_reindex_requested = pyqtSignal()
+
     def __init__(self, parent=None):
         super().__init__(parent)
         self.settings = QSettings("Hectronic", "Secretario")
@@ -691,6 +771,16 @@ class SettingsWidget(QWidget):
         scroll_audio.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         scroll_audio.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
         self.tab_widget.addTab(scroll_audio, "🔊 Audio")
+
+        # RAG Settings Panel
+        self.rag_panel = RAGSettingsPanel(self.settings)
+        scroll_rag = QScrollArea()
+        scroll_rag.setWidget(self.rag_panel)
+        scroll_rag.setWidgetResizable(True)
+        scroll_rag.setFrameShape(QScrollArea.Shape.NoFrame)
+        scroll_rag.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        scroll_rag.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        self.tab_widget.addTab(scroll_rag, "🧠 RAG")
         
         # Prompts Settings Panel
         self.prompts_panel = PromptsSettingsPanel(self.settings)
@@ -727,13 +817,52 @@ class SettingsWidget(QWidget):
         save_btn.clicked.connect(self.save_settings)
         layout.addWidget(save_btn)
 
+        # Runtime RAG actions
+        rag_actions_layout = QHBoxLayout()
+        self.rag_init_btn = QPushButton("Initialize RAG")
+        self.rag_init_btn.clicked.connect(self._initialize_rag)
+        rag_actions_layout.addWidget(self.rag_init_btn)
+
+        self.rag_reload_btn = QPushButton("Reload RAG")
+        self.rag_reload_btn.clicked.connect(self._reload_rag)
+        rag_actions_layout.addWidget(self.rag_reload_btn)
+
+        self.rag_reindex_btn = QPushButton("Queue RAG Reindex")
+        self.rag_reindex_btn.clicked.connect(self._queue_rag_reindex)
+        rag_actions_layout.addWidget(self.rag_reindex_btn)
+        rag_actions_layout.addStretch()
+        layout.addLayout(rag_actions_layout)
+
     def save_settings(self):
         """Save all settings from both panels."""
         self.general_panel.save()
         self.audio_panel.save()
+        self.rag_panel.save()
         self.prompts_panel.save()
+        self.settings.sync()
         
         self.status_label.setText("✅ Settings saved successfully!")
+        QTimer.singleShot(3000, self._clear_status_label)
+
+    def _initialize_rag(self):
+        self.rag_panel.save()
+        self.settings.sync()
+        cfg = self.rag_panel.get_rag_config()
+        self.rag_initialize_requested.emit(cfg)
+        self.status_label.setText("RAG initialize requested.")
+        QTimer.singleShot(3000, self._clear_status_label)
+
+    def _reload_rag(self):
+        self.rag_panel.save()
+        self.settings.sync()
+        cfg = self.rag_panel.get_rag_config()
+        self.rag_reload_requested.emit(cfg)
+        self.status_label.setText("RAG reload requested.")
+        QTimer.singleShot(3000, self._clear_status_label)
+
+    def _queue_rag_reindex(self):
+        self.rag_reindex_requested.emit()
+        self.status_label.setText("RAG reindex task queued.")
         QTimer.singleShot(3000, self._clear_status_label)
     
     def _clear_status_label(self):

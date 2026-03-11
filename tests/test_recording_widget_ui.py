@@ -179,5 +179,24 @@ class TestRecordingWidgetUI(unittest.TestCase):
         self.assertEqual(self.widget.summary_display.toPlainText(), "Queue summary result")
         mock_tasks_refresh.assert_called_once()
 
+    def test_open_chat_for_recording_emits_only_recording_context(self):
+        self.widget.current_record_id = 11
+        self.mock_db.fetch_record.return_value = {
+            "id": 11,
+            "title": "Weekly sync",
+            "created_at": "2026-03-09 10:00:00",
+            "tags": "ops,team",
+        }
+        emitted = []
+        self.widget.start_chat_requested.connect(lambda ctx: emitted.append(ctx))
+
+        self.widget.open_chat_for_recording()
+
+        self.assertEqual(len(emitted), 1)
+        self.assertEqual(
+            emitted[0],
+            [{"type": "recording", "value": 11, "label": "Weekly sync"}],
+        )
+
 if __name__ == '__main__':
     unittest.main()

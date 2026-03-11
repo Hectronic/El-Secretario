@@ -14,6 +14,7 @@ El Secretario – Windows 10 / 11
 👉 **Python 3.10.11 (64-bit)**
 
 This is the most stable version for Whisper, Torch, and pyannote on Windows.
+Python `3.11` and `3.12` are also supported. Avoid Python `3.13+` for now because pinned dependencies like `torch==2.5.1` may fail to install.
 
 ### 🔽 Download
 

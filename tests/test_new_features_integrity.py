@@ -70,6 +70,19 @@ class TestNewFeaturesIntegrity(unittest.TestCase):
         self.assertEqual(widget.tasks_batch_widget.task_queue, self.task_queue)
         widget.deleteLater()
 
+    def test_tools_widget_rag_reindex_queues_with_selected_scope(self):
+        widget = ToolsWidget(self.db, self.notebook_db, task_queue=self.task_queue)
+        self.task_queue.enqueue_rag_reindex.return_value = True
+        idx = widget.rag_scope_combo.findData("missing")
+        self.assertGreaterEqual(idx, 0)
+        widget.rag_scope_combo.setCurrentIndex(idx)
+
+        widget._queue_rag_reindex()
+
+        self.task_queue.enqueue_rag_reindex.assert_called_once_with(scope="missing")
+        self.assertIn("missing records only", widget.rag_status_lbl.text())
+        widget.deleteLater()
+
     def test_task_batch_widget_logic(self):
         """Verify TaskBatchWidget can refresh stats and attempt to start processing."""
         widget = TaskBatchWidget(task_queue=self.task_queue)

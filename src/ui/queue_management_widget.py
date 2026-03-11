@@ -139,6 +139,9 @@ class QueueManagementWidget(QWidget):
             label += f"Day: {task.get('date', 'Unknown')}"
         elif t_type == "weekly_summary":
             label += f"Week: {task.get('date', 'Unknown')}"
+        elif t_type == "rag_reindex":
+            scope = task.get("reindex_scope", "all")
+            label += "Rebuild semantic index (missing only)" if scope == "missing" else "Rebuild semantic index (all)"
             
         tags = task.get("tags_filter") or task.get("tags")
         if tags:

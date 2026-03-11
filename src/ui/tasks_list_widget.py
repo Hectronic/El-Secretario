@@ -301,8 +301,7 @@ class TasksListWidget(QWidget):
             week_start=week_sunday if not self.record_id else None,
             notes=dialog.get_notes(),
         )
-        self.tasks_changed.emit()
-        self.refresh()
+        self._emit_tasks_mutated(refresh_self=True)
 
     def _current_order_mode(self):
         return str(self.order_combo.currentData() or "date")
@@ -499,9 +498,7 @@ class TasksListWidget(QWidget):
                 widget.set_completed(completed_state)
             task['is_completed'] = completed_state
             item.setData(Qt.ItemDataRole.UserRole, task)
-        self.tasks_changed.emit()
-        self._notify_global_refresh()
-        self.refresh()
+        self._emit_tasks_mutated(refresh_self=True)
 
     def _edit_task_item(self, item):
         task = item.data(Qt.ItemDataRole.UserRole)
@@ -515,9 +512,7 @@ class TasksListWidget(QWidget):
                 dialog.get_notes(),
                 dialog.get_tags(),
             )
-            self.refresh()
-            self.tasks_changed.emit()
-            self._notify_global_refresh()
+            self._emit_tasks_mutated(refresh_self=True)
 
     def _delete_items(self, items):
         if QMessageBox.question(self, "Delete Tasks", f"Delete {len(items)} task(s)?") != QMessageBox.StandardButton.Yes:
@@ -526,15 +521,17 @@ class TasksListWidget(QWidget):
             task = item.data(Qt.ItemDataRole.UserRole)
             if task:
                 self.db.delete_task(task['id'])
-        self.refresh()
-        self.tasks_changed.emit()
-        self._notify_global_refresh()
+        self._emit_tasks_mutated(refresh_self=True)
 
     def _on_single_complete_toggle(self, task_id, is_completed):
         self.db.toggle_task_completion(task_id, is_completed)
+        self._emit_tasks_mutated(refresh_self=False)
+
+    def _emit_tasks_mutated(self, refresh_self: bool):
         self.tasks_changed.emit()
-        # Optionally notify other summary viewers if open
         self._notify_global_refresh()
+        if refresh_self:
+            self.refresh()
 
     def _notify_global_refresh(self):
         for widget in QApplication.topLevelWidgets():
@@ -596,9 +593,8 @@ class TasksListWidget(QWidget):
         ordered_ids = self._ordered_task_ids()
         if ordered_ids:
             self.db.set_tasks_custom_order(ordered_ids)
-            self.tasks_changed.emit()
             # Crucial: restore widgets that were lost during drag-drop move
-            self.refresh()
+            self._emit_tasks_mutated(refresh_self=True)
 
     def _on_item_double_clicked(self, item):
         task = item.data(Qt.ItemDataRole.UserRole)

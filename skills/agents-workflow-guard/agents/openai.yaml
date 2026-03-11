@@ -1,0 +1,4 @@
+interface:
+  display_name: "Agents Workflow Guard"
+  short_description: "Follow agents.md workflow for code changes"
+  default_prompt: "Use $agents-workflow-guard to implement changes with mandatory venv-based tests, add/update tests as needed, preserve Windows/Ubuntu compatibility, and keep multilingual docs updated."

@@ -15,13 +15,68 @@
 import platform
 
 from PyQt6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLabel, QSpacerItem, QSizePolicy, QLineEdit, QListWidget, QListWidgetItem, QComboBox, QCheckBox, QGroupBox, QFormLayout, QProgressBar, QTextBrowser, QScrollArea, QFrame
-from PyQt6.QtCore import Qt, pyqtSignal, QTimer, QSettings
-from PyQt6.QtGui import QPixmap
+from PyQt6.QtCore import Qt, pyqtSignal, QTimer, QSettings, QTime, QPointF
+from PyQt6.QtGui import QPixmap, QPainter, QColor, QPen
 from src.ui.styles import LIST_WIDGET_STYLE
 import numpy as np
 import os
 
 Recorder = None
+
+class AnalogClockWidget(QWidget):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setFixedSize(92, 92)
+        self._timer = QTimer(self)
+        self._timer.timeout.connect(self.update)
+        self._timer.start(1000)
+
+    def paintEvent(self, _event):
+        side = min(self.width(), self.height())
+        now = QTime.currentTime()
+
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        painter.translate(self.width() / 2, self.height() / 2)
+        painter.scale(side / 100.0, side / 100.0)
+
+        painter.setPen(QPen(QColor("#CFD8DC"), 3))
+        painter.setBrush(QColor("#FFFFFF"))
+        painter.drawEllipse(-46, -46, 92, 92)
+
+        for i in range(12):
+            painter.save()
+            painter.rotate(i * 30)
+            painter.setPen(QPen(QColor("#78909C"), 2 if i % 3 else 3))
+            painter.drawLine(0, -38, 0, -44)
+            painter.restore()
+
+        hour_angle = 30 * ((now.hour() % 12) + now.minute() / 60.0)
+        minute_angle = 6 * (now.minute() + now.second() / 60.0)
+        second_angle = 6 * now.second()
+
+        painter.save()
+        painter.rotate(hour_angle)
+        painter.setPen(QPen(QColor("#37474F"), 5, cap=Qt.PenCapStyle.RoundCap))
+        painter.drawLine(QPointF(0, 5), QPointF(0, -21))
+        painter.restore()
+
+        painter.save()
+        painter.rotate(minute_angle)
+        painter.setPen(QPen(QColor("#455A64"), 3, cap=Qt.PenCapStyle.RoundCap))
+        painter.drawLine(QPointF(0, 7), QPointF(0, -30))
+        painter.restore()
+
+        painter.save()
+        painter.rotate(second_angle)
+        painter.setPen(QPen(QColor("#E53935"), 1.5, cap=Qt.PenCapStyle.RoundCap))
+        painter.drawLine(QPointF(0, 9), QPointF(0, -33))
+        painter.restore()
+
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(QColor("#E53935"))
+        painter.drawEllipse(-3, -3, 6, 6)
+
 
 class WelcomeWidget(QWidget):
     # Modified signal to include recording configuration
@@ -30,6 +85,7 @@ class WelcomeWidget(QWidget):
     search_triggered = pyqtSignal(str)
     result_clicked = pyqtSignal(int)
     new_chat_requested = pyqtSignal()
+    ask_chat_with_context_requested = pyqtSignal()
     new_note_requested = pyqtSignal()
     batch_process_requested = pyqtSignal()  # Kept for compatibility
     import_audio_requested = pyqtSignal(dict)  # Also include config for import
@@ -121,6 +177,16 @@ class WelcomeWidget(QWidget):
         self.settings.setValue("rec_config/auto_summarize_after_transcription", self.auto_summary_check.isChecked())
         self.status_message_requested.emit("Recording configuration saved.")
 
+    def _update_digital_clock(self):
+        self.digital_clock_label.setText(QTime.currentTime().toString("HH:mm:ss"))
+        self._sync_header_balance()
+
+    def _sync_header_balance(self):
+        if not hasattr(self, "header_left_spacer"):
+            return
+        clock_width = max(self.analog_clock.width(), self.digital_clock_label.sizeHint().width())
+        self.header_left_spacer.setFixedWidth(clock_width)
+
     def init_ui(self):
         root_layout = QVBoxLayout(self)
         root_layout.setContentsMargins(0, 0, 0, 0)
@@ -139,8 +205,31 @@ class WelcomeWidget(QWidget):
         layout.setSpacing(14)
         self.main_content_layout = layout
 
-        # Logo
+        # Header block: brand and search aligned with the clock on the same top row
+        header_container = QWidget()
+        header_container.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        header_layout = QVBoxLayout(header_container)
+        header_layout.setContentsMargins(16, 12, 16, 12)
+        header_layout.setSpacing(0)
+
+        header_row = QHBoxLayout()
+        header_row.setContentsMargins(0, 0, 0, 0)
+        header_row.setSpacing(18)
+
+        brand_search_column = QVBoxLayout()
+        brand_search_column.setContentsMargins(0, 0, 0, 0)
+        brand_search_column.setSpacing(10)
+
+        self.header_left_spacer = QWidget()
+        self.header_left_spacer.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+
+        brand_row = QHBoxLayout()
+        brand_row.setContentsMargins(0, 0, 0, 0)
+        brand_row.setSpacing(10)
+        brand_row.setAlignment(Qt.AlignmentFlag.AlignHCenter)
+
         logo_label = QLabel()
+        self.brand_logo = logo_label
         # Robust logo path for PyInstaller or local dev
         import sys
         def get_resource_path(relative_path):
@@ -150,33 +239,75 @@ class WelcomeWidget(QWidget):
         logo_path = get_resource_path("logo.png")
         if os.path.exists(logo_path):
             pixmap = QPixmap(logo_path)
-            # Scale if too big, e.g., max height 150
-            pixmap = pixmap.scaledToHeight(150, Qt.TransformationMode.SmoothTransformation)
+            # Compact logo for top header
+            pixmap = pixmap.scaledToHeight(58, Qt.TransformationMode.SmoothTransformation)
             logo_label.setPixmap(pixmap)
-            logo_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            layout.addWidget(logo_label, alignment=Qt.AlignmentFlag.AlignCenter)
+            logo_label.setAlignment(Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignVCenter)
+            brand_row.addWidget(logo_label, 0, Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignVCenter)
 
-        # Title
         title = QLabel("El Secretario")
-        title.setStyleSheet("font-size: 32px; font-weight: bold; color: #2196F3;")
-        layout.addWidget(title, alignment=Qt.AlignmentFlag.AlignCenter)
+        title.setStyleSheet("font-size: 24px; font-weight: bold; color: #2196F3;")
+        title.setAlignment(Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignVCenter)
+        self.brand_title = title
+        brand_row.addWidget(title, 0, Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignVCenter)
+        brand_search_column.addLayout(brand_row)
 
-        # Search Bar
+        clock_column = QVBoxLayout()
+        clock_column.setContentsMargins(0, 0, 0, 0)
+        clock_column.setSpacing(2)
+        clock_column.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignTop)
+        self.analog_clock = AnalogClockWidget()
+        clock_column.addWidget(self.analog_clock, 0, Qt.AlignmentFlag.AlignHCenter)
+        self.digital_clock_label = QLabel()
+        self.digital_clock_label.setStyleSheet("font-size: 14px; font-weight: 600; color: #1E3A5F;")
+        clock_column.addWidget(self.digital_clock_label, 0, Qt.AlignmentFlag.AlignHCenter)
+
         self.search_input = QLineEdit()
         self.search_input.setPlaceholderText("Search your notes...")
         self.search_input.setStyleSheet("""
             QLineEdit {
-                padding: 10px;
-                font-size: 16px;
-                border: 2px solid #ddd;
+                background: white;
+                padding: 8px 12px;
+                font-size: 15px;
+                border: 2px solid #C7D7E4;
                 border-radius: 10px;
             }
             QLineEdit:focus {
                 border-color: #2196F3;
             }
         """)
+        self.search_input.setMinimumHeight(38)
         self.search_input.returnPressed.connect(self.on_search_triggered)
-        layout.addWidget(self.search_input, alignment=Qt.AlignmentFlag.AlignCenter)
+        search_row = QHBoxLayout()
+        search_row.setContentsMargins(0, 0, 0, 0)
+        search_row.setSpacing(0)
+        search_row.addStretch()
+        search_row.addWidget(self.search_input, 0, Qt.AlignmentFlag.AlignHCenter)
+        search_row.addStretch()
+        brand_search_column.addLayout(search_row, 1)
+
+        search_actions_row = QHBoxLayout()
+        search_actions_row.setContentsMargins(0, 0, 0, 0)
+        search_actions_row.setSpacing(12)
+        search_actions_row.setAlignment(Qt.AlignmentFlag.AlignHCenter)
+
+        self.search_btn = self.create_big_button("Buscar", "#1565C0", self.on_search_triggered, width=150, height=44)
+        self.ask_btn = self.create_big_button("Preguntar", "#2E7D32", self.ask_chat_with_context_requested.emit, width=150, height=44)
+        search_actions_row.addWidget(self.search_btn)
+        search_actions_row.addWidget(self.ask_btn)
+        brand_search_column.addLayout(search_actions_row)
+
+        header_row.addWidget(self.header_left_spacer, 0, Qt.AlignmentFlag.AlignTop)
+        header_row.addLayout(brand_search_column, 1)
+        header_row.addLayout(clock_column, 0)
+        header_layout.addLayout(header_row)
+        layout.addWidget(header_container)
+
+        self.clock_timer = QTimer(self)
+        self.clock_timer.timeout.connect(self._update_digital_clock)
+        self.clock_timer.start(1000)
+        self._update_digital_clock()
+        self._sync_header_balance()
 
         # === Recording Configuration Section ===
         rec_config_row = QHBoxLayout()
@@ -471,6 +602,9 @@ class WelcomeWidget(QWidget):
         if compact_mode:
             self.main_content_layout.setContentsMargins(18, 8, 18, 8)
             self.main_content_layout.setSpacing(10)
+            self.brand_title.setStyleSheet("font-size: 20px; font-weight: bold; color: #2196F3;")
+            self.analog_clock.setFixedSize(78, 78)
+            self.digital_clock_label.setStyleSheet("font-size: 12px; font-weight: 600; color: #1E3A5F;")
             self.rec_container.setFixedSize(96, 142)
             self._set_rec_button_size(72)
             self.new_note_top_btn.setFixedSize(96, 142)
@@ -479,10 +613,13 @@ class WelcomeWidget(QWidget):
             self.fav_list.setMaximumHeight(170)
             self.today_list.setMinimumHeight(120)
             self.today_list.setMaximumHeight(170)
-            search_min_width = 520
+            search_min_width = 360
         else:
             self.main_content_layout.setContentsMargins(24, 12, 24, 12)
             self.main_content_layout.setSpacing(14)
+            self.brand_title.setStyleSheet("font-size: 24px; font-weight: bold; color: #2196F3;")
+            self.analog_clock.setFixedSize(92, 92)
+            self.digital_clock_label.setStyleSheet("font-size: 14px; font-weight: 600; color: #1E3A5F;")
             self.rec_container.setFixedSize(110, 160)
             self._set_rec_button_size(85)
             self.new_note_top_btn.setFixedSize(110, 160)
@@ -491,11 +628,12 @@ class WelcomeWidget(QWidget):
             self.fav_list.setMaximumHeight(220)
             self.today_list.setMinimumHeight(140)
             self.today_list.setMaximumHeight(220)
-            search_min_width = 760
+            search_min_width = 440
 
-        max_search_width = max(search_min_width, min(1280, viewport_width - 60))
+        max_search_width = max(search_min_width, min(920, viewport_width - 220))
         self.search_input.setMinimumWidth(search_min_width)
         self.search_input.setMaximumWidth(max_search_width)
+        self._sync_header_balance()
 
         target_config_width = 410 if compact_mode else 450
         available_width = max(320, viewport_width - 360)
@@ -503,6 +641,9 @@ class WelcomeWidget(QWidget):
 
         btn_width = 145 if compact_mode else 160
         btn_height = 52 if compact_mode else 60
+        self.search_btn.setFixedSize(135 if compact_mode else 150, 40 if compact_mode else 44)
+        self.ask_btn.setFixedSize(135 if compact_mode else 150, 40 if compact_mode else 44)
+
         for btn in (self.chat_btn, self.import_btn, self.tools_btn, self.settings_btn):
             btn.setFixedSize(btn_width, btn_height)
 

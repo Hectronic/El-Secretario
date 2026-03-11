@@ -208,6 +208,12 @@ class NoteWidget(QWidget):
             self.tabs.setCurrentIndex(2) # Summary tab
         elif task_type == "task_extraction":
             self.tasks_widget.refresh()
+            self._refresh_global_tasks_sidebar()
+
+    def _refresh_global_tasks_sidebar(self):
+        for widget in QApplication.topLevelWidgets():
+            if hasattr(widget, "refresh_tasks_sidebar"):
+                widget.refresh_tasks_sidebar()
 
     def on_ai_error(self, err):
         self.status_changed.emit("AI Task Failed.")

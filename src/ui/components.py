@@ -62,6 +62,7 @@ def create_tag_chip(tag: str, width: int | None = 84, height: int = 18, font_siz
 class SidebarTaskCompactWidget(QWidget):
     """Compact task row for sidebar accordion: title + tiny tags line."""
     completion_toggled = pyqtSignal(int, bool)
+    ROW_HEIGHT = 56
 
     def __init__(
         self,
@@ -77,10 +78,11 @@ class SidebarTaskCompactWidget(QWidget):
 
     def _build_ui(self, title: str, tags: list[str], is_completed: bool):
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(8, 6, 8, 6)
+        layout.setContentsMargins(8, 8, 8, 8)
         layout.setSpacing(4)
 
         top_row = QWidget()
+        top_row.setMinimumHeight(22)
         top_layout = QHBoxLayout(top_row)
         top_layout.setContentsMargins(0, 0, 0, 0)
         top_layout.setSpacing(6)
@@ -91,6 +93,7 @@ class SidebarTaskCompactWidget(QWidget):
         self.complete_check.setStyleSheet("""
             QCheckBox {
                 spacing: 0px;
+                padding: 0px;
             }
             QCheckBox::indicator {
                 width: 16px;
@@ -123,6 +126,7 @@ class SidebarTaskCompactWidget(QWidget):
         layout.addWidget(top_row)
 
         tags_row = QWidget()
+        tags_row.setMinimumHeight(16)
         tags_layout = QHBoxLayout(tags_row)
         tags_layout.setContentsMargins(0, 0, 0, 0)
         tags_layout.setSpacing(4)
@@ -141,7 +145,7 @@ class SidebarTaskCompactWidget(QWidget):
 
         tags_layout.addStretch()
         layout.addWidget(tags_row)
-        self.setMinimumHeight(46)
+        self.setFixedHeight(self.ROW_HEIGHT)
 
     def _on_toggle_completed(self, checked: bool):
         if isinstance(self.task_id, int):

@@ -111,6 +111,32 @@ class RecordingInProgressWidget(QWidget):
         """)
         layout.addWidget(self.vu_meter, alignment=Qt.AlignmentFlag.AlignHCenter)
 
+        # Controls
+        controls_layout = QHBoxLayout()
+        controls_layout.setSpacing(12)
+        controls_layout.setContentsMargins(0, 4, 0, 4)
+        controls_layout.addStretch(1)
+
+        self.pause_btn = QPushButton("Pause")
+        self.pause_btn.setProperty("class", "calendar-nav-btn")
+        self.pause_btn.setFixedSize(124, 50)
+        self.pause_btn.clicked.connect(self.toggle_pause)
+        controls_layout.addWidget(self.pause_btn)
+
+        self.stop_btn = QPushButton("Finish")
+        self.stop_btn.setProperty("class", "calendar-primary-btn")
+        self.stop_btn.setFixedSize(124, 50)
+        self.stop_btn.clicked.connect(self.finish_recording)
+        controls_layout.addWidget(self.stop_btn)
+
+        self.cancel_btn = QPushButton("Cancel")
+        self.cancel_btn.setProperty("class", "record-del-btn")
+        self.cancel_btn.setFixedSize(124, 50)
+        self.cancel_btn.clicked.connect(self.cancel_recording)
+        controls_layout.addWidget(self.cancel_btn)
+        controls_layout.addStretch(1)
+        layout.addLayout(controls_layout)
+
         # Recording Options Group
         self.options_group = QGroupBox("Recording Options")
         self.options_group.setStyleSheet("""
@@ -216,30 +242,6 @@ class RecordingInProgressWidget(QWidget):
         self.workspace_split.setSizes([1, 1])
         layout.addWidget(self.workspace_split, 1)
 
-        # Controls
-        controls_layout = QHBoxLayout()
-        controls_layout.setSpacing(20)
-
-        self.pause_btn = QPushButton("Pause")
-        self.pause_btn.setFixedSize(120, 50)
-        self.pause_btn.setStyleSheet("font-size: 16px;")
-        self.pause_btn.clicked.connect(self.toggle_pause)
-        controls_layout.addWidget(self.pause_btn)
-
-        self.stop_btn = QPushButton("Finish")
-        self.stop_btn.setFixedSize(120, 50)
-        self.stop_btn.setStyleSheet("background-color: #4CAF50; color: white; font-size: 16px; font-weight: bold;")
-        self.stop_btn.clicked.connect(self.finish_recording)
-        controls_layout.addWidget(self.stop_btn)
-
-        layout.addLayout(controls_layout)
-        
-        # Cancel Button
-        self.cancel_btn = QPushButton("Cancel Recording")
-        self.cancel_btn.setStyleSheet("color: #888; text-decoration: underline; border: none; background: none;")
-        self.cancel_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.cancel_btn.clicked.connect(self.cancel_recording)
-        layout.addWidget(self.cancel_btn, alignment=Qt.AlignmentFlag.AlignCenter)
         self._apply_layout_density()
 
     def resizeEvent(self, event):
@@ -267,8 +269,9 @@ class RecordingInProgressWidget(QWidget):
             self.timer_label.setStyleSheet("font-size: 48px; font-weight: bold; color: #eeeeee;")
             self.vu_meter.setFixedSize(320, 16)
             self.notes_input.setMinimumHeight(160)
-            self.pause_btn.setFixedSize(108, 44)
-            self.stop_btn.setFixedSize(108, 44)
+            self.pause_btn.setFixedSize(112, 44)
+            self.stop_btn.setFixedSize(112, 44)
+            self.cancel_btn.setFixedSize(112, 44)
             self.workspace_split.setOrientation(Qt.Orientation.Vertical)
         else:
             self.main_content_layout.setContentsMargins(20, 14, 20, 14)
@@ -277,8 +280,9 @@ class RecordingInProgressWidget(QWidget):
             self.timer_label.setStyleSheet("font-size: 64px; font-weight: bold; color: #eeeeee;")
             self.vu_meter.setFixedSize(400, 20)
             self.notes_input.setMinimumHeight(220)
-            self.pause_btn.setFixedSize(120, 50)
-            self.stop_btn.setFixedSize(120, 50)
+            self.pause_btn.setFixedSize(124, 50)
+            self.stop_btn.setFixedSize(124, 50)
+            self.cancel_btn.setFixedSize(124, 50)
             self.workspace_split.setOrientation(Qt.Orientation.Horizontal)
 
     def add_quick_task(self):

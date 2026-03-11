@@ -40,6 +40,7 @@ class ContextManagerPanel(QWidget):
         self.current_week_monday = None
         self.current_date_filter = None
         self.active_global_tags = []
+        self.forced_records = []
         
         self.init_ui()
         self.load_notebooks()
@@ -48,30 +49,54 @@ class ContextManagerPanel(QWidget):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(10, 10, 10, 10)
         layout.setSpacing(12)
+
+        is_dark = self.palette().color(self.backgroundRole()).lightness() < 128
+        panel_bg = "#262b33" if is_dark else "#ffffff"
+        panel_border = "#4a5463" if is_dark else "#c6d2e2"
+        panel_text = "#e8eef7" if is_dark else "#2b3b52"
+        meta_text = "#b8c1cf" if is_dark else "#666666"
+
+        # --- Entries (Context) List ---
+        entries_group = QGroupBox("Detected Context Entries")
+        entries_layout = QVBoxLayout(entries_group)
+        
+        self.entries_list = QListWidget()
+        self.entries_list.setStyleSheet(
+            f"font-size: 11px; background-color: {panel_bg}; color: {panel_text}; "
+            f"border: 1px solid {panel_border}; border-radius: 8px;"
+        )
+        entries_layout.addWidget(self.entries_list)
+        
+        self.entries_count_lbl = QLabel("0 entries found")
+        self.entries_count_lbl.setStyleSheet(f"color: {meta_text}; font-size: 11px;")
+        entries_layout.addWidget(self.entries_count_lbl)
+        
+        layout.addWidget(entries_group)
         
         # --- Context Status ---
-        status_group = QGroupBox("Contexto del Calendario")
+        status_group = QGroupBox("Chat Context")
         status_layout = QVBoxLayout(status_group)
         
-        self.sync_cb = QCheckBox("Sincronizar con App")
+        self.sync_cb = QCheckBox("Sync with App")
         self.sync_cb.setChecked(True)
         self.sync_cb.setStyleSheet("font-weight: bold; color: #2196F3;")
         status_layout.addWidget(self.sync_cb)
         
-        self.date_lbl = QLabel("Fechas: Toda la historia")
-        self.date_lbl.setStyleSheet("font-size: 11px; color: #1565C0; font-weight: bold;")
+        self.date_lbl = QLabel("Dates: all history")
+        date_color = "#8fb8ff" if is_dark else "#1565C0"
+        self.date_lbl.setStyleSheet(f"font-size: 11px; color: {date_color}; font-weight: bold;")
         self.date_lbl.setWordWrap(True)
         status_layout.addWidget(self.date_lbl)
         
-        self.tags_lbl = QLabel("Tags: Ninguno")
-        self.tags_lbl.setStyleSheet("font-size: 11px; color: #555;")
+        self.tags_lbl = QLabel("Tags: all")
+        self.tags_lbl.setStyleSheet(f"font-size: 11px; color: {meta_text};")
         self.tags_lbl.setWordWrap(True)
         status_layout.addWidget(self.tags_lbl)
         
         layout.addWidget(status_group)
         
         # --- Notebooks Section ---
-        nb_group = QGroupBox("Incluir Libretas")
+        nb_group = QGroupBox("Include Notebooks")
         nb_layout = QVBoxLayout(nb_group)
         self.nb_list = QListWidget()
         self.nb_list.setFixedHeight(120)
@@ -79,22 +104,16 @@ class ContextManagerPanel(QWidget):
         nb_layout.addWidget(self.nb_list)
         layout.addWidget(nb_group)
         
-        # --- Entries (Fichas) List ---
-        entries_group = QGroupBox("Fichas Detectadas (Contexto)")
-        entries_layout = QVBoxLayout(entries_group)
-        
-        self.entries_list = QListWidget()
-        self.entries_list.setStyleSheet("font-size: 10px; background-color: #f9f9f9;")
-        entries_layout.addWidget(self.entries_list)
-        
-        self.entries_count_lbl = QLabel("0 entradas encontradas")
-        self.entries_count_lbl.setStyleSheet("color: gray; font-size: 10px; font-style: italic;")
-        entries_layout.addWidget(self.entries_count_lbl)
-        
-        layout.addWidget(entries_group)
-        
         # --- Tools ---
-        self.clear_chat_btn = QPushButton("Borrar Historial de Chat")
+        self.add_context_btn = QPushButton("Add Context")
+        self.add_context_btn.clicked.connect(self.parent().add_context)
+        layout.addWidget(self.add_context_btn)
+
+        self.reset_context_btn = QPushButton("Reset Extra Context")
+        self.reset_context_btn.clicked.connect(self.parent().reset_extra_context)
+        layout.addWidget(self.reset_context_btn)
+
+        self.clear_chat_btn = QPushButton("Clear Chat History")
         self.clear_chat_btn.clicked.connect(self.parent().clear_history)
         layout.addWidget(self.clear_chat_btn)
         
@@ -122,17 +141,7 @@ class ContextManagerPanel(QWidget):
         self.current_date_filter = date_str
         self.active_global_tags = [t.strip() for t in tags_str.split(',')] if tags_str else []
         
-        # Update Labels
-        if self.current_week_monday:
-            mon_s = self.current_week_monday.toString("yyyy-MM-dd")
-            self.date_lbl.setText(f"Rango: {mon_s} al {date_str}")
-        elif date_str:
-            self.date_lbl.setText(f"Día: {date_str}")
-        else:
-            self.date_lbl.setText("Fechas: Toda la historia")
-            
-        self.tags_lbl.setText(f"Tags: {', '.join(self.active_global_tags) if self.active_global_tags else 'Todos'}")
-        
+        self._update_status_labels()
         self.refresh_entries()
         self.context_changed.emit()
 
@@ -152,6 +161,21 @@ class ContextManagerPanel(QWidget):
         self.entries_list.clear()
         
         records = []
+        seen_record_ids = set()
+
+        # Always include forced meeting contexts first.
+        for fr in self.forced_records:
+            rid = fr.get("id")
+            if rid is None:
+                continue
+            seen_record_ids.add(int(rid))
+            title = fr.get("title") or "Untitled"
+            created_at = fr.get("created_at") or ""
+            item = QListWidgetItem(f"📌 🎤 {title}")
+            if created_at:
+                item.setToolTip(created_at)
+            self.entries_list.addItem(item)
+
         if self.current_week_monday:
             start_date = self.current_week_monday.toString("yyyy-MM-dd")
             end_date = self.current_date_filter
@@ -163,8 +187,13 @@ class ContextManagerPanel(QWidget):
         
         # Display Recordings
         for r in records:
+            rid = r.get("id")
+            if rid is not None and int(rid) in seen_record_ids:
+                continue
+            if rid is not None:
+                seen_record_ids.add(int(rid))
             icon = "🎤" if r.get('type') == 'recording' else "📝"
-            item = QListWidgetItem(f"{icon} {r['title'] or 'Sin título'}")
+            item = QListWidgetItem(f"{icon} {r['title'] or 'Untitled'}")
             item.setToolTip(f"{r['created_at']}")
             self.entries_list.addItem(item)
             
@@ -172,18 +201,47 @@ class ContextManagerPanel(QWidget):
         for nid in self.get_active_notebooks():
             nb_entries = self.notebook_db.get_entries(nid)
             for e in nb_entries:
-                item = QListWidgetItem(f"📓 {e['title'] or 'Nota de Libreta'}")
+                item = QListWidgetItem(f"📓 {e['title'] or 'Notebook note'}")
                 self.entries_list.addItem(item)
                 
-        self.entries_count_lbl.setText(f"{self.entries_list.count()} entradas en contexto")
+        self.entries_count_lbl.setText(f"{self.entries_list.count()} entries in context")
 
     def reset_all(self):
         self.current_date_filter = None
         self.current_week_monday = None
         self.active_global_tags = []
+        self.forced_records = []
         for i in range(self.nb_list.count()):
             self.nb_list.item(i).setCheckState(Qt.CheckState.Unchecked)
+        self._update_status_labels()
         self.refresh_entries()
+
+    def set_forced_records(self, records):
+        self.forced_records = list(records or [])
+        self.refresh_entries()
+        self._update_status_labels()
+
+    def clear_extra_context(self):
+        self.current_date_filter = None
+        self.current_week_monday = None
+        self.active_global_tags = []
+        for i in range(self.nb_list.count()):
+            self.nb_list.item(i).setCheckState(Qt.CheckState.Unchecked)
+        self._update_status_labels()
+        self.refresh_entries()
+        self.context_changed.emit()
+
+    def _update_status_labels(self):
+        if self.current_week_monday:
+            mon_s = self.current_week_monday.toString("yyyy-MM-dd")
+            self.date_lbl.setText(f"Dates: {mon_s} to {self.current_date_filter}")
+        elif self.current_date_filter:
+            self.date_lbl.setText(f"Date: {self.current_date_filter}")
+        else:
+            self.date_lbl.setText("Dates: all history")
+        self.tags_lbl.setText(
+            f"Tags: {', '.join(self.active_global_tags) if self.active_global_tags else 'all'}"
+        )
 
 class AddContextDialog(QDialog):
     def __init__(self, db_manager, notebook_db, parent=None):
@@ -271,25 +329,14 @@ class ChatWidget(QWidget):
         self.chat_history = [] 
         self.chat_thread = None
         self.current_session_id = session_id
+        self.forced_record_ids = set()
+        self.forced_record_labels = []
         
         self.init_ui()
         
         # Load initial contexts if provided (for new chats)
         if initial_contexts:
-            for ctx in initial_contexts:
-                if ctx['type'] == 'date':
-                    self.context_panel.current_date_filter = ctx['value']
-                elif ctx['type'] == 'tag':
-                    for i in range(self.context_panel.tag_list.count()):
-                        item = self.context_panel.tag_list.item(i)
-                        if item.text() == ctx['value']:
-                            item.setCheckState(Qt.CheckState.Checked)
-                elif ctx['type'] == 'notebook':
-                    for i in range(self.context_panel.nb_list.count()):
-                        item = self.context_panel.nb_list.item(i)
-                        if item.data(Qt.ItemDataRole.UserRole) == ctx['value']:
-                            item.setCheckState(Qt.CheckState.Checked)
-            self.context_panel.update_visuals()
+            self._apply_contexts(initial_contexts)
         
         if self.current_session_id:
             self.load_session(self.current_session_id)
@@ -340,13 +387,40 @@ class ChatWidget(QWidget):
         self.context_panel.sync_with_global(monday, date_str, tags_str)
 
     def clear_history(self):
-        reply = QMessageBox.question(self, "Borrar Historial", "¿Estás seguro de que quieres borrar el historial de este chat?",
+        reply = QMessageBox.question(self, "Clear History", "Are you sure you want to clear this chat history?",
                                    QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
         if reply == QMessageBox.StandardButton.Yes:
             self.chat_history = []
             self.display.clear()
             if self.current_session_id:
                 self.db.update_chat_session(self.current_session_id, json.dumps([]))
+
+    def add_context(self):
+        dialog = AddContextDialog(self.db, self.notebook_db, self)
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return
+        ctx = dialog.selected_context or {}
+        ctx_type = ctx.get("type")
+        if ctx_type == "date":
+            self.context_panel.current_week_monday = None
+            self.context_panel.current_date_filter = str(ctx.get("value") or "")
+        elif ctx_type == "tag":
+            tag = str(ctx.get("value") or "").strip()
+            if tag and tag not in self.context_panel.active_global_tags:
+                self.context_panel.active_global_tags.append(tag)
+        elif ctx_type == "notebook":
+            nid = ctx.get("value")
+            for i in range(self.context_panel.nb_list.count()):
+                item = self.context_panel.nb_list.item(i)
+                if item.data(Qt.ItemDataRole.UserRole) == nid:
+                    item.setCheckState(Qt.CheckState.Checked)
+                    break
+        self.context_panel._update_status_labels()
+        self.context_panel.refresh_entries()
+        self.context_panel.context_changed.emit()
+
+    def reset_extra_context(self):
+        self.context_panel.clear_extra_context()
 
     def load_session(self, session_id):
         sessions = self.db.fetch_chat_sessions()
@@ -360,21 +434,7 @@ class ChatWidget(QWidget):
             if context_data:
                 try:
                     contexts = json.loads(context_data)
-                    self.context_panel.reset_all()
-                    for ctx in contexts:
-                        if ctx['type'] == 'date':
-                            self.context_panel.current_date_filter = ctx['value']
-                        elif ctx['type'] == 'tag':
-                            for i in range(self.context_panel.tag_list.count()):
-                                item = self.context_panel.tag_list.item(i)
-                                if item.text() == ctx['value']:
-                                    item.setCheckState(Qt.CheckState.Checked)
-                        elif ctx['type'] == 'notebook':
-                            for i in range(self.context_panel.nb_list.count()):
-                                item = self.context_panel.nb_list.item(i)
-                                if item.data(Qt.ItemDataRole.UserRole) == ctx['value']:
-                                    item.setCheckState(Qt.CheckState.Checked)
-                    self.context_panel.update_visuals()
+                    self._apply_contexts(contexts)
                 except:
                     pass
             
@@ -401,30 +461,51 @@ class ChatWidget(QWidget):
             entries = self.notebook_db.get_entries(nid)
             for entry in entries:
                 content = entry['content']
-                title = entry['title'] or "Sin título"
-                context_text_parts.append(f"[Nota de Libreta: {title}]\n{content}")
+                title = entry['title'] or "Untitled"
+                context_text_parts.append(f"[Notebook note: {title}]\n{content}")
 
         # 2. Tags & Dates (RAG Filter)
         tags = self.context_panel.get_active_tags()
         
         records = []
+        seen_ids = set()
+        for rid in sorted(self.forced_record_ids):
+            rec = self.db.fetch_record(rid)
+            if isinstance(rec, dict) and rec.get("id") is not None:
+                records.append(rec)
+                seen_ids.add(int(rec["id"]))
         if self.context_panel.current_week_monday:
             # Multi-day range
             start_date = self.context_panel.current_week_monday.toString("yyyy-MM-dd")
             end_date = self.context_panel.current_date_filter
-            records = self.db.fetch_by_date_range(start_date, end_date, tags if tags else None)
+            for rec in self.db.fetch_by_date_range(start_date, end_date, tags if tags else None):
+                rid = int(rec.get("id"))
+                if rid not in seen_ids:
+                    seen_ids.add(rid)
+                    records.append(rec)
         elif self.context_panel.current_date_filter:
             # Single day
-            records = self.db.fetch_by_dates([self.context_panel.current_date_filter], tags if tags else None)
+            for rec in self.db.fetch_by_dates([self.context_panel.current_date_filter], tags if tags else None):
+                rid = int(rec.get("id"))
+                if rid not in seen_ids:
+                    seen_ids.add(rid)
+                    records.append(rec)
         elif tags:
             # Tags only, all time
-            records = self.db.fetch_by_date_range("1970-01-01", "2099-12-31", tags)
+            for rec in self.db.fetch_by_date_range("1970-01-01", "2099-12-31", tags):
+                rid = int(rec.get("id"))
+                if rid not in seen_ids:
+                    seen_ids.add(rid)
+                    records.append(rec)
         
         rag_ids = None
         if records:
             rag_ids = [str(r['id']) for r in records]
             for r in records:
-                context_text_parts.append(f"[Grabación: {r['title'] or 'Sin título'} ({r['created_at']})]\n{r['transcription']}")
+                composed = self.db.compose_ai_text(r.get("transcription"), r.get("recording_notes"))
+                context_text_parts.append(
+                    f"[Meeting: {r['title'] or 'Untitled'} ({r['created_at']})]\n{composed}"
+                )
 
         # 3. RAG Search
         if rag_ids or (not tags and not self.context_panel.current_date_filter):
@@ -437,7 +518,7 @@ class ChatWidget(QWidget):
 
         context_text = "\n\n".join(context_text_parts)
         if not context_text:
-            context_text = "No se encontró contexto relevante."
+            context_text = "No relevant context found."
 
         # Start Chat Thread
         settings = QSettings("Hectronic", "Secretario")
@@ -474,6 +555,8 @@ class ChatWidget(QWidget):
             save_contexts.append({"type": "tag", "value": t})
         for n in self.context_panel.get_active_notebooks():
             save_contexts.append({"type": "notebook", "value": n})
+        for rid in sorted(self.forced_record_ids):
+            save_contexts.append({"type": "recording", "value": rid})
             
         context_json = json.dumps(save_contexts)
         
@@ -530,3 +613,52 @@ class ChatWidget(QWidget):
     def closeEvent(self, event):
         self.cleanup()
         super().closeEvent(event)
+
+    def _apply_contexts(self, contexts):
+        self.context_panel.reset_all()
+        self.forced_record_ids = set()
+        self.forced_record_labels = []
+        has_recording_context = False
+        for ctx in contexts or []:
+            ctx_type = (ctx or {}).get("type")
+            ctx_value = (ctx or {}).get("value")
+            if ctx_type == "date" and ctx_value:
+                self.context_panel.current_date_filter = str(ctx_value)
+            elif ctx_type == "tag" and ctx_value:
+                tag_value = str(ctx_value).strip()
+                if tag_value and tag_value not in self.context_panel.active_global_tags:
+                    self.context_panel.active_global_tags.append(tag_value)
+            elif ctx_type == "notebook":
+                for i in range(self.context_panel.nb_list.count()):
+                    item = self.context_panel.nb_list.item(i)
+                    if item.data(Qt.ItemDataRole.UserRole) == ctx_value:
+                        item.setCheckState(Qt.CheckState.Checked)
+            elif ctx_type == "recording":
+                has_recording_context = True
+                try:
+                    rid = int(ctx_value)
+                except (TypeError, ValueError):
+                    continue
+                self.forced_record_ids.add(rid)
+                label = ((ctx or {}).get("label") or f"Recording {rid}").strip()
+                if label and label not in self.forced_record_labels:
+                    self.forced_record_labels.append(label)
+
+        if has_recording_context:
+            # Prevent global sidebar sync from polluting a "single meeting" chat by default.
+            self.context_panel.sync_cb.setChecked(False)
+
+        forced_records = []
+        for rid in sorted(self.forced_record_ids):
+            rec = self.db.fetch_record(rid)
+            if isinstance(rec, dict):
+                forced_records.append(
+                    {
+                        "id": rid,
+                        "title": rec.get("title") or f"Recording {rid}",
+                        "created_at": rec.get("created_at") or "",
+                    }
+                )
+            else:
+                forced_records.append({"id": rid, "title": f"Recording {rid}", "created_at": ""})
+        self.context_panel.set_forced_records(forced_records)
