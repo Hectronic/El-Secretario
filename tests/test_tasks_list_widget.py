@@ -1,5 +1,5 @@
 from datetime import date
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 from PyQt6.QtCore import Qt, QDate
 from PyQt6.QtWidgets import QListWidgetItem
@@ -111,8 +111,12 @@ def test_open_create_dialog_saves_tags_notes_and_content(qtbot):
     db = _FakeDB()
     widget = TasksListWidget(db)
     qtbot.addWidget(widget)
+    sidebar = MagicMock()
 
-    with patch("src.ui.tasks_list_widget.TaskEditDialog", _DialogAccepted):
+    with patch("src.ui.tasks_list_widget.TaskEditDialog", _DialogAccepted), patch(
+        "src.ui.tasks_list_widget.QApplication.topLevelWidgets",
+        return_value=[sidebar],
+    ):
         widget.open_create_dialog()
 
     assert len(db.saved_task_calls) == 1
@@ -122,6 +126,7 @@ def test_open_create_dialog_saves_tags_notes_and_content(qtbot):
     assert payload["tags"] == "alpha, beta"
     assert payload["record_id"] is None
     assert payload["day_date"] == date.today().isoformat()
+    sidebar.refresh_tasks_sidebar.assert_called_once()
 
 
 def test_edit_task_item_updates_task_details_with_tags(qtbot):
@@ -197,16 +202,19 @@ def test_on_list_reordered_sets_custom_order(qtbot):
     db = _FakeDB()
     widget = TasksListWidget(db)
     qtbot.addWidget(widget)
+    sidebar = MagicMock()
 
     for task_id in (10, 11):
         item = QListWidgetItem()
         item.setData(Qt.ItemDataRole.UserRole, {"id": task_id, "content": f"T{task_id}", "is_completed": 0})
         widget.tasks_list.addItem(item)
 
-    widget._on_list_reordered()
+    with patch("src.ui.tasks_list_widget.QApplication.topLevelWidgets", return_value=[sidebar]):
+        widget._on_list_reordered()
 
     assert widget.order_combo.currentData() == "custom"
     assert db.custom_order_calls[-1] == [10, 11]
+    sidebar.refresh_tasks_sidebar.assert_called_once()
 
 
 def test_complete_selected_toggles_all_selected(qtbot):
@@ -228,3 +236,16 @@ def test_complete_selected_toggles_all_selected(qtbot):
 
     assert (21, True) in db.toggle_calls
     assert (22, True) in db.toggle_calls
+
+
+def test_single_complete_toggle_refreshes_global_sidebar(qtbot):
+    db = _FakeDB()
+    widget = TasksListWidget(db)
+    qtbot.addWidget(widget)
+    sidebar = MagicMock()
+
+    with patch("src.ui.tasks_list_widget.QApplication.topLevelWidgets", return_value=[sidebar]):
+        widget._on_single_complete_toggle(77, True)
+
+    assert db.toggle_calls == [(77, True)]
+    sidebar.refresh_tasks_sidebar.assert_called_once()

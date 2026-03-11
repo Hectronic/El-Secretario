@@ -28,6 +28,106 @@ import chromadb
 from chromadb.config import Settings
 from chromadb.utils import embedding_functions
 
+
+class _InMemoryCollection:
+    """Minimal in-memory collection fallback compatible with the Chroma API we use."""
+
+    def __init__(self):
+        self._docs: Dict[str, Dict[str, Any]] = {}
+
+    def upsert(self, ids, documents, metadatas):
+        for doc_id, text, metadata in zip(ids, documents, metadatas):
+            self._docs[str(doc_id)] = {
+                "id": str(doc_id),
+                "document": text or "",
+                "metadata": dict(metadata or {}),
+            }
+
+    def delete(self, ids):
+        for doc_id in ids:
+            self._docs.pop(str(doc_id), None)
+
+    def query(self, query_texts, n_results=5, where=None):
+        query = (query_texts[0] if query_texts else "") or ""
+        q_lower = query.lower()
+
+        candidates = []
+        for doc_id, entry in self._docs.items():
+            if not self._matches_where(entry, where):
+                continue
+
+            text = entry.get("document", "") or ""
+            text_lower = text.lower()
+            # Prefer explicit term hits; fallback to deterministic tie-break by id.
+            score = text_lower.count(q_lower) if q_lower else 0
+            if q_lower and score == 0 and q_lower not in text_lower:
+                continue
+            candidates.append((score, doc_id, entry))
+
+        candidates.sort(key=lambda item: (-item[0], item[1]))
+        selected = candidates[: max(0, int(n_results or 0))]
+
+        return {
+            "ids": [[item[1] for item in selected]],
+            "documents": [[item[2].get("document", "") for item in selected]],
+            "metadatas": [[item[2].get("metadata", {}) for item in selected]],
+            "distances": [[float(1.0 / (1 + item[0])) for item in selected]],
+        }
+
+    def _matches_where(self, entry: Dict[str, Any], where: Optional[Dict[str, Any]]) -> bool:
+        if not where:
+            return True
+        if "$and" in where:
+            return all(self._matches_where(entry, clause) for clause in where.get("$and", []))
+
+        for key, expected in where.items():
+            if key == "$and":
+                continue
+            actual = entry["id"] if key == "id" else (entry.get("metadata", {}) or {}).get(key)
+            if isinstance(expected, dict):
+                if "$in" in expected and actual not in expected["$in"]:
+                    return False
+                if "$ne" in expected and actual == expected["$ne"]:
+                    return False
+            else:
+                if actual != expected:
+                    return False
+        return True
+
+
+class _InMemoryChromaClient:
+    """Minimal client fallback exposing get_or_create_collection."""
+
+    def __init__(self):
+        self._collections: Dict[str, _InMemoryCollection] = {}
+
+    def get_or_create_collection(self, name, embedding_function=None):  # noqa: ARG002
+        if name not in self._collections:
+            self._collections[name] = _InMemoryCollection()
+        return self._collections[name]
+
+
+def _get_or_create_collection_compatible(client, name: str, embedding_fn):
+    """
+    Open/create a collection while tolerating embedding-function conflicts
+    with previously persisted Chroma configurations.
+    """
+    try:
+        return client.get_or_create_collection(
+            name=name,
+            embedding_function=embedding_fn,
+        )
+    except ValueError as e:
+        msg = str(e).lower()
+        if "embedding function" in msg and ("conflict" in msg or "already exists" in msg):
+            logging.warning(
+                "Embedding function conflict for collection '%s'. Reusing existing collection configuration.",
+                name,
+            )
+            return client.get_or_create_collection(name=name)
+        raise
+
+
 class RAGEngine:
     def __init__(self, persist_directory: str = "chroma_db"):
         self.persist_directory = persist_directory
@@ -64,7 +164,7 @@ class RAGEngine:
             self.is_persistent = True
         except Exception as e:
             logging.warning(f"Persistent Chroma init failed, using in-memory fallback: {e}")
-            self.client = chromadb.Client(settings=chroma_settings)
+            self.client = _InMemoryChromaClient()
             self.is_persistent = False
         
         # Use SentenceTransformer if available, fallback to default.
@@ -87,9 +187,10 @@ class RAGEngine:
                      type(self.embedding_fn).__name__ if self.embedding_fn else "None")
         
         # Get or create collection
-        self.collection = self.client.get_or_create_collection(
+        self.collection = _get_or_create_collection_compatible(
+            self.client,
             name="transcriptions",
-            embedding_function=self.embedding_fn
+            embedding_fn=self.embedding_fn,
         )
 
     def add_document(self, doc_id: str, text: str, metadata: Optional[Dict[str, Any]] = None) -> None:
@@ -260,9 +361,10 @@ def _rag_upsert_subprocess_entry(payload: Dict[str, Any], result_path: str):
         embedding_fn = embedding_functions.SentenceTransformerEmbeddingFunction(
             model_name="all-MiniLM-L6-v2"
         )
-        collection = client.get_or_create_collection(
+        collection = _get_or_create_collection_compatible(
+            client,
             name="transcriptions",
-            embedding_function=embedding_fn,
+            embedding_fn=embedding_fn,
         )
         collection.upsert(
             ids=[payload["doc_id"]],
@@ -346,9 +448,10 @@ def _rag_query_subprocess_entry(payload: Dict[str, Any], result_path: str):
         embedding_fn = embedding_functions.SentenceTransformerEmbeddingFunction(
             model_name="all-MiniLM-L6-v2"
         )
-        collection = client.get_or_create_collection(
+        collection = _get_or_create_collection_compatible(
+            client,
             name="transcriptions",
-            embedding_function=embedding_fn,
+            embedding_fn=embedding_fn,
         )
         query_result = collection.query(
             query_texts=[payload["query"]],
@@ -431,9 +534,10 @@ def _rag_keyword_search_subprocess_entry(payload: Dict[str, Any], result_path: s
         embedding_fn = embedding_functions.SentenceTransformerEmbeddingFunction(
             model_name="all-MiniLM-L6-v2"
         )
-        collection = client.get_or_create_collection(
+        collection = _get_or_create_collection_compatible(
+            client,
             name="transcriptions",
-            embedding_function=embedding_fn,
+            embedding_fn=embedding_fn,
         )
         raw = collection.get(
             where=payload["where"],

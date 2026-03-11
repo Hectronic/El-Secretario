@@ -1,12 +1,100 @@
 from collections import deque
 from typing import Deque, Dict, Optional, Tuple, Any, List
 
-from PyQt6.QtCore import QObject, pyqtSignal, QSettings, QTimer
+from PyQt6.QtCore import QObject, pyqtSignal, QSettings, QTimer, QThread
 
 from src.summary_generator import SummaryGenerator
 from src.ai_assistant import AIAssistant
 from src.database import DBManager
 from src.worker import TranscriberThread
+
+
+class RAGReindexThread(QThread):
+    task_completed = pyqtSignal(dict)
+    progress = pyqtSignal(int)
+    status_update = pyqtSignal(str)
+    error = pyqtSignal(str)
+
+    def __init__(self, db: DBManager, rag_engine, scope: str = "all", parent=None):
+        super().__init__(parent)
+        self.db = db
+        self.rag = rag_engine
+        self.scope = (scope or "all").strip().lower()
+
+    def run(self):
+        if self.rag is None:
+            self.error.emit("RAG engine is not initialized.")
+            return
+
+        try:
+            records = self.db.fetch_all()
+            candidates = []
+            for rec in records:
+                rec_id = rec.get("id")
+                if not isinstance(rec_id, int):
+                    continue
+                rec_type = str(rec.get("type") or "recording")
+                if rec_type not in {"recording", "note"}:
+                    continue
+                ai_text = self.db.get_record_ai_text(rec_id)
+                if not str(ai_text or "").strip():
+                    continue
+                if self.scope == "missing" and self._is_indexed_in_rag(rec_id):
+                    continue
+                candidates.append((rec, ai_text))
+
+            total = len(candidates)
+            if total == 0:
+                self.status_update.emit("RAG reindex: no eligible records found.")
+                self.progress.emit(100)
+                self.task_completed.emit({"indexed": 0, "skipped": 0, "total": 0})
+                return
+
+            indexed = 0
+            skipped = 0
+            for idx, (rec, ai_text) in enumerate(candidates, start=1):
+                if self.isInterruptionRequested():
+                    self.status_update.emit("RAG reindex interrupted.")
+                    break
+
+                rec_id = rec.get("id")
+                title = (rec.get("title") or f"Record {rec_id}").strip()
+                metadata = {
+                    "title": title,
+                    "date": rec.get("created_at") or "",
+                    "tags": rec.get("tags") or "",
+                    "type": rec.get("type") or "recording",
+                }
+                try:
+                    self.rag.add_document(rec_id, ai_text, metadata=metadata)
+                    indexed += 1
+                except Exception:
+                    skipped += 1
+
+                if idx == 1 or idx % 25 == 0 or idx == total:
+                    self.status_update.emit(f"RAG reindex: {idx}/{total}")
+                self.progress.emit(int((idx / total) * 100))
+
+            self.task_completed.emit({"indexed": indexed, "skipped": skipped, "total": total})
+        except Exception as e:
+            self.error.emit(str(e))
+
+    def _is_indexed_in_rag(self, record_id: int) -> bool:
+        sid = str(record_id)
+        try:
+            collection = getattr(self.rag, "collection", None)
+            if collection is not None and hasattr(collection, "get"):
+                raw = collection.get(ids=[sid], where={"deleted": {"$ne": "1"}})
+                return bool(raw and raw.get("ids"))
+        except Exception:
+            pass
+
+        # Fallback path for collection backends that don't expose `get`.
+        try:
+            hits = self.rag.search("", n_results=1, ids=[sid])
+            return bool(hits)
+        except Exception:
+            return False
 
 
 class SummaryTaskQueueManager(QObject):
@@ -32,6 +120,7 @@ class SummaryTaskQueueManager(QObject):
         self._current_worker: Optional[Any] = None
         self._zombie_workers = [] 
         self.db = DBManager()
+        self.rag_engine = None
         self._wait_remaining_seconds = 0
         self._wait_description = ""
         self._wait_timer = QTimer(self)
@@ -167,6 +256,20 @@ class SummaryTaskQueueManager(QObject):
         }
         return self._enqueue_unique_task(task)
 
+    def enqueue_rag_reindex(self, scope: str = "all") -> bool:
+        normalized_scope = (scope or "all").strip().lower()
+        if normalized_scope not in {"all", "missing"}:
+            normalized_scope = "all"
+        task = {
+            "type": "rag_reindex",
+            "title": "RAG Reindex",
+            "reindex_scope": normalized_scope,
+        }
+        return self._enqueue_unique_task(task)
+
+    def set_rag_engine(self, rag_engine) -> None:
+        self.rag_engine = rag_engine
+
     def add_external_trace(self, message: str, task: Optional[Dict] = None, event: str = "trace"):
         msg = str(message or "").strip()
         if not msg:
@@ -250,6 +353,7 @@ class SummaryTaskQueueManager(QObject):
             task.get("record_id", ""),
             task.get("tags_filter", ""),
             task.get("audio_path", ""),
+            task.get("reindex_scope", ""),
         )
 
     def _emit_queue_state(self):
@@ -313,6 +417,15 @@ class SummaryTaskQueueManager(QObject):
                 worker.finished.connect(self._on_worker_completed)
                 worker.progress.connect(self.task_progress.emit)
                 worker.status_update.connect(self._on_worker_status_update)
+            elif task_type == "rag_reindex":
+                worker = RAGReindexThread(
+                    self.db,
+                    self.rag_engine,
+                    scope=task.get("reindex_scope", "all"),
+                    parent=self,
+                )
+                worker.task_completed.connect(self._on_worker_completed)
+                worker.progress.connect(self.task_progress.emit)
             else:
                 worker = AIAssistant("", task_type, task.get("text", ""))
                 worker.task_completed.connect(lambda t_type, result: self._on_worker_completed(result))
@@ -380,6 +493,14 @@ class SummaryTaskQueueManager(QObject):
                     # Auto chain summary
                     ai_text = self.db.get_record_ai_text(task["record_id"])
                     self.enqueue_recording_summary(task["record_id"], ai_text, task.get("title", ""))
+                elif t_type == "rag_reindex" and isinstance(result, dict):
+                    indexed = int(result.get("indexed", 0))
+                    skipped = int(result.get("skipped", 0))
+                    total = int(result.get("total", 0))
+                    scope_label = "missing only" if task.get("reindex_scope") == "missing" else "all records"
+                    self.task_status_update.emit(
+                        f"RAG reindex ({scope_label}) completed: {indexed}/{total} indexed, {skipped} skipped."
+                    )
             except Exception as e:
                 logging.error(f"Queue persistence error: {e}", exc_info=True)
 

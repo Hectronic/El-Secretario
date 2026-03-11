@@ -18,8 +18,8 @@ import shutil
 import logging
 from datetime import date, timedelta
 from PyQt6.QtWidgets import (QMainWindow, QWidget, QVBoxLayout, 
-                             QHBoxLayout, QListWidget, QPushButton, 
-                             QLabel, QMessageBox, QListWidgetItem, QComboBox,
+                             QHBoxLayout, QListWidget, QPushButton, QToolButton,
+                             QLabel, QMessageBox, QListWidgetItem, QComboBox, QInputDialog,
                              QTabWidget, QSplitter, QApplication, QStyle, QLineEdit, QTabBar,
                              QCalendarWidget, QCheckBox, QFileDialog, QMenu, QProgressBar, QDialog)
 from PyQt6.QtCore import Qt, QSettings, QUrl, QDate, QTimer
@@ -49,6 +49,7 @@ from src.ui.maintenance_widget import MaintenanceWidget
 from src.ui.tools_widget import ToolsWidget
 from src.ui.summary_task_queue import SummaryTaskQueueManager
 from src.ui.queue_management_widget import QueueManagementWidget
+from src.ui.chat_history_widget import ChatHistoryWidget
 from src.ui.tasks_list_widget import TasksListWidget, TaskEditDialog
 
 Recorder = None
@@ -103,6 +104,58 @@ class MainWindow(QMainWindow):
         # Show Welcome Tab
         self.show_welcome_screen()
         logging.info("MainWindow initialized.")
+
+    @staticmethod
+    def _to_env_bool(value) -> str:
+        return "1" if bool(value) else "0"
+
+    def _apply_rag_runtime_env(self, rag_config):
+        os.environ["EL_SECRETARIO_CHROMA_SAFE_DELETE"] = self._to_env_bool(
+            rag_config.get("safe_delete_mode", True)
+        )
+        os.environ["EL_SECRETARIO_RAG_SUBPROCESS_UPSERT"] = self._to_env_bool(
+            rag_config.get("subprocess_upsert_mode", True)
+        )
+        os.environ["EL_SECRETARIO_RAG_SUBPROCESS_QUERY"] = self._to_env_bool(
+            rag_config.get("subprocess_query_mode", True)
+        )
+
+    def _propagate_rag_engine_to_open_tabs(self):
+        for i in range(self.central_tabs.count()):
+            widget = self.central_tabs.widget(i)
+            if hasattr(widget, "rag"):
+                try:
+                    widget.rag = self.rag
+                except Exception:
+                    logging.exception("Failed to propagate RAG engine to tab %s", type(widget).__name__)
+
+    def _build_rag_engine(self, rag_config, reason="runtime"):
+        self._apply_rag_runtime_env(rag_config)
+        if not rag_config.get("enabled", True):
+            self.rag = None
+            self.summary_task_queue.set_rag_engine(None)
+            self._propagate_rag_engine_to_open_tabs()
+            self.handle_status_message("RAG disabled from settings.")
+            logging.info("RAG disabled (%s).", reason)
+            return
+
+        persist_dir = rag_config.get("persist_directory") or "chroma_db"
+        try:
+            from src.rag_engine import RAGEngine
+            self.rag = RAGEngine(persist_directory=persist_dir)
+            self.summary_task_queue.set_rag_engine(self.rag)
+            self._propagate_rag_engine_to_open_tabs()
+            self.handle_status_message(f"RAG ready ({reason}).")
+            logging.info("RAG initialized (%s) with persist_directory=%s", reason, persist_dir)
+        except Exception as e:
+            self.rag = None
+            self.summary_task_queue.set_rag_engine(None)
+            self._propagate_rag_engine_to_open_tabs()
+            logging.exception("Failed to initialize RAG (%s).", reason)
+            if str(reason).lower() == "startup":
+                self.handle_status_message(f"RAG unavailable on startup: {e}")
+            else:
+                QMessageBox.warning(self, "RAG Error", f"Failed to initialize RAG: {e}")
 
     def _log_user_settings_snapshot(self, context: str):
         settings = QSettings("Hectronic", "Secretario")
@@ -223,6 +276,11 @@ class MainWindow(QMainWindow):
             return f"Transcribing: {task.get('title', 'Unknown')}"
         if t_type == "weekly_summary":
             return f"Week: {task.get('date', 'Unknown')}"
+        if t_type == "rag_reindex":
+            scope = task.get("reindex_scope", "all")
+            if scope == "missing":
+                return "RAG Reindex (Missing)"
+            return "RAG Reindex (All)"
         
         date = task.get("date", "unknown date")
         tags_filter = task.get("tags_filter")
@@ -232,7 +290,7 @@ class MainWindow(QMainWindow):
 
     def _on_summary_task_enqueued(self, task, position):
         self.task_status_label.setText(
-            f"Queued summary: {self._format_task_name(task)} (#{position} in queue)"
+            f"Queued task: {self._format_task_name(task)} (#{position} in queue)"
         )
 
     def _on_summary_task_started(self, task, remaining_pending):
@@ -273,6 +331,8 @@ class MainWindow(QMainWindow):
                     widget = self.central_tabs.widget(i)
                     if isinstance(widget, SummaryViewerWidget):
                         widget._load_daily_tasks()
+                # Keep right sidebar tasks in sync when extraction is completed by queue.
+                self.refresh_tasks_sidebar()
                 
             elif t_type == "daily_summary":
                 date = task.get("date")
@@ -291,6 +351,8 @@ class MainWindow(QMainWindow):
                             widget.update_summary_view()
                     except (RuntimeError, AttributeError):
                         continue
+            elif t_type == "rag_reindex":
+                self.request_sidebar_reload(include_history=True)
 
             self.task_status_label.setText(
                 f"Finished: {self._format_task_name(task)}"
@@ -325,9 +387,22 @@ class MainWindow(QMainWindow):
                 self.task_status_label.setText("Summary queue idle.")
 
     def handle_status_message(self, message):
+        # During early startup, status widgets may not be created yet.
+        try:
+            label = self.task_status_label
+        except Exception:
+            label = None
+
+        if label is None:
+            try:
+                self.statusBar().showMessage(str(message or ""), 5000)
+            except Exception:
+                pass
+            return
+
         # If the queue is running, don't overwrite its status with generic messages
         if not self.summary_task_queue.is_running:
-            self.task_status_label.setText(message)
+            label.setText(message)
 
     def handle_progress(self, value):
         # If the queue is running, don't let individual widgets interfere with the progress bar
@@ -480,11 +555,31 @@ class MainWindow(QMainWindow):
         right_layout.setContentsMargins(5, 5, 5, 5)
         right_layout.setSpacing(8)
         
-        def create_section(section_key, title, list_widget=None, button=None):
+        def create_section(section_key, title, list_widget=None, button=None, top_widget=None, header_actions=None):
             container = QWidget()
             container_layout = QVBoxLayout(container)
             container_layout.setContentsMargins(0, 0, 0, 0)
             container_layout.setSpacing(4)
+
+            header_shell = QWidget()
+            header_shell.setProperty("class", "accordion-header-shell")
+            header_shell.setStyleSheet("""
+                QWidget[class="accordion-header-shell"] {
+                    border: 1px solid #546E7A;
+                    border-radius: 12px;
+                    background-color: transparent;
+                }
+                QWidget[class="accordion-header-shell"][active="true"] {
+                    background-color: rgba(33, 150, 243, 0.20);
+                    border-color: #2196F3;
+                }
+                QWidget[class="accordion-header-shell"][active="false"]:hover {
+                    background-color: rgba(84, 110, 122, 0.18);
+                }
+            """)
+            header_shell_layout = QHBoxLayout(header_shell)
+            header_shell_layout.setContentsMargins(8, 4, 8, 4)
+            header_shell_layout.setSpacing(4)
 
             header_btn = QPushButton(title)
             header_btn.setCheckable(True)
@@ -495,26 +590,24 @@ class MainWindow(QMainWindow):
                 QPushButton[class="accordion-header-btn"] {
                     text-align: left;
                     font-weight: 700;
-                    border: 1px solid #546E7A;
-                    border-radius: 12px;
-                    padding: 8px 12px;
+                    border: none;
+                    border-radius: 0;
+                    padding: 8px 6px;
                     background-color: transparent;
-                }
-                QPushButton[class="accordion-header-btn"]:hover {
-                    background-color: rgba(84, 110, 122, 0.18);
-                }
-                QPushButton[class="accordion-header-btn"]:checked {
-                    background-color: rgba(33, 150, 243, 0.20);
-                    border-color: #2196F3;
                 }
             """)
             header_btn.clicked.connect(lambda _checked=False, key=section_key: self._on_right_section_header_clicked(key))
-            container_layout.addWidget(header_btn)
+            header_shell_layout.addWidget(header_btn, 1)
+            if header_actions is not None:
+                header_shell_layout.addWidget(header_actions, 0, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+            container_layout.addWidget(header_shell)
 
             content_widget = QWidget()
             content_layout = QVBoxLayout(content_widget)
             content_layout.setContentsMargins(0, 0, 0, 0)
             content_layout.setSpacing(6)
+            if top_widget is not None:
+                content_layout.addWidget(top_widget)
             if list_widget is not None:
                 list_widget.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
                 list_widget.setProperty("class", "embedded-list")
@@ -529,6 +622,7 @@ class MainWindow(QMainWindow):
             self._right_sidebar_sections[section_key] = {
                 "title": title,
                 "header": header_btn,
+                "header_shell": header_shell,
                 "content": content_widget,
             }
             return container
@@ -539,26 +633,47 @@ class MainWindow(QMainWindow):
         self.tasks_sidebar_list.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.tasks_sidebar_list.customContextMenuRequested.connect(self.show_tasks_sidebar_context_menu)
 
-        self.open_tasks_btn = QPushButton("View all")
-        self.open_tasks_btn.setProperty("class", "calendar-nav-btn")
-        self.open_tasks_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.open_tasks_btn.setMinimumHeight(34)
-        self.open_tasks_btn.clicked.connect(lambda: self.open_tasks_tab(create_new=False))
+        task_action_style = """
+            QToolButton {
+                border: none;
+                border-radius: 8px;
+                padding: 4px;
+                background-color: transparent;
+                color: #CFD8DC;
+                font-size: 18px;
+                font-weight: 700;
+            }
+            QToolButton:hover {
+                background-color: rgba(84, 110, 122, 0.18);
+            }
+        """
 
-        self.create_task_btn = QPushButton("Create new")
-        self.create_task_btn.setProperty("class", "calendar-nav-btn")
+        self.create_task_btn = QToolButton()
+        self.create_task_btn.setText("+")
+        self.create_task_btn.setToolTip("Create a new task")
         self.create_task_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.create_task_btn.setMinimumHeight(34)
+        self.create_task_btn.setAutoRaise(True)
+        self.create_task_btn.setFixedSize(28, 28)
+        self.create_task_btn.setStyleSheet(task_action_style)
         self.create_task_btn.clicked.connect(lambda: self.open_tasks_tab(create_new=True))
 
-        tasks_buttons = QWidget()
-        tasks_buttons_layout = QHBoxLayout(tasks_buttons)
-        tasks_buttons_layout.setContentsMargins(0, 0, 0, 0)
-        tasks_buttons_layout.setSpacing(8)
-        tasks_buttons_layout.addWidget(self.open_tasks_btn)
-        tasks_buttons_layout.addWidget(self.create_task_btn)
+        self.open_tasks_btn = QToolButton()
+        self.open_tasks_btn.setText("⤢")
+        self.open_tasks_btn.setToolTip("Open the full Tasks tab")
+        self.open_tasks_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.open_tasks_btn.setAutoRaise(True)
+        self.open_tasks_btn.setFixedSize(28, 28)
+        self.open_tasks_btn.setStyleSheet(task_action_style)
+        self.open_tasks_btn.clicked.connect(lambda: self.open_tasks_tab(create_new=False))
 
-        tasks_section = create_section("tasks", "✅ Tasks", self.tasks_sidebar_list, tasks_buttons)
+        self.tasks_header_actions = QWidget()
+        tasks_header_layout = QHBoxLayout(self.tasks_header_actions)
+        tasks_header_layout.setContentsMargins(0, 0, 0, 0)
+        tasks_header_layout.setSpacing(2)
+        tasks_header_layout.addWidget(self.create_task_btn)
+        tasks_header_layout.addWidget(self.open_tasks_btn)
+
+        tasks_section = create_section("tasks", "✅ Tasks", self.tasks_sidebar_list, header_actions=self.tasks_header_actions)
         right_layout.addWidget(tasks_section)
         self._right_sidebar_sections["tasks"]["index"] = right_layout.indexOf(tasks_section)
 
@@ -566,14 +681,35 @@ class MainWindow(QMainWindow):
         self.sessions_list = QListWidget()
         self.sessions_list.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.sessions_list.itemClicked.connect(self.on_chat_session_clicked)
-        
-        self.delete_chat_session_btn = QPushButton("Delete Chat")
-        self.delete_chat_session_btn.setProperty("class", "calendar-nav-btn")
-        self.delete_chat_session_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.delete_chat_session_btn.setMinimumHeight(34)
-        self.delete_chat_session_btn.clicked.connect(self.delete_selected_chat_session)
-        
-        chat_section = create_section("chats", "💬 Chat History", self.sessions_list, self.delete_chat_session_btn)
+        self.sessions_list.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self.sessions_list.customContextMenuRequested.connect(self.show_chat_sidebar_context_menu)
+
+        self.new_chat_btn = QToolButton()
+        self.new_chat_btn.setText("+")
+        self.new_chat_btn.setToolTip("Start a new chat")
+        self.new_chat_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.new_chat_btn.setAutoRaise(True)
+        self.new_chat_btn.setFixedSize(28, 28)
+        self.new_chat_btn.setStyleSheet(task_action_style)
+        self.new_chat_btn.clicked.connect(lambda: self.open_chat_tab(None))
+
+        self.open_chat_history_btn = QToolButton()
+        self.open_chat_history_btn.setText("⤢")
+        self.open_chat_history_btn.setToolTip("Open the full Chat History tab")
+        self.open_chat_history_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.open_chat_history_btn.setAutoRaise(True)
+        self.open_chat_history_btn.setFixedSize(28, 28)
+        self.open_chat_history_btn.setStyleSheet(task_action_style)
+        self.open_chat_history_btn.clicked.connect(self.open_chat_history_tab)
+
+        self.chats_header_actions = QWidget()
+        chats_header_layout = QHBoxLayout(self.chats_header_actions)
+        chats_header_layout.setContentsMargins(0, 0, 0, 0)
+        chats_header_layout.setSpacing(2)
+        chats_header_layout.addWidget(self.new_chat_btn)
+        chats_header_layout.addWidget(self.open_chat_history_btn)
+
+        chat_section = create_section("chats", "💬 Chat History", self.sessions_list, header_actions=self.chats_header_actions)
         right_layout.addWidget(chat_section)
         self._right_sidebar_sections["chats"]["index"] = right_layout.indexOf(chat_section)
         
@@ -581,14 +717,35 @@ class MainWindow(QMainWindow):
         self.notebooks_list = QListWidget()
         self.notebooks_list.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.notebooks_list.itemClicked.connect(self.on_notebook_clicked)
-        
-        self.open_notebooks_btn = QPushButton("View all notebooks")
-        self.open_notebooks_btn.setProperty("class", "calendar-nav-btn")
+        self.notebooks_list.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self.notebooks_list.customContextMenuRequested.connect(self.show_notebooks_sidebar_context_menu)
+
+        self.create_notebook_btn = QToolButton()
+        self.create_notebook_btn.setText("+")
+        self.create_notebook_btn.setToolTip("Create a new notebook")
+        self.create_notebook_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.create_notebook_btn.setAutoRaise(True)
+        self.create_notebook_btn.setFixedSize(28, 28)
+        self.create_notebook_btn.setStyleSheet(task_action_style)
+        self.create_notebook_btn.clicked.connect(self.create_notebook)
+
+        self.open_notebooks_btn = QToolButton()
+        self.open_notebooks_btn.setText("⤢")
+        self.open_notebooks_btn.setToolTip("Open the full Notebooks tab")
         self.open_notebooks_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.open_notebooks_btn.setMinimumHeight(34)
+        self.open_notebooks_btn.setAutoRaise(True)
+        self.open_notebooks_btn.setFixedSize(28, 28)
+        self.open_notebooks_btn.setStyleSheet(task_action_style)
         self.open_notebooks_btn.clicked.connect(self.open_notebooks_list)
-        
-        nb_section = create_section("notebooks", "📓 Notebooks", self.notebooks_list, self.open_notebooks_btn)
+
+        self.notebooks_header_actions = QWidget()
+        notebooks_header_layout = QHBoxLayout(self.notebooks_header_actions)
+        notebooks_header_layout.setContentsMargins(0, 0, 0, 0)
+        notebooks_header_layout.setSpacing(2)
+        notebooks_header_layout.addWidget(self.create_notebook_btn)
+        notebooks_header_layout.addWidget(self.open_notebooks_btn)
+
+        nb_section = create_section("notebooks", "📓 Notebooks", self.notebooks_list, header_actions=self.notebooks_header_actions)
         right_layout.addWidget(nb_section)
         self._right_sidebar_sections["notebooks"]["index"] = right_layout.indexOf(nb_section)
 
@@ -596,7 +753,35 @@ class MainWindow(QMainWindow):
         self.collections_list = QListWidget()
         self.collections_list.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.collections_list.itemClicked.connect(self.on_collection_clicked)
-        tags_section = create_section("tags", "🏷️ Tags", self.collections_list)
+        self.collections_list.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self.collections_list.customContextMenuRequested.connect(self.show_tags_sidebar_context_menu)
+
+        self.new_tag_chat_btn = QToolButton()
+        self.new_tag_chat_btn.setText("+")
+        self.new_tag_chat_btn.setToolTip("Start a chat for the selected tag")
+        self.new_tag_chat_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.new_tag_chat_btn.setAutoRaise(True)
+        self.new_tag_chat_btn.setFixedSize(28, 28)
+        self.new_tag_chat_btn.setStyleSheet(task_action_style)
+        self.new_tag_chat_btn.clicked.connect(self.open_selected_tag_chat)
+
+        self.open_collections_btn = QToolButton()
+        self.open_collections_btn.setText("⤢")
+        self.open_collections_btn.setToolTip("Open the full Collections tab")
+        self.open_collections_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.open_collections_btn.setAutoRaise(True)
+        self.open_collections_btn.setFixedSize(28, 28)
+        self.open_collections_btn.setStyleSheet(task_action_style)
+        self.open_collections_btn.clicked.connect(self.open_collections_list)
+
+        self.tags_header_actions = QWidget()
+        tags_header_layout = QHBoxLayout(self.tags_header_actions)
+        tags_header_layout.setContentsMargins(0, 0, 0, 0)
+        tags_header_layout.setSpacing(2)
+        tags_header_layout.addWidget(self.new_tag_chat_btn)
+        tags_header_layout.addWidget(self.open_collections_btn)
+
+        tags_section = create_section("tags", "🏷️ Tags", self.collections_list, header_actions=self.tags_header_actions)
         right_layout.addWidget(tags_section)
         self._right_sidebar_sections["tags"]["index"] = right_layout.indexOf(tags_section)
 
@@ -638,13 +823,18 @@ class MainWindow(QMainWindow):
         self.splitter.setCollapsible(1, False)
         self.splitter.setCollapsible(2, False)
         
-        # Initialize RAG Engine
-        try:
-            from src.rag_engine import RAGEngine
-            self.rag = RAGEngine()
-        except Exception as e:
-            print(f"Failed to init RAG: {e}")
-            self.rag = None
+        # Initialize RAG Engine from settings
+        settings = QSettings("Hectronic", "Secretario")
+        self._build_rag_engine(
+            {
+                "enabled": settings.value("rag_enabled", True, type=bool),
+                "persist_directory": settings.value("rag_persist_directory", "chroma_db"),
+                "safe_delete_mode": settings.value("rag_safe_delete_mode", True, type=bool),
+                "subprocess_upsert_mode": settings.value("rag_subprocess_upsert_mode", True, type=bool),
+                "subprocess_query_mode": settings.value("rag_subprocess_query_mode", True, type=bool),
+            },
+            reason="startup",
+        )
 
     def _on_right_section_header_clicked(self, section_key):
         if self._active_right_section == section_key:
@@ -664,6 +854,11 @@ class MainWindow(QMainWindow):
             prefix = "▾ " if is_active else "▸ "
             section["header"].setText(f"{prefix}{section['title']}")
             section["header"].blockSignals(False)
+            header_shell = section.get("header_shell")
+            if header_shell is not None:
+                header_shell.setProperty("active", "true" if is_active else "false")
+                header_shell.style().unpolish(header_shell)
+                header_shell.style().polish(header_shell)
             section["content"].setVisible(is_active)
             idx = section.get("index")
             if self._right_sidebar_layout is not None and idx is not None:
@@ -681,6 +876,7 @@ class MainWindow(QMainWindow):
         self.welcome_widget.search_triggered.connect(self.perform_welcome_search)
         self.welcome_widget.result_clicked.connect(self.open_item_tab)
         self.welcome_widget.new_chat_requested.connect(lambda: self.open_chat_tab(None))
+        self.welcome_widget.ask_chat_with_context_requested.connect(self.open_chat_tab_from_current_context)
         self.welcome_widget.import_audio_requested.connect(self.import_audio_file)
         self.welcome_widget.notebooks_requested.connect(self.open_notebooks_list)
         self.welcome_widget.tools_requested.connect(lambda: self.open_tools_tab())
@@ -753,6 +949,7 @@ class MainWindow(QMainWindow):
         rec_widget.recording_saved.connect(self.load_history)
         rec_widget.status_changed.connect(self.handle_status_message)
         rec_widget.progress_changed.connect(self.handle_progress)
+        rec_widget.start_chat_requested.connect(lambda contexts: self.open_chat_tab(initial_contexts=contexts))
         rec_widget.close_requested.connect(lambda: self.close_tab(self.central_tabs.indexOf(rec_widget)))
         
         # If config is provided, set the widget's transcription settings
@@ -897,6 +1094,29 @@ class MainWindow(QMainWindow):
         
         index = self.central_tabs.addTab(chat_widget, title)
         self.central_tabs.setCurrentIndex(index)
+        return chat_widget
+
+    def open_chat_tab_from_current_context(self):
+        tag = self.tag_filter_combo.currentText() if hasattr(self, "tag_filter_combo") else "All"
+        tags_str = "" if not tag or tag == "All" else tag
+        chat_widget = self.open_chat_tab(None)
+        if isinstance(chat_widget, ChatWidget):
+            chat_widget.update_from_global_selection(self.current_week_monday, self.current_date_filter, tags_str)
+
+    def open_chat_history_tab(self):
+        for i in range(self.central_tabs.count()):
+            widget = self.central_tabs.widget(i)
+            if isinstance(widget, ChatHistoryWidget):
+                self.central_tabs.setCurrentIndex(i)
+                return widget
+
+        history_widget = ChatHistoryWidget(self)
+        history_widget.session_requested.connect(self.open_chat_tab)
+        history_widget.session_delete_requested.connect(self.delete_chat_session_by_id)
+        history_widget.set_sessions(self.db.fetch_chat_sessions())
+        index = self.central_tabs.addTab(history_widget, "💬 Chat History")
+        self.central_tabs.setCurrentIndex(index)
+        return history_widget
 
     def open_tools_tab(self, tab_index=0):
         """Open the unified Tools tab, optionally switching to a specific sub-tab."""
@@ -1178,7 +1398,9 @@ class MainWindow(QMainWindow):
             self.collections_list.addItem("No tags.")
             return
         for tag in tags:
-            self.collections_list.addItem(tag)
+            item = QListWidgetItem(tag)
+            item.setData(Qt.ItemDataRole.UserRole, tag)
+            self.collections_list.addItem(item)
 
     def load_notebooks(self):
         """Load notebooks into the sidebar list."""
@@ -1196,10 +1418,100 @@ class MainWindow(QMainWindow):
         self.open_notebook(notebook_id, notebook_name)
 
     def on_collection_clicked(self, item):
-        tag = item.text()
+        tag = item.data(Qt.ItemDataRole.UserRole) or item.text()
         if not tag or tag == "No tags.":
             return
         self.open_collection_tab(tag)
+
+    def create_notebook(self):
+        name, ok = QInputDialog.getText(self, "New Notebook", "Notebook Name:")
+        if ok and name.strip():
+            self.notebook_db.create_notebook(name.strip())
+            self.load_notebooks()
+
+    def _find_notebook_by_id(self, notebook_id):
+        notebooks = self.notebook_db.get_notebooks()
+        return next((nb for nb in notebooks if nb.get("id") == notebook_id), None)
+
+    def rename_notebook(self, notebook_id):
+        notebook = self._find_notebook_by_id(notebook_id)
+        if not notebook:
+            return
+        new_name, ok = QInputDialog.getText(self, "Rename Notebook", "New Name:", text=notebook["name"])
+        if ok and new_name.strip():
+            self.notebook_db.rename_notebook(notebook_id, new_name.strip())
+            self.load_notebooks()
+
+    def delete_notebook(self, notebook_id):
+        notebook = self._find_notebook_by_id(notebook_id)
+        if not notebook:
+            return
+        reply = QMessageBox.question(
+            self,
+            "Delete Notebook",
+            f"Are you sure you want to delete '{notebook['name']}' and all its notes?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+        )
+        if reply == QMessageBox.StandardButton.Yes:
+            self.notebook_db.delete_notebook(notebook_id)
+            self.load_notebooks()
+
+    def show_notebooks_sidebar_context_menu(self, point):
+        item = self.notebooks_list.itemAt(point)
+        if not item:
+            return
+
+        notebook_id = item.data(Qt.ItemDataRole.UserRole)
+        notebook_name = item.text().replace("📓 ", "")
+        if not isinstance(notebook_id, int):
+            return
+
+        menu = QMenu(self)
+        open_action = menu.addAction("Open")
+        chat_action = menu.addAction("Chat")
+        rename_action = menu.addAction("Rename")
+        delete_action = menu.addAction("Delete")
+
+        chosen = menu.exec(self.notebooks_list.viewport().mapToGlobal(point))
+        if chosen == open_action:
+            self.open_notebook(notebook_id, notebook_name)
+        elif chosen == chat_action:
+            self.open_notebook_chat(notebook_id, notebook_name)
+        elif chosen == rename_action:
+            self.rename_notebook(notebook_id)
+        elif chosen == delete_action:
+            self.delete_notebook(notebook_id)
+
+    def open_selected_tag_chat(self):
+        item = self.collections_list.currentItem()
+        if item is None:
+            self.open_chat_tab(None)
+            return
+
+        tag = item.data(Qt.ItemDataRole.UserRole) or item.text()
+        if not tag or tag == "No tags.":
+            self.open_chat_tab(None)
+            return
+        self.open_collection_chat(tag)
+
+    def show_tags_sidebar_context_menu(self, point):
+        item = self.collections_list.itemAt(point)
+        if not item:
+            return
+
+        tag = item.data(Qt.ItemDataRole.UserRole) or item.text()
+        if not tag or tag == "No tags.":
+            return
+
+        menu = QMenu(self)
+        open_action = menu.addAction("Open")
+        chat_action = menu.addAction("Chat")
+
+        chosen = menu.exec(self.collections_list.viewport().mapToGlobal(point))
+        if chosen == open_action:
+            self.open_collection_tab(tag)
+        elif chosen == chat_action:
+            self.open_collection_chat(tag)
 
     def open_collection_tab(self, tag):
         # Check if already open
@@ -1377,6 +1689,10 @@ class MainWindow(QMainWindow):
             item = QListWidgetItem(f"{s['name']} ({s['created_at'][:16]})")
             item.setData(Qt.ItemDataRole.UserRole, s)
             self.sessions_list.addItem(item)
+        for i in range(self.central_tabs.count()):
+            widget = self.central_tabs.widget(i)
+            if isinstance(widget, ChatHistoryWidget):
+                widget.set_sessions(sessions)
 
     def refresh_tasks_sidebar(self):
         if not hasattr(self, "tasks_sidebar_list"):
@@ -1384,7 +1700,29 @@ class MainWindow(QMainWindow):
 
         self.tasks_sidebar_list.blockSignals(True)
         self.tasks_sidebar_list.clear()
-        tasks = self.db.get_recent_incomplete_tasks(limit=self.tasks_sidebar_limit)
+        tag = self.tag_filter_combo.currentText() if hasattr(self, "tag_filter_combo") else "All"
+        tags_filter = tag if tag and tag != "All" else None
+
+        if self.current_week_monday and self.current_date_filter:
+            tasks = self.db.get_tasks_by_date_range(
+                self.current_week_monday.toString("yyyy-MM-dd"),
+                self.current_date_filter,
+                tags_filter=tags_filter,
+                include_completed=False,
+            )
+            if self.tasks_sidebar_limit is not None:
+                tasks = tasks[:self.tasks_sidebar_limit]
+        elif self.current_date_filter:
+            tasks = self.db.get_tasks_by_date(
+                self.current_date_filter,
+                tags_filter=tags_filter,
+            )
+            tasks = [task for task in tasks if not bool(task.get("is_completed"))]
+            if self.tasks_sidebar_limit is not None:
+                tasks = tasks[:self.tasks_sidebar_limit]
+        else:
+            tasks = self.db.get_recent_incomplete_tasks(limit=self.tasks_sidebar_limit)
+
         if not tasks:
             self.tasks_sidebar_list.addItem("No incomplete tasks.")
             self.tasks_sidebar_list.blockSignals(False)
@@ -1493,24 +1831,56 @@ class MainWindow(QMainWindow):
         session = item.data(Qt.ItemDataRole.UserRole)
         self.open_chat_tab(session['id'])
 
+    def show_chat_sidebar_context_menu(self, point):
+        item = self.sessions_list.itemAt(point)
+        if not item:
+            return
+
+        session = item.data(Qt.ItemDataRole.UserRole)
+        if not isinstance(session, dict):
+            return
+
+        menu = QMenu(self)
+        open_action = menu.addAction("Open")
+        delete_action = menu.addAction("Delete")
+
+        chosen = menu.exec(self.sessions_list.viewport().mapToGlobal(point))
+        if chosen == open_action:
+            self.open_chat_tab(session["id"])
+        elif chosen == delete_action:
+            self.delete_chat_session_by_id(session["id"])
+
+    def delete_chat_session_by_id(self, session_id):
+        sessions = self.db.fetch_chat_sessions()
+        session = next((s for s in sessions if s.get("id") == session_id), None)
+        if not session:
+            return
+
+        reply = QMessageBox.question(
+            self,
+            "Delete Chat",
+            f"Are you sure you want to delete '{session['name']}'?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+        )
+        if reply != QMessageBox.StandardButton.Yes:
+            return
+
+        self.db.delete_chat_session(session["id"])
+        self.load_chat_sessions()
+
+        for i in range(self.central_tabs.count()):
+            widget = self.central_tabs.widget(i)
+            if isinstance(widget, ChatWidget) and widget.current_session_id == session["id"]:
+                self.central_tabs.removeTab(i)
+                widget.deleteLater()
+                break
+
     def delete_selected_chat_session(self):
         item = self.sessions_list.currentItem()
         if not item:
             return
         session = item.data(Qt.ItemDataRole.UserRole)
-        reply = QMessageBox.question(self, "Delete Chat", f"Are you sure you want to delete '{session['name']}'?",
-                                   QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
-        if reply == QMessageBox.StandardButton.Yes:
-            self.db.delete_chat_session(session['id'])
-            self.load_chat_sessions()
-            
-            # Close tab if open
-            for i in range(self.central_tabs.count()):
-                widget = self.central_tabs.widget(i)
-                if isinstance(widget, ChatWidget) and widget.current_session_id == session['id']:
-                    self.central_tabs.removeTab(i)
-                    widget.deleteLater()
-                    break
+        self.delete_chat_session_by_id(session["id"])
 
     def on_calendar_date_changed(self):
         date = self.calendar.selectedDate()
@@ -1699,6 +2069,15 @@ class MainWindow(QMainWindow):
                 return
 
         settings_widget = SettingsWidget()
+        settings_widget.rag_initialize_requested.connect(
+            lambda cfg: self._build_rag_engine(cfg, reason="initialize")
+        )
+        settings_widget.rag_reload_requested.connect(
+            lambda cfg: self._build_rag_engine(cfg, reason="reload")
+        )
+        settings_widget.rag_reindex_requested.connect(
+            lambda: self.summary_task_queue.enqueue_rag_reindex()
+        )
         index = self.central_tabs.addTab(settings_widget, "Settings")
         self.central_tabs.setCurrentIndex(index)
 

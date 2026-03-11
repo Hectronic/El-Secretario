@@ -37,6 +37,7 @@ Recorder = None
 class RecordingWidget(QWidget):
     recording_saved = pyqtSignal() # To refresh history list in MainWindow
     close_requested = pyqtSignal() # To request closing the tab
+    start_chat_requested = pyqtSignal(list) # Emits initial chat contexts
     status_changed = pyqtSignal(str)
     progress_changed = pyqtSignal(int)
 
@@ -211,31 +212,59 @@ class RecordingWidget(QWidget):
         self.tabs.addTab(self.tasks_widget, "Tasks")
         layout.addWidget(self.tabs)
         
+        bottom_actions_layout = QHBoxLayout()
+        bottom_actions_layout.setSpacing(12)
+        bottom_actions_layout.setContentsMargins(0, 6, 0, 2)
+
         ai_layout = QHBoxLayout()
+        ai_layout.setSpacing(10)
         self.summarize_btn = QPushButton("Summarize (AI)")
+        self.summarize_btn.setProperty("class", "calendar-nav-btn")
+        self.summarize_btn.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
+        self.summarize_btn.setMinimumHeight(36)
         self.summarize_btn.clicked.connect(lambda: self.run_ai_task("summary"))
         self.summarize_btn.setEnabled(False)
         ai_layout.addWidget(self.summarize_btn)
 
         self.extract_tasks_btn = QPushButton("Extract Tasks (AI)")
+        self.extract_tasks_btn.setProperty("class", "calendar-nav-btn")
+        self.extract_tasks_btn.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
+        self.extract_tasks_btn.setMinimumHeight(36)
         self.extract_tasks_btn.clicked.connect(lambda: self.run_ai_task("task_extraction"))
         self.extract_tasks_btn.setEnabled(False)
         ai_layout.addWidget(self.extract_tasks_btn)
-        
-        layout.addLayout(ai_layout)
 
-        mgmt_layout = QHBoxLayout()
         self.retranscribe_btn = QPushButton("Retranscribe")
+        self.retranscribe_btn.setProperty("class", "calendar-nav-btn")
+        self.retranscribe_btn.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
+        self.retranscribe_btn.setMinimumHeight(38)
         self.retranscribe_btn.clicked.connect(self.retranscribe_recording)
         self.retranscribe_btn.setEnabled(False)
-        mgmt_layout.addWidget(self.retranscribe_btn)
-        
+        ai_layout.addWidget(self.retranscribe_btn)
+
+        bottom_actions_layout.addLayout(ai_layout)
+        bottom_actions_layout.addStretch()
+
+        self.ask_meeting_btn = QPushButton("Ask About This Meeting")
+        self.ask_meeting_btn.setProperty("class", "calendar-primary-btn")
+        self.ask_meeting_btn.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
+        self.ask_meeting_btn.setMinimumHeight(38)
+        self.ask_meeting_btn.clicked.connect(self.open_chat_for_recording)
+        self.ask_meeting_btn.setEnabled(False)
+        bottom_actions_layout.addWidget(self.ask_meeting_btn)
+        bottom_actions_layout.addSpacing(18)
+
         self.delete_btn = QPushButton("Delete")
-        self.delete_btn.setStyleSheet("color: red;")
+        self.delete_btn.setProperty("class", "record-del-btn")
+        self.delete_btn.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
+        self.delete_btn.setMinimumHeight(38)
+        self.delete_btn.setMinimumWidth(110)
         self.delete_btn.clicked.connect(self.delete_recording)
         self.delete_btn.setEnabled(False)
-        mgmt_layout.addWidget(self.delete_btn)
-        layout.addLayout(mgmt_layout)
+        bottom_actions_layout.addWidget(self.delete_btn)
+        bottom_actions_layout.addSpacing(8)
+
+        layout.addLayout(bottom_actions_layout)
 
     def load_record(self, record_id):
         record = self.db.fetch_record(record_id)
@@ -271,6 +300,7 @@ class RecordingWidget(QWidget):
                 
             self.tasks_widget.record_id = self.current_record_id
             self.tasks_widget.refresh()
+            self.ask_meeting_btn.setEnabled(True)
 
     def set_transcription_config(self, config):
         if config.get("model"):
@@ -505,6 +535,12 @@ class RecordingWidget(QWidget):
             self.tabs.setCurrentWidget(self.summary_display)
         elif task_type == "task_extraction":
             self.tasks_widget.refresh()
+            self._refresh_global_tasks_sidebar()
+
+    def _refresh_global_tasks_sidebar(self):
+        for widget in QApplication.topLevelWidgets():
+            if hasattr(widget, "refresh_tasks_sidebar"):
+                widget.refresh_tasks_sidebar()
 
     def refresh_from_background_queue(self, include_summary=False, include_tasks=False):
         """
@@ -559,6 +595,22 @@ class RecordingWidget(QWidget):
                 self.recording_saved.emit()
                 self.close_requested.emit()
 
+    def open_chat_for_recording(self):
+        if not self.current_record_id:
+            return
+        record = self.db.fetch_record(self.current_record_id)
+        if not isinstance(record, dict):
+            return
+        title = (record.get("title") or f"Recording {self.current_record_id}").strip()
+        contexts = [
+            {
+                "type": "recording",
+                "value": int(self.current_record_id),
+                "label": title,
+            }
+        ]
+        self.start_chat_requested.emit(contexts)
+
     def play_audio(self): self.player.play()
     def pause_audio(self): self.player.pause()
     def stop_audio(self): self.player.stop()
@@ -569,11 +621,11 @@ class RecordingWidget(QWidget):
         if self.player.mediaStatus() == QMediaPlayer.MediaStatus.EndOfMedia: self.stop_audio()
     def enable_playback_controls(self):
         self.play_btn.setEnabled(True); self.pause_btn.setEnabled(True); self.stop_btn.setEnabled(True)
-        self.retranscribe_btn.setEnabled(True); self.delete_btn.setEnabled(True)
+        self.ask_meeting_btn.setEnabled(True); self.retranscribe_btn.setEnabled(True); self.delete_btn.setEnabled(True)
         
     def disable_playback_controls(self):
         self.play_btn.setEnabled(False); self.pause_btn.setEnabled(False); self.stop_btn.setEnabled(False)
-        self.retranscribe_btn.setEnabled(False); self.delete_btn.setEnabled(False)
+        self.ask_meeting_btn.setEnabled(False); self.retranscribe_btn.setEnabled(False); self.delete_btn.setEnabled(False)
 
     def _clear_transcriber_thread_ref(self, *args):
         thread = self.transcriber_thread

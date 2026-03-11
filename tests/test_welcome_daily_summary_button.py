@@ -20,8 +20,8 @@ import shutil
 from datetime import date, timedelta
 from unittest.mock import MagicMock, patch
 
-from PyQt6.QtWidgets import QApplication
-from PyQt6.QtCore import QSettings
+from PyQt6.QtWidgets import QApplication, QMessageBox
+from PyQt6.QtCore import QDate, QSettings, Qt
 
 # Add project root to path
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
@@ -29,6 +29,8 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 from src.ui.main_window import MainWindow
 from src.ui.welcome_widget import WelcomeWidget
 from src.ui.dialogs import SettingsWidget
+from src.ui.chat_widget import ChatWidget
+from src.ui.chat_history_widget import ChatHistoryWidget
 from src.ui.components import SidebarTaskCompactWidget, create_tag_chip
 
 
@@ -69,6 +71,23 @@ class TestWelcomeDailySummaryButton(unittest.TestCase):
             widget.generate_daily_summary_btn.click()
 
             self.assertEqual(len(calls), 1)
+        finally:
+            widget.deleteLater()
+
+    def test_welcome_search_buttons_trigger_search_and_context_chat(self):
+        widget = WelcomeWidget(_FakeDB())
+        try:
+            search_calls = []
+            ask_calls = []
+            widget.search_triggered.connect(search_calls.append)
+            widget.ask_chat_with_context_requested.connect(lambda: ask_calls.append(True))
+
+            widget.search_input.setText("estado semanal")
+            widget.search_btn.click()
+            widget.ask_btn.click()
+
+            self.assertEqual(search_calls, ["estado semanal"])
+            self.assertEqual(ask_calls, [True])
         finally:
             widget.deleteLater()
 
@@ -114,6 +133,31 @@ class TestWelcomeDailySummaryButton(unittest.TestCase):
             self.assertEqual(widget.rec_container.height(), 160)
             self.assertEqual(widget.chat_btn.height(), 60)
             self.assertEqual(widget.today_list.maximumHeight(), 220)
+        finally:
+            widget.deleteLater()
+
+    def test_welcome_brand_is_center_aligned(self):
+        widget = WelcomeWidget(_FakeDB())
+        try:
+            self.assertTrue(widget.brand_title.alignment() & Qt.AlignmentFlag.AlignHCenter)
+            self.assertTrue(widget.brand_logo.alignment() & Qt.AlignmentFlag.AlignHCenter)
+        finally:
+            widget.deleteLater()
+
+    def test_welcome_header_keeps_brand_and_search_in_top_row_with_clock(self):
+        widget = WelcomeWidget(_FakeDB())
+        try:
+            header_container = widget.scroll_area.widget().layout().itemAt(0).widget()
+            header_layout = header_container.layout()
+            header_row = header_layout.itemAt(0).layout()
+            brand_search_column = header_row.itemAt(1).layout()
+            clock_column = header_row.itemAt(2).layout()
+
+            self.assertIs(brand_search_column.itemAt(0).layout().itemAt(1).widget(), widget.brand_title)
+            self.assertIs(brand_search_column.itemAt(1).layout().itemAt(1).widget(), widget.search_input)
+            self.assertIs(clock_column.itemAt(0).widget(), widget.analog_clock)
+            self.assertIs(clock_column.itemAt(1).widget(), widget.digital_clock_label)
+            self.assertEqual(header_row.itemAt(0).widget().width(), max(widget.analog_clock.width(), widget.digital_clock_label.sizeHint().width()))
         finally:
             widget.deleteLater()
 
@@ -224,6 +268,196 @@ class TestMainWindowDailySummaryIntegration(unittest.TestCase):
             self.window._right_sidebar_layout.stretch(self.window._right_sidebar_bottom_spacer_index),
             1,
         )
+        tasks_section = self.window._right_sidebar_sections["tasks"]
+        tasks_content = self.window._right_sidebar_sections["tasks"]["content"]
+        self.assertIs(self.window.create_task_btn.parentWidget(), self.window.tasks_header_actions)
+        self.assertIs(self.window.open_tasks_btn.parentWidget(), self.window.tasks_header_actions)
+        self.assertIs(self.window.tasks_header_actions.parentWidget(), tasks_section["header_shell"])
+        self.assertTrue(tasks_content.isHidden())
+        self.assertEqual(self.window.create_task_btn.toolTip(), "Create a new task")
+        self.assertEqual(self.window.open_tasks_btn.toolTip(), "Open the full Tasks tab")
+        self.assertEqual(self.window.create_task_btn.text(), "+")
+        self.assertEqual(self.window.open_tasks_btn.text(), "⤢")
+        chats_section = self.window._right_sidebar_sections["chats"]
+        self.assertIs(self.window.new_chat_btn.parentWidget(), self.window.chats_header_actions)
+        self.assertIs(self.window.open_chat_history_btn.parentWidget(), self.window.chats_header_actions)
+        self.assertIs(self.window.chats_header_actions.parentWidget(), chats_section["header_shell"])
+        self.assertEqual(self.window.new_chat_btn.toolTip(), "Start a new chat")
+        self.assertEqual(self.window.open_chat_history_btn.toolTip(), "Open the full Chat History tab")
+        self.assertEqual(self.window.new_chat_btn.text(), "+")
+        self.assertEqual(self.window.open_chat_history_btn.text(), "⤢")
+        notebooks_section = self.window._right_sidebar_sections["notebooks"]
+        self.assertIs(self.window.create_notebook_btn.parentWidget(), self.window.notebooks_header_actions)
+        self.assertIs(self.window.open_notebooks_btn.parentWidget(), self.window.notebooks_header_actions)
+        self.assertIs(self.window.notebooks_header_actions.parentWidget(), notebooks_section["header_shell"])
+        self.assertEqual(self.window.create_notebook_btn.toolTip(), "Create a new notebook")
+        self.assertEqual(self.window.open_notebooks_btn.toolTip(), "Open the full Notebooks tab")
+        self.assertEqual(self.window.create_notebook_btn.text(), "+")
+        self.assertEqual(self.window.open_notebooks_btn.text(), "⤢")
+        tags_section = self.window._right_sidebar_sections["tags"]
+        self.assertIs(self.window.new_tag_chat_btn.parentWidget(), self.window.tags_header_actions)
+        self.assertIs(self.window.open_collections_btn.parentWidget(), self.window.tags_header_actions)
+        self.assertIs(self.window.tags_header_actions.parentWidget(), tags_section["header_shell"])
+        self.assertEqual(self.window.new_tag_chat_btn.toolTip(), "Start a chat for the selected tag")
+        self.assertEqual(self.window.open_collections_btn.toolTip(), "Open the full Collections tab")
+        self.assertEqual(self.window.new_tag_chat_btn.text(), "+")
+        self.assertEqual(self.window.open_collections_btn.text(), "⤢")
+
+        self.window._set_active_right_section("tasks")
+        self.assertFalse(tasks_content.isHidden())
+        self.assertEqual(tasks_section["header_shell"].property("active"), "true")
+
+    def test_chat_sidebar_header_actions_open_expected_tabs(self):
+        self.mock_db.fetch_chat_sessions.return_value = [
+            {"id": 7, "name": "Sprint review", "created_at": "2026-03-10 09:30:00"},
+        ]
+        self.window.load_chat_sessions()
+
+        self.window.new_chat_btn.click()
+        self.assertIsInstance(self.window.central_tabs.currentWidget(), ChatWidget)
+
+        self.window.open_chat_history_btn.click()
+        current = self.window.central_tabs.currentWidget()
+        self.assertIsInstance(current, ChatHistoryWidget)
+        self.assertEqual(current.sessions_list.count(), 1)
+
+    @patch("src.ui.main_window.QMenu")
+    def test_chat_sidebar_context_menu_open_uses_selected_session(self, mock_menu_cls):
+        session = {"id": 7, "name": "Sprint review", "created_at": "2026-03-10 09:30:00"}
+        self.mock_db.fetch_chat_sessions.return_value = [session]
+        self.window.load_chat_sessions()
+        self.window.open_chat_tab = MagicMock()
+
+        item = self.window.sessions_list.item(0)
+        fake_menu = MagicMock()
+        fake_open_action = object()
+        fake_delete_action = object()
+        fake_menu.addAction.side_effect = [fake_open_action, fake_delete_action]
+        fake_menu.exec.return_value = fake_open_action
+        mock_menu_cls.return_value = fake_menu
+
+        rect = self.window.sessions_list.visualItemRect(item)
+        self.window.show_chat_sidebar_context_menu(rect.center())
+
+        self.window.open_chat_tab.assert_called_once_with(7)
+
+    @patch("src.ui.main_window.QMessageBox.question")
+    @patch("src.ui.main_window.QMenu")
+    def test_chat_sidebar_context_menu_delete_removes_session(self, mock_menu_cls, mock_question):
+        session = {"id": 7, "name": "Sprint review", "created_at": "2026-03-10 09:30:00"}
+        self.mock_db.fetch_chat_sessions.return_value = [session]
+        self.window.load_chat_sessions()
+        mock_question.return_value = QMessageBox.StandardButton.Yes
+
+        fake_menu = MagicMock()
+        fake_open_action = object()
+        fake_delete_action = object()
+        fake_menu.addAction.side_effect = [fake_open_action, fake_delete_action]
+        fake_menu.exec.return_value = fake_delete_action
+        mock_menu_cls.return_value = fake_menu
+
+        rect = self.window.sessions_list.visualItemRect(self.window.sessions_list.item(0))
+        self.window.show_chat_sidebar_context_menu(rect.center())
+
+        self.mock_db.delete_chat_session.assert_called_once_with(7)
+
+    @patch("src.ui.main_window.QInputDialog.getText")
+    def test_notebooks_header_create_button_creates_notebook(self, mock_get_text):
+        mock_get_text.return_value = ("Ideas", True)
+
+        self.window.create_notebook_btn.click()
+
+        self.mock_notebook_db.create_notebook.assert_called_once_with("Ideas")
+
+    def test_notebooks_header_expand_button_opens_tab(self):
+        self.window.open_notebooks_btn.click()
+
+        current = self.window.central_tabs.currentWidget()
+        self.assertEqual(current.__class__.__name__, "NotebooksListWidget")
+
+    @patch("src.ui.main_window.QMenu")
+    def test_notebooks_sidebar_context_menu_chat_opens_notebook_chat(self, mock_menu_cls):
+        self.mock_notebook_db.get_notebooks.return_value = [{"id": 3, "name": "Ideas"}]
+        self.window.load_notebooks()
+        self.window.open_notebook_chat = MagicMock()
+
+        fake_menu = MagicMock()
+        fake_open_action = object()
+        fake_chat_action = object()
+        fake_rename_action = object()
+        fake_delete_action = object()
+        fake_menu.addAction.side_effect = [
+            fake_open_action,
+            fake_chat_action,
+            fake_rename_action,
+            fake_delete_action,
+        ]
+        fake_menu.exec.return_value = fake_chat_action
+        mock_menu_cls.return_value = fake_menu
+
+        rect = self.window.notebooks_list.visualItemRect(self.window.notebooks_list.item(0))
+        self.window.show_notebooks_sidebar_context_menu(rect.center())
+
+        self.window.open_notebook_chat.assert_called_once_with(3, "Ideas")
+
+    @patch("src.ui.main_window.QInputDialog.getText")
+    @patch("src.ui.main_window.QMenu")
+    def test_notebooks_sidebar_context_menu_rename_updates_notebook(self, mock_menu_cls, mock_get_text):
+        self.mock_notebook_db.get_notebooks.return_value = [{"id": 3, "name": "Ideas"}]
+        self.window.load_notebooks()
+        mock_get_text.return_value = ("Roadmap", True)
+
+        fake_menu = MagicMock()
+        fake_open_action = object()
+        fake_chat_action = object()
+        fake_rename_action = object()
+        fake_delete_action = object()
+        fake_menu.addAction.side_effect = [
+            fake_open_action,
+            fake_chat_action,
+            fake_rename_action,
+            fake_delete_action,
+        ]
+        fake_menu.exec.return_value = fake_rename_action
+        mock_menu_cls.return_value = fake_menu
+
+        rect = self.window.notebooks_list.visualItemRect(self.window.notebooks_list.item(0))
+        self.window.show_notebooks_sidebar_context_menu(rect.center())
+
+        self.mock_notebook_db.rename_notebook.assert_called_once_with(3, "Roadmap")
+
+    def test_tags_header_plus_uses_selected_tag_chat(self):
+        self.mock_db.get_all_tags.return_value = ["alpha"]
+        self.window.load_collections()
+        self.window.collections_list.setCurrentRow(0)
+        self.window.open_collection_chat = MagicMock()
+
+        self.window.new_tag_chat_btn.click()
+
+        self.window.open_collection_chat.assert_called_once_with("alpha")
+
+    def test_tags_header_expand_button_opens_collections_tab(self):
+        self.window.open_collections_btn.click()
+
+        self.assertEqual(self.window.central_tabs.tabText(self.window.central_tabs.currentIndex()), "Colecciones")
+
+    @patch("src.ui.main_window.QMenu")
+    def test_tags_sidebar_context_menu_chat_opens_collection_chat(self, mock_menu_cls):
+        self.mock_db.get_all_tags.return_value = ["alpha"]
+        self.window.load_collections()
+        self.window.open_collection_chat = MagicMock()
+
+        fake_menu = MagicMock()
+        fake_open_action = object()
+        fake_chat_action = object()
+        fake_menu.addAction.side_effect = [fake_open_action, fake_chat_action]
+        fake_menu.exec.return_value = fake_chat_action
+        mock_menu_cls.return_value = fake_menu
+
+        rect = self.window.collections_list.visualItemRect(self.window.collections_list.item(0))
+        self.window.show_tags_sidebar_context_menu(rect.center())
+
+        self.window.open_collection_chat.assert_called_once_with("alpha")
 
     def test_right_settings_section_opens_settings_tab(self):
         self.assertTrue(hasattr(self.window, "right_settings_btn"))
@@ -232,6 +466,21 @@ class TestMainWindowDailySummaryIntegration(unittest.TestCase):
 
         current = self.window.central_tabs.currentWidget()
         self.assertIsInstance(current, SettingsWidget)
+
+    def test_welcome_ask_button_opens_chat_with_current_calendar_context(self):
+        self.window.current_week_monday = QDate(2026, 3, 2)
+        self.window.current_date_filter = "2026-03-05"
+        if self.window.tag_filter_combo.findText("ops") < 0:
+            self.window.tag_filter_combo.addItem("ops")
+        self.window.tag_filter_combo.setCurrentText("ops")
+
+        self.window.welcome_widget.ask_btn.click()
+
+        chat_widget = self.window.central_tabs.currentWidget()
+        self.assertEqual(chat_widget.__class__.__name__, "ChatWidget")
+        self.assertEqual(chat_widget.context_panel.current_week_monday, self.window.current_week_monday)
+        self.assertEqual(chat_widget.context_panel.current_date_filter, "2026-03-05")
+        self.assertEqual(chat_widget.context_panel.get_active_tags(), ["ops"])
 
     def test_tasks_sidebar_compact_item_and_tag_colors(self):
         self.mock_db.get_recent_incomplete_tasks.return_value = [

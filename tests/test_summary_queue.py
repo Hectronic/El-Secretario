@@ -155,5 +155,16 @@ class TestSummaryQueue(unittest.TestCase):
         self.assertEqual(messages.count("Retrying 1"), 1)
         self.assertEqual(messages.count("Retrying 2"), 1)
 
+    def test_enqueue_rag_reindex_deduplicates_by_scope(self):
+        with patch.object(self.queue_manager, "_start_next_if_idle"):
+            self.assertTrue(self.queue_manager.enqueue_rag_reindex(scope="all"))
+            self.assertTrue(self.queue_manager.enqueue_rag_reindex(scope="missing"))
+            self.assertFalse(self.queue_manager.enqueue_rag_reindex(scope="missing"))
+
+            queued = self.queue_manager.get_queue_list()
+            self.assertEqual(len(queued), 2)
+            scopes = sorted([q.get("reindex_scope") for q in queued])
+            self.assertEqual(scopes, ["all", "missing"])
+
 if __name__ == '__main__':
     unittest.main()

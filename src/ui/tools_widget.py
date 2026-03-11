@@ -16,7 +16,7 @@
 Unified Tools Widget combining Maintenance and Batch Processing functionality.
 """
 
-from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QTabWidget, QLabel)
+from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QTabWidget, QLabel, QPushButton, QHBoxLayout, QComboBox)
 from PyQt6.QtGui import QPalette
 from PyQt6.QtCore import Qt
 
@@ -38,6 +38,7 @@ class ToolsWidget(QWidget):
     TAB_SUMMARIES = 2
     TAB_TASKS = 3
     TAB_DATA = 4
+    TAB_RAG = 5
 
     def _is_dark_theme(self):
         return self.palette().color(QPalette.ColorRole.Window).lightness() < 128
@@ -86,6 +87,10 @@ class ToolsWidget(QWidget):
         self.data_widget = self._create_data_tab()
         self.tabs.addTab(self.data_widget, "📦 Data")
 
+        # RAG Tab
+        self.rag_widget = self._create_rag_tab()
+        self.tabs.addTab(self.rag_widget, "🧠 RAG")
+
         layout.addWidget(self.tabs)
 
     def _create_storage_tab(self):
@@ -94,6 +99,73 @@ class ToolsWidget(QWidget):
         # We'll create a full maintenance widget and it will show all its content
         widget = MaintenanceWidget(self.db, self.notebook_db)
         return widget
+
+    def _create_rag_tab(self):
+        widget = QWidget()
+        layout = QVBoxLayout(widget)
+        layout.setSpacing(16)
+        layout.setAlignment(Qt.AlignmentFlag.AlignTop)
+        layout.setContentsMargins(40, 40, 40, 40)
+
+        title = QLabel("RAG Maintenance")
+        title.setStyleSheet("font-size: 24px; font-weight: bold; color: #607D8B;")
+        layout.addWidget(title)
+
+        info = QLabel(
+            "Queue a background task to rebuild the RAG index from current records and notes.\n"
+            "The task runs through the global queue so it can be monitored and cancelled."
+        )
+        info.setWordWrap(True)
+        info.setStyleSheet(f"color: {self._secondary_text_color()}; font-size: 14px;")
+        layout.addWidget(info)
+
+        self.rag_status_lbl = QLabel("")
+        self.rag_status_lbl.setWordWrap(True)
+        self.rag_status_lbl.setStyleSheet("color: #4CAF50; font-size: 14px;")
+        layout.addWidget(self.rag_status_lbl)
+
+        scope_row = QHBoxLayout()
+        scope_label = QLabel("Reindex scope:")
+        scope_label.setStyleSheet("font-weight: bold;")
+        scope_row.addWidget(scope_label)
+        self.rag_scope_combo = QComboBox()
+        self.rag_scope_combo.addItem("All records", "all")
+        self.rag_scope_combo.addItem("Only missing in RAG", "missing")
+        self.rag_scope_combo.setCurrentIndex(0)
+        scope_row.addWidget(self.rag_scope_combo)
+        scope_row.addStretch()
+        layout.addLayout(scope_row)
+
+        btn_row = QHBoxLayout()
+        self.rag_reindex_btn = QPushButton("Queue RAG Reindex")
+        self.rag_reindex_btn.setFixedSize(220, 46)
+        self.rag_reindex_btn.setProperty("class", "calendar-primary-btn")
+        self.rag_reindex_btn.clicked.connect(self._queue_rag_reindex)
+        self.rag_reindex_btn.setEnabled(self.task_queue is not None)
+        btn_row.addWidget(self.rag_reindex_btn)
+        btn_row.addStretch()
+        layout.addLayout(btn_row)
+        layout.addStretch()
+
+        if not self.task_queue:
+            self.rag_status_lbl.setText("Task queue is not available.")
+            self.rag_status_lbl.setStyleSheet("color: #f44336; font-size: 14px;")
+        return widget
+
+    def _queue_rag_reindex(self):
+        if not self.task_queue:
+            self.rag_status_lbl.setText("Task queue is not available.")
+            self.rag_status_lbl.setStyleSheet("color: #f44336; font-size: 14px;")
+            return
+        scope = self.rag_scope_combo.currentData() or "all"
+        queued = self.task_queue.enqueue_rag_reindex(scope=scope)
+        if queued:
+            scope_text = "all records" if scope == "all" else "missing records only"
+            self.rag_status_lbl.setText(f"✓ RAG reindex task queued ({scope_text}).")
+            self.rag_status_lbl.setStyleSheet("color: #4CAF50; font-size: 14px;")
+        else:
+            self.rag_status_lbl.setText("RAG reindex task with this scope is already running or queued.")
+            self.rag_status_lbl.setStyleSheet("color: #FF9800; font-size: 14px;")
 
     def _create_data_tab(self):
         """Create the Data tab with export/import functionality."""
