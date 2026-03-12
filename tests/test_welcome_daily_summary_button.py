@@ -31,7 +31,7 @@ from src.ui.welcome_widget import WelcomeWidget
 from src.ui.dialogs import SettingsWidget
 from src.ui.chat_widget import ChatWidget
 from src.ui.chat_history_widget import ChatHistoryWidget
-from src.ui.components import SidebarTaskCompactWidget, create_tag_chip
+from src.ui.components import SidebarChatSessionWidget, SidebarTaskCompactWidget, create_tag_chip
 
 
 class _FakeDB:
@@ -307,7 +307,7 @@ class TestMainWindowDailySummaryIntegration(unittest.TestCase):
         self.assertFalse(tasks_content.isHidden())
         self.assertEqual(tasks_section["header_shell"].property("active"), "true")
 
-    def test_chat_sidebar_header_actions_open_expected_tabs(self):
+    def test_chat_sidebar_actions_open_expected_tabs(self):
         self.mock_db.fetch_chat_sessions.return_value = [
             {"id": 7, "name": "Sprint review", "created_at": "2026-03-10 09:30:00"},
         ]
@@ -316,10 +316,26 @@ class TestMainWindowDailySummaryIntegration(unittest.TestCase):
         self.window.new_chat_btn.click()
         self.assertIsInstance(self.window.central_tabs.currentWidget(), ChatWidget)
 
-        self.window.open_chat_history_btn.click()
+        item = self.window.sessions_list.item(0)
+        item_widget = self.window.sessions_list.itemWidget(item)
+        self.assertIsInstance(item_widget, SidebarChatSessionWidget)
+        item_widget.expand_btn.click()
         current = self.window.central_tabs.currentWidget()
         self.assertIsInstance(current, ChatHistoryWidget)
         self.assertEqual(current.sessions_list.count(), 1)
+
+    def test_chat_sidebar_item_embeds_expand_button(self):
+        self.mock_db.fetch_chat_sessions.return_value = [
+            {"id": 7, "name": "Sprint review", "created_at": "2026-03-10 09:30:00"},
+        ]
+        self.window.load_chat_sessions()
+
+        item = self.window.sessions_list.item(0)
+        item_widget = self.window.sessions_list.itemWidget(item)
+
+        self.assertIsInstance(item_widget, SidebarChatSessionWidget)
+        self.assertEqual(item_widget.expand_btn.toolTip(), "Open the full Chat History tab")
+        self.assertEqual(item_widget.expand_btn.text(), "⤢")
 
     @patch("src.ui.main_window.QMenu")
     def test_chat_sidebar_context_menu_open_uses_selected_session(self, mock_menu_cls):
@@ -327,12 +343,14 @@ class TestMainWindowDailySummaryIntegration(unittest.TestCase):
         self.mock_db.fetch_chat_sessions.return_value = [session]
         self.window.load_chat_sessions()
         self.window.open_chat_tab = MagicMock()
+        self.window.open_floating_chat = MagicMock()
 
         item = self.window.sessions_list.item(0)
         fake_menu = MagicMock()
         fake_open_action = object()
+        fake_open_floating_action = object()
         fake_delete_action = object()
-        fake_menu.addAction.side_effect = [fake_open_action, fake_delete_action]
+        fake_menu.addAction.side_effect = [fake_open_action, fake_open_floating_action, fake_delete_action]
         fake_menu.exec.return_value = fake_open_action
         mock_menu_cls.return_value = fake_menu
 
@@ -340,6 +358,30 @@ class TestMainWindowDailySummaryIntegration(unittest.TestCase):
         self.window.show_chat_sidebar_context_menu(rect.center())
 
         self.window.open_chat_tab.assert_called_once_with(7)
+        self.window.open_floating_chat.assert_not_called()
+
+    @patch("src.ui.main_window.QMenu")
+    def test_chat_sidebar_context_menu_open_floating_uses_selected_session(self, mock_menu_cls):
+        session = {"id": 7, "name": "Sprint review", "created_at": "2026-03-10 09:30:00"}
+        self.mock_db.fetch_chat_sessions.return_value = [session]
+        self.window.load_chat_sessions()
+        self.window.open_chat_tab = MagicMock()
+        self.window.open_floating_chat = MagicMock()
+
+        item = self.window.sessions_list.item(0)
+        fake_menu = MagicMock()
+        fake_open_action = object()
+        fake_open_floating_action = object()
+        fake_delete_action = object()
+        fake_menu.addAction.side_effect = [fake_open_action, fake_open_floating_action, fake_delete_action]
+        fake_menu.exec.return_value = fake_open_floating_action
+        mock_menu_cls.return_value = fake_menu
+
+        rect = self.window.sessions_list.visualItemRect(item)
+        self.window.show_chat_sidebar_context_menu(rect.center())
+
+        self.window.open_floating_chat.assert_called_once_with(7)
+        self.window.open_chat_tab.assert_not_called()
 
     @patch("src.ui.main_window.QMessageBox.question")
     @patch("src.ui.main_window.QMenu")
@@ -351,8 +393,9 @@ class TestMainWindowDailySummaryIntegration(unittest.TestCase):
 
         fake_menu = MagicMock()
         fake_open_action = object()
+        fake_open_floating_action = object()
         fake_delete_action = object()
-        fake_menu.addAction.side_effect = [fake_open_action, fake_delete_action]
+        fake_menu.addAction.side_effect = [fake_open_action, fake_open_floating_action, fake_delete_action]
         fake_menu.exec.return_value = fake_delete_action
         mock_menu_cls.return_value = fake_menu
 

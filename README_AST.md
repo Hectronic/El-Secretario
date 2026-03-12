@@ -11,6 +11,7 @@ El Secretario ye una ferramienta intelixente de trescripción y organización d'
 - **Grabación ya Importación d'Audio**: Graba audio direutamente na aplicación o importa archivos esistentes.
 - **Trescripción y Diarización**: Trescribe audio automáticamente ya identifica distintos falantes (diarización) usando Whisper d'OpenAI y pyannote.audio.
 - **Gueta Intelixente (RAG)**: Usa Xeneración Aumentada por Recuperación (RAG) pa charrar coles tos grabaciones y alcontrar información específica. Soporta Google Gemini y **Ollama** pa execución llocal.
+- **Ventanes de Chat Flexibles**: Los chats pueden quedar como pestañes normales, movese a la barra flotante y minimizase en fiches compactes pa restauralos rápido.
 - **Cuadernos y Coleiciones**: Organiza les tos grabaciones en cuadernos y coleiciones. Accede a elles direutamente dende la barra llateral.
 - **Vista de Calendariu**: Esplora les tos grabaciones per fecha.
 - **Ferramientes Unificaes**: Llimpieza d'almacenamientu, procesamientu per llotes y esportación/importación de datos nuna sola pestaña.

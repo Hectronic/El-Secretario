@@ -13,6 +13,7 @@ Read this in [Español](README_ES.md) | [Asturianu](README_AST.md)
 - **Audio Recording & Import**: Record audio directly within the app or import existing files.
 - **Transcription & Diarization**: Automatically transcribe audio and identify different speakers (diarization) using OpenAI's Whisper and pyannote.audio.
 - **Intelligent Search (RAG)**: Use Retrieval-Augmented Generation (RAG) to chat with your recordings and find specific information. Supports Google Gemini and **Ollama** for local execution.
+- **Flexible Chat Windows**: Chats can stay as regular tabs, move to the floating bar, and be minimized into compact chips for quick restore.
 - **Notebooks & Collections**: Organize your recordings into notebooks and collections. Access them directly from the sidebar.
 - **Calendar View**: Browse your recordings by date.
 - **Unified Tools**: Storage cleanup, batch processing, and data export/import in one convenient tab.

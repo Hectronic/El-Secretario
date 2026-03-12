@@ -8,6 +8,7 @@ from PyQt6.QtWidgets import QApplication, QDialog
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from src.ui.chat_widget import ChatWidget
+from src.ui.styles import apply_theme
 
 
 class TestChatWidgetContext(unittest.TestCase):
@@ -86,3 +87,31 @@ class TestChatWidgetContext(unittest.TestCase):
         finally:
             widget.deleteLater()
 
+    def test_chat_widget_reapplies_dark_styles_when_theme_changes(self):
+        apply_theme("Light")
+        widget = ChatWidget(self.rag)
+        try:
+            self.assertIn("background-color: #ffffff", widget.display.styleSheet())
+            self.assertIn("background-color: #f5f5f5", widget.input_field.styleSheet())
+
+            apply_theme("Dark")
+            self.app.processEvents()
+
+            self.assertIn("background-color: #1f232a", widget.display.styleSheet())
+            self.assertIn("color: #f3f6fb", widget.display.styleSheet())
+            self.assertIn("background-color: #2a2f37", widget.input_field.styleSheet())
+            self.assertIn("color: #e8eef7", widget.title_label.styleSheet())
+        finally:
+            widget.deleteLater()
+            apply_theme("Light")
+
+    def test_chat_widget_dark_messages_force_light_markdown_text(self):
+        apply_theme("Dark")
+        widget = ChatWidget(self.rag)
+        try:
+            widget.append_to_chat("Assistant", "Texto normal\n\n- punto\n\n**negrita**")
+            html = widget.display.toHtml()
+            self.assertIn("#ffffff", html.lower())
+        finally:
+            widget.deleteLater()
+            apply_theme("Light")
