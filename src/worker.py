@@ -66,7 +66,7 @@ def _iter_sherpa_candidate_dirs(model_dir: str):
         return
     yield str(root)
     for current_root, dirnames, filenames in os.walk(root):
-        if "tokens.txt" in filenames:
+        if any(f.endswith("tokens.txt") for f in filenames):
             yield current_root
         dirnames[:] = [d for d in dirnames if not d.startswith(".")]
 
@@ -174,7 +174,7 @@ def _resolve_sherpa_onnx_model_config(model_dir: str, model_type: str) -> dict:
     if model_type == "auto":
         if transducer_encoder and transducer_decoder and transducer_joiner:
             model_type = "transducer"
-        elif whisper_encoder and whisper_decoder and "whisper" in Path(whisper_encoder).name.lower():
+        elif whisper_encoder and whisper_decoder and ("whisper" in Path(whisper_encoder).name.lower() or "whisper" in str(model_dir).lower()):
             model_type = "whisper"
         else:
             hint = f"{model_dir} {Path(generic_model).name}".lower()

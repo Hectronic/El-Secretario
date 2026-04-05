@@ -20,3 +20,4 @@ log/
 # OS
 .DS_Store
 
+models/
