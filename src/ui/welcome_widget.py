@@ -18,6 +18,12 @@ from PyQt6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLab
 from PyQt6.QtCore import Qt, pyqtSignal, QTimer, QSettings, QTime, QPointF
 from PyQt6.QtGui import QPixmap, QPainter, QColor, QPen
 from src.ui.styles import LIST_WIDGET_STYLE
+from src.transcription_options import (
+    DEFAULT_TRANSCRIPTION_MODEL,
+    DEFAULT_WELCOME_TRANSCRIPTION_MODEL,
+    get_saved_transcription_model,
+    get_transcription_model_options,
+)
 import numpy as np
 import os
 
@@ -137,9 +143,10 @@ class WelcomeWidget(QWidget):
             if index >= 0:
                 self.mic_combo.setCurrentIndex(index)
         
-        saved_model = self.settings.value("rec_config/model", None)
-        if saved_model is None:
-            saved_model = self.settings.value("whisper_model", "large-v3")
+        saved_model = get_saved_transcription_model(
+            self.settings,
+            default=DEFAULT_WELCOME_TRANSCRIPTION_MODEL,
+        )
         self.model_combo.setCurrentText(saved_model)
         
         saved_lang = self.settings.value("rec_config/language", "Auto")
@@ -415,8 +422,8 @@ class WelcomeWidget(QWidget):
         ml_row.setSpacing(10)
         
         self.model_combo = QComboBox()
-        self.model_combo.addItems(["tiny", "base", "small", "medium", "large-v3"])
-        self.model_combo.setCurrentText("base")
+        self.model_combo.addItems(get_transcription_model_options())
+        self.model_combo.setCurrentText(DEFAULT_TRANSCRIPTION_MODEL)
         self.model_combo.setMinimumWidth(80)
         
         model_label = QLabel("🧠 Model:")

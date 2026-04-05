@@ -70,16 +70,21 @@ The summary MUST be written in {language}.
 
 Recordings Content:
 {text}""",
-                "task_extraction": """Extract actionable tasks and to-do items from the transcription provided below.
+                "task_extraction": """Extract only explicit, actionable next-step tasks from the content below.
 
 Rules:
-- Format: A simple JSON array of strings.
-- Example: ["Task 1", "Task 2"]
-- If no tasks are found, return [].
+- Return a JSON array of strings and nothing else.
+- Each task must be concrete, specific, and executable by one person.
+- Start each task with a strong action verb.
+- Include the object or expected deliverable when present.
+- Keep each task concise, ideally under 16 words.
+- Do not create generic reminders, summaries, topics, or inferred workstreams.
+- Do not split one action into multiple tasks unless the content clearly separates them.
+- Ignore background discussion, context, decisions, and vague intentions.
+- If no clear actionable task exists, return [].
 - Language: {language}
-- Output ONLY the JSON array. Do not include markdown code blocks or any other text.
 
-Transcription:
+Content:
 <transcription>
 {text}
 </transcription>

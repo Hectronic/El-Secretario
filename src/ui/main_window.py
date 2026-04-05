@@ -23,7 +23,7 @@ from PyQt6.QtWidgets import (QMainWindow, QWidget, QVBoxLayout,
                              QTabWidget, QSplitter, QApplication, QStyle, QLineEdit, QTabBar,
                              QCalendarWidget, QCheckBox, QFileDialog, QMenu, QProgressBar, QDialog,
                              QFrame)
-from PyQt6.QtCore import Qt, QSettings, QUrl, QDate, QTimer, QPoint, QEvent
+from PyQt6.QtCore import Qt, QSettings, QUrl, QDate, QTimer, QPoint, QEvent, QSize, pyqtSignal
 from PyQt6.QtGui import QAction, QIcon, QDesktopServices, QTextCharFormat, QColor, QCursor
 
 from src.database import DBManager
@@ -59,6 +59,144 @@ from src.ui.chat_history_widget import ChatHistoryWidget
 from src.ui.tasks_list_widget import TasksListWidget, TaskEditDialog
 
 Recorder = None
+
+
+class FloatingChatHost(QFrame):
+    size_changed = pyqtSignal()
+
+    DEFAULT_WIDTH = 420
+    DEFAULT_HEIGHT = 380
+    MIN_WIDTH = 320
+    MIN_HEIGHT = 260
+    MAX_WIDTH = 760
+    MAX_HEIGHT = 680
+    MINIMIZED_WIDTH = 260
+    MINIMIZED_HEIGHT = 32
+    RESIZE_HANDLE_SIZE = 24
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self._preferred_size = QSize(self.DEFAULT_WIDTH, self.DEFAULT_HEIGHT)
+        self._min_size = QSize(self.MIN_WIDTH, self.MIN_HEIGHT)
+        self._max_size = QSize(self.MAX_WIDTH, self.MAX_HEIGHT)
+        self._resize_enabled = True
+        self._resizing = False
+        self._drag_origin = QPoint()
+        self._start_size = QSize(self._preferred_size)
+        self.setMouseTracking(True)
+        self.resize_handle = QLabel(self)
+        self.resize_handle.setObjectName("floatingChatResizeHandle")
+        self.resize_handle.setFixedSize(self.RESIZE_HANDLE_SIZE, self.RESIZE_HANDLE_SIZE)
+        self.resize_handle.setCursor(Qt.CursorShape.SizeFDiagCursor)
+        self.resize_handle.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.resize_handle.setToolTip("Drag to resize")
+        self.resize_handle.setMouseTracking(True)
+        self.resize_handle.installEventFilter(self)
+        self.resize_handle.raise_()
+
+    def sizeHint(self):
+        return QSize(self._preferred_size)
+
+    def minimumSizeHint(self):
+        return QSize(self.minimumWidth(), self.minimumHeight())
+
+    def set_preferred_size(self, size: QSize):
+        bounded = QSize(
+            max(self._min_size.width(), min(size.width(), self._max_size.width())),
+            max(self._min_size.height(), min(size.height(), self._max_size.height())),
+        )
+        self._preferred_size = bounded
+        self.setFixedSize(bounded)
+        self.updateGeometry()
+        self.size_changed.emit()
+
+    def set_size_bounds(self, min_size: QSize, max_size: QSize):
+        self._min_size = QSize(min_size)
+        self._max_size = QSize(max_size)
+
+    def set_resize_enabled(self, enabled: bool):
+        self._resize_enabled = bool(enabled)
+        self.resize_handle.setVisible(self._resize_enabled)
+        if not self._resize_enabled and not self._resizing:
+            self.unsetCursor()
+
+    def _position_resize_handle(self):
+        margin = 3
+        x = margin
+        y = margin
+        self.resize_handle.move(x, y)
+
+    def _in_resize_zone(self, pos):
+        return (
+            self._resize_enabled
+            and pos.x() <= self.RESIZE_HANDLE_SIZE
+            and pos.y() <= self.RESIZE_HANDLE_SIZE
+        )
+
+    def mousePressEvent(self, event):
+        if event.button() == Qt.MouseButton.LeftButton and self._in_resize_zone(event.position().toPoint()):
+            self._resizing = True
+            self._drag_origin = event.globalPosition().toPoint()
+            self._start_size = QSize(self._preferred_size)
+            event.accept()
+            return
+        super().mousePressEvent(event)
+
+    def mouseMoveEvent(self, event):
+        if self._resizing:
+            delta = self._drag_origin - event.globalPosition().toPoint()
+            self.set_preferred_size(
+                QSize(
+                    self._start_size.width() + delta.x(),
+                    self._start_size.height() + delta.y(),
+                )
+            )
+            event.accept()
+            return
+        if self._in_resize_zone(event.position().toPoint()):
+            self.setCursor(Qt.CursorShape.SizeFDiagCursor)
+        else:
+            self.unsetCursor()
+        super().mouseMoveEvent(event)
+
+    def mouseReleaseEvent(self, event):
+        if self._resizing and event.button() == Qt.MouseButton.LeftButton:
+            self._resizing = False
+            event.accept()
+            return
+        super().mouseReleaseEvent(event)
+
+    def leaveEvent(self, event):
+        if not self._resizing:
+            self.unsetCursor()
+        super().leaveEvent(event)
+
+    def resizeEvent(self, event):
+        self._position_resize_handle()
+        super().resizeEvent(event)
+
+    def eventFilter(self, watched, event):
+        if watched is self.resize_handle:
+            if event.type() == QEvent.Type.MouseButtonPress and event.button() == Qt.MouseButton.LeftButton:
+                self._resizing = True
+                self._drag_origin = event.globalPosition().toPoint()
+                self._start_size = QSize(self._preferred_size)
+                self.resize_handle.grabMouse(Qt.CursorShape.SizeFDiagCursor)
+                return True
+            if event.type() == QEvent.Type.MouseMove and self._resizing:
+                delta = self._drag_origin - event.globalPosition().toPoint()
+                self.set_preferred_size(
+                    QSize(
+                        self._start_size.width() + delta.x(),
+                        self._start_size.height() + delta.y(),
+                    )
+                )
+                return True
+            if event.type() == QEvent.Type.MouseButtonRelease and self._resizing:
+                self._resizing = False
+                self.resize_handle.releaseMouse()
+                return True
+        return super().eventFilter(watched, event)
 
 class MainWindow(QMainWindow):
     def __init__(self):
@@ -910,7 +1048,7 @@ class MainWindow(QMainWindow):
         
         # Add as first tab, not closable
         self.central_tabs.addTab(self.welcome_widget, "Welcome")
-        self.central_tabs.tabBar().setTabButton(0, QTabBar.ButtonPosition.RightSide, None) # Remove close button
+        self._set_tab_action_buttons(self.welcome_widget)
 
     def open_item_tab(self, record_id):
         """Open a tab for a record, deciding between recording and note."""
@@ -1132,6 +1270,8 @@ class MainWindow(QMainWindow):
         is_dark = self._is_dark_theme()
         border_color = "rgba(100, 181, 246, 0.55)" if is_dark else "rgba(84, 110, 122, 0.45)"
         bg_color = "#232831" if is_dark else "#f5f7fb"
+        handle_color = "#d7e7ff" if is_dark else "#1f5f99"
+        handle_bg = "rgba(20, 26, 34, 0.82)" if is_dark else "rgba(255, 255, 255, 0.92)"
         host.setStyleSheet(f"""
             QFrame#floatingChatHost {{
                 background-color: {bg_color};
@@ -1139,20 +1279,48 @@ class MainWindow(QMainWindow):
                 border-radius: 12px;
             }}
         """)
+        host.resize_handle.setText("◤")
+        host.resize_handle.setStyleSheet(
+            "QLabel#floatingChatResizeHandle {"
+            f"color: {handle_color};"
+            f"background-color: {handle_bg};"
+            "border: 1px solid rgba(120, 140, 160, 0.35);"
+            "border-radius: 7px;"
+            "font-size: 16px;"
+            "font-weight: 700;"
+            "padding: 0px;"
+            "}"
+        )
 
     def _wrap_floating_chat(self, chat_widget):
-        host = QFrame()
+        host = FloatingChatHost()
         host.setObjectName("floatingChatHost")
         host.setProperty("chat_widget", chat_widget)
         host.setProperty("chat_minimized", False)
+        host.setProperty(
+            "normal_size",
+            QSize(FloatingChatHost.DEFAULT_WIDTH, FloatingChatHost.DEFAULT_HEIGHT),
+        )
         self._apply_floating_chat_host_style(host)
-        host.setFixedWidth(380)
+        host.set_size_bounds(
+            QSize(FloatingChatHost.MIN_WIDTH, FloatingChatHost.MIN_HEIGHT),
+            QSize(FloatingChatHost.MAX_WIDTH, FloatingChatHost.MAX_HEIGHT),
+        )
+        host.size_changed.connect(lambda h=host: self._on_floating_chat_host_size_changed(h))
+        host.set_preferred_size(QSize(FloatingChatHost.DEFAULT_WIDTH, FloatingChatHost.DEFAULT_HEIGHT))
         layout = QVBoxLayout(host)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
         layout.addWidget(chat_widget)
         self._set_floating_chat_minimized(host, False)
         return host
+
+    def _on_floating_chat_host_size_changed(self, host):
+        if host is None or host.property("chat_minimized"):
+            self._refresh_floating_chat_bar()
+            return
+        host.setProperty("normal_size", QSize(host.size()))
+        self._refresh_floating_chat_bar()
 
     def _set_floating_chat_minimized(self, host, minimized):
         if host is None:
@@ -1164,8 +1332,30 @@ class MainWindow(QMainWindow):
         host.setProperty("chat_minimized", minimized)
         chat_widget.setVisible(True)
         chat_widget.set_floating_minimized(minimized)
-        host.setFixedWidth(260 if minimized else 380)
-        host.setFixedHeight(32 if minimized else 360)
+        if minimized:
+            if not host.property("normal_size"):
+                host.setProperty("normal_size", QSize(host.size()))
+            else:
+                host.setProperty("normal_size", QSize(host.size()))
+            host.set_size_bounds(
+                QSize(FloatingChatHost.MINIMIZED_WIDTH, FloatingChatHost.MINIMIZED_HEIGHT),
+                QSize(FloatingChatHost.MINIMIZED_WIDTH, FloatingChatHost.MINIMIZED_HEIGHT),
+            )
+            host.set_resize_enabled(False)
+            host.set_preferred_size(
+                QSize(FloatingChatHost.MINIMIZED_WIDTH, FloatingChatHost.MINIMIZED_HEIGHT)
+            )
+            return
+
+        normal_size = host.property("normal_size")
+        if not isinstance(normal_size, QSize):
+            normal_size = QSize(FloatingChatHost.DEFAULT_WIDTH, FloatingChatHost.DEFAULT_HEIGHT)
+        host.set_size_bounds(
+            QSize(FloatingChatHost.MIN_WIDTH, FloatingChatHost.MIN_HEIGHT),
+            QSize(FloatingChatHost.MAX_WIDTH, FloatingChatHost.MAX_HEIGHT),
+        )
+        host.set_resize_enabled(True)
+        host.set_preferred_size(normal_size)
 
     def _find_floating_chat_host_by_widget(self, chat_widget):
         return next((h for h in self.floating_chat_hosts if h.property("chat_widget") is chat_widget), None)
@@ -1185,6 +1375,7 @@ class MainWindow(QMainWindow):
         if visible:
             for host in self.floating_chat_hosts:
                 self._apply_floating_chat_host_style(host)
+                self.floating_chat_layout.setAlignment(host, Qt.AlignmentFlag.AlignBottom)
             # Use singleShot to let the layout settle before calculating positions
             QTimer.singleShot(0, self._reposition_floating_chat_bar)
             self.floating_chat_bar.raise_()
@@ -1245,6 +1436,80 @@ class MainWindow(QMainWindow):
 
     def _tab_title_for_chat(self, chat_widget):
         return chat_widget.get_chat_title()
+
+    def _set_tab_action_buttons(self, widget):
+        if widget is None:
+            return
+        index = self.central_tabs.indexOf(widget)
+        if index == -1:
+            return
+
+        tab_bar = self.central_tabs.tabBar()
+
+        if isinstance(widget, WelcomeWidget):
+            tab_bar.setTabButton(index, QTabBar.ButtonPosition.LeftSide, None)
+            tab_bar.setTabButton(index, QTabBar.ButtonPosition.RightSide, None)
+            return
+
+        if not isinstance(widget, ChatWidget):
+            return
+
+        buttons = QWidget(tab_bar)
+        layout = QHBoxLayout(buttons)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(2)
+
+        float_btn = QToolButton(buttons)
+        float_btn.setText("↗")
+        float_btn.setToolTip("Move chat to floating window")
+        float_btn.setAutoRaise(True)
+        float_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        float_btn.setFixedSize(18, 18)
+        float_btn.setStyleSheet("""
+            QToolButton {
+                border: none;
+                border-radius: 6px;
+                padding: 0px;
+                background: transparent;
+                color: #6f8698;
+                font-size: 11px;
+                font-weight: 700;
+            }
+            QToolButton:hover {
+                background-color: rgba(33, 150, 243, 0.16);
+                color: #2196F3;
+            }
+        """)
+        float_btn.clicked.connect(lambda _checked=False, w=widget: self.float_chat_widget(w))
+        layout.addWidget(float_btn)
+
+        close_btn = QToolButton(buttons)
+        close_btn.setText("×")
+        close_btn.setToolTip("Close tab")
+        close_btn.setAutoRaise(True)
+        close_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        close_btn.setFixedSize(18, 18)
+        close_btn.setStyleSheet("""
+            QToolButton {
+                border: none;
+                border-radius: 6px;
+                padding: 0px;
+                background: transparent;
+                color: #6f8698;
+                font-size: 12px;
+                font-weight: 700;
+            }
+            QToolButton:hover {
+                background-color: rgba(244, 67, 54, 0.15);
+                color: #f44336;
+            }
+        """)
+        close_btn.clicked.connect(
+            lambda _checked=False, w=widget: self.close_tab(self.central_tabs.indexOf(w))
+        )
+        layout.addWidget(close_btn)
+
+        tab_bar.setTabButton(index, QTabBar.ButtonPosition.RightSide, buttons)
 
     def _sync_chat_widget_title(self, chat_widget, title):
         tab_index = self.central_tabs.indexOf(chat_widget)
@@ -1312,6 +1577,7 @@ class MainWindow(QMainWindow):
         title = self._tab_title_for_chat(chat_widget)
         index = self.central_tabs.addTab(chat_widget, title)
         self.central_tabs.setCurrentIndex(index)
+        self._set_tab_action_buttons(chat_widget)
         self._refresh_floating_chat_bar()
 
     def close_chat_widget(self, chat_widget):
@@ -1347,6 +1613,7 @@ class MainWindow(QMainWindow):
         
         index = self.central_tabs.addTab(chat_widget, title)
         self.central_tabs.setCurrentIndex(index)
+        self._set_tab_action_buttons(chat_widget)
         return chat_widget
 
     def open_floating_chat(self, session_id=None, initial_contexts=None):
@@ -1876,6 +2143,12 @@ class MainWindow(QMainWindow):
                 contexts.append({"type": "tag", "value": tag, "label": tag})
         self.open_chat_tab(initial_contexts=contexts)
 
+    def open_chat_with_contexts(self, contexts, floating=False):
+        normalized = list(contexts or [])
+        if floating:
+            return self.open_floating_chat(initial_contexts=normalized)
+        return self.open_chat_tab(initial_contexts=normalized)
+
     def on_history_item_clicked(self, item):
         data = item.data(Qt.ItemDataRole.UserRole)
         type_ = data.get('type', 'recording')
@@ -1911,6 +2184,7 @@ class MainWindow(QMainWindow):
         viewer.regenerate_requested.connect(self.regenerate_summary)
         viewer.open_recording_requested.connect(self.open_recording_tab)
         viewer.start_chat_requested.connect(self.open_chat_tab_with_filters)
+        viewer.start_chat_contexts_requested.connect(self.open_chat_with_contexts)
         # viewer.close_requested.connect(...) # If we added a close signal
         
         type_ = summary_data.get('type')

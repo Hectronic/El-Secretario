@@ -123,6 +123,7 @@ class DBManager:
                         week_start TEXT NOT NULL,
                         content TEXT NOT NULL,
                         task_origin TEXT,
+                        is_ai_generated INTEGER DEFAULT 0,
                         notes TEXT,
                         tags TEXT,
                         is_completed INTEGER DEFAULT 0,
@@ -187,6 +188,7 @@ class DBManager:
                             week_start TEXT NOT NULL,
                             content TEXT NOT NULL,
                             task_origin TEXT,
+                            is_ai_generated INTEGER DEFAULT 0,
                             notes TEXT,
                             tags TEXT,
                             is_completed INTEGER DEFAULT 0,
@@ -200,7 +202,7 @@ class DBManager:
                     ''')
                     cursor.execute('''
                         INSERT INTO tasks_new (
-                            id, record_id, day_date, week_start, content, task_origin, notes, tags, is_completed, completed_at, custom_order, created_at
+                            id, record_id, day_date, week_start, content, task_origin, is_ai_generated, notes, tags, is_completed, completed_at, custom_order, created_at
                         )
                         SELECT
                             t.id,
@@ -209,6 +211,7 @@ class DBManager:
                             COALESCE(date(r.created_at, 'weekday 0'), date(t.created_at, 'weekday 0'), date('now', 'weekday 0')),
                             t.content,
                             NULL,
+                            0,
                             NULL,
                             t.tags,
                             t.is_completed,
@@ -232,6 +235,8 @@ class DBManager:
                     cursor.execute('ALTER TABLE tasks ADD COLUMN notes TEXT')
                 if "task_origin" not in task_columns:
                     cursor.execute('ALTER TABLE tasks ADD COLUMN task_origin TEXT')
+                if "is_ai_generated" not in task_columns:
+                    cursor.execute('ALTER TABLE tasks ADD COLUMN is_ai_generated INTEGER DEFAULT 0')
                 if "completed_at" not in task_columns:
                     cursor.execute('ALTER TABLE tasks ADD COLUMN completed_at DATETIME')
                 if "custom_order" not in task_columns:
@@ -1239,7 +1244,8 @@ class DBManager:
 
     def save_task(self, record_id: Optional[int], content: str, tags: Optional[str] = None,
                   day_date: Optional[str] = None, week_start: Optional[str] = None,
-                  notes: Optional[str] = None, task_origin: Optional[str] = None) -> int:
+                  notes: Optional[str] = None, task_origin: Optional[str] = None,
+                  is_ai_generated: bool = False) -> int:
         """
         Save a task with optional scope:
         - week only: week_start
@@ -1289,9 +1295,18 @@ class DBManager:
         with self.get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute('''
-                INSERT INTO tasks (record_id, day_date, week_start, content, task_origin, notes, tags)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
-            ''', (resolved_record_id, resolved_day_date, resolved_week_start, content.strip(), resolved_origin, notes, resolved_tags))
+                INSERT INTO tasks (record_id, day_date, week_start, content, task_origin, is_ai_generated, notes, tags)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            ''', (
+                resolved_record_id,
+                resolved_day_date,
+                resolved_week_start,
+                content.strip(),
+                resolved_origin,
+                1 if is_ai_generated else 0,
+                notes,
+                resolved_tags,
+            ))
             conn.commit()
             return cursor.lastrowid
 
@@ -1348,6 +1363,23 @@ class DBManager:
             cursor = conn.cursor()
             cursor.execute('DELETE FROM tasks WHERE record_id = ?', (record_id,))
             conn.commit()
+
+    def delete_ai_tasks_by_record(self, record_id: int) -> None:
+        """Delete only AI-generated tasks for a record."""
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute('DELETE FROM tasks WHERE record_id = ? AND is_ai_generated = 1', (record_id,))
+            conn.commit()
+
+    def has_ai_tasks_for_record(self, record_id: int) -> bool:
+        """Return True if the record has AI-generated tasks."""
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                'SELECT 1 FROM tasks WHERE record_id = ? AND is_ai_generated = 1 LIMIT 1',
+                (record_id,),
+            )
+            return cursor.fetchone() is not None
 
     def get_tasks_by_record(self, record_id: int) -> List[Dict[str, Any]]:
         """Fetch all tasks for a specific recording."""

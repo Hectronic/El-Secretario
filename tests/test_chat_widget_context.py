@@ -73,6 +73,47 @@ class TestChatWidgetContext(unittest.TestCase):
         finally:
             widget.deleteLater()
 
+    @patch("src.ui.chat_widget.ChatThread")
+    @patch("src.ai_provider.validate_ai_provider_config", return_value=(True, ""))
+    def test_week_range_context_includes_records_and_tasks(self, _mock_validate, mock_chat_thread):
+        weekly_record = {
+            "id": 8,
+            "title": "Weekly Sync",
+            "created_at": "2026-03-10 10:00:00",
+            "transcription": "Weekly transcript",
+            "recording_notes": "Weekly notes",
+            "type": "recording",
+            "tags": "ops",
+        }
+        self.mock_db.fetch_by_date_range.return_value = [weekly_record]
+        self.mock_db.fetch_record.return_value = weekly_record
+        self.mock_db.get_tasks_by_date_range.return_value = [
+            {"content": "Send recap", "is_completed": 0, "task_origin": "Weekly Sync", "record_title": "Weekly Sync"}
+        ]
+        worker = MagicMock()
+        mock_chat_thread.return_value = worker
+
+        widget = ChatWidget(
+            self.rag,
+            initial_contexts=[
+                {"type": "date_range", "value": {"start": "2026-03-09", "end": "2026-03-15"}, "label": "week"},
+                {"type": "recording", "value": 8, "label": "Weekly Sync"},
+                {"type": "tag", "value": "ops", "label": "ops"},
+            ],
+        )
+        try:
+            widget.input_field.setText("Summarize the week")
+            widget.send_message()
+
+            self.assertTrue(mock_chat_thread.called)
+            context_text = mock_chat_thread.call_args.args[2]
+            self.assertIn("Weekly transcript", context_text)
+            self.assertIn("Weekly notes", context_text)
+            self.assertIn("[Tasks]", context_text)
+            self.assertIn("Send recap", context_text)
+        finally:
+            widget.deleteLater()
+
     @patch("src.ui.chat_widget.AddContextDialog")
     def test_add_context_allows_manual_tag_extension(self, mock_dialog_cls):
         dialog = MagicMock()

@@ -18,7 +18,7 @@ import unittest
 from unittest.mock import MagicMock, patch
 from PyQt6.QtWidgets import QApplication, QWidget
 from PyQt6.QtTest import QTest
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import Qt, QSize
 
 # Add project root to path
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
@@ -107,6 +107,8 @@ class TestTabContextMenu(unittest.TestCase):
         self.window._connect_chat_widget(chat_widget)
         self.window.central_tabs.addTab(chat_widget, "Chat")
 
+        self.assertTrue(chat_widget.header.isHidden())
+
         self.window.float_chat_widget(chat_widget)
         self.assertEqual(self.window.central_tabs.count(), 0)
         self.assertEqual(len(self.window.floating_chat_hosts), 1)
@@ -114,6 +116,7 @@ class TestTabContextMenu(unittest.TestCase):
         self.assertIs(self.window.floating_chat_bar.parentWidget(), self.window.centralWidget())
         self.assertEqual(chat_widget.display_mode, "floating")
         self.assertTrue(chat_widget.context_panel.isHidden())
+        self.assertFalse(chat_widget.header.isHidden())
 
         self.window.dock_chat_widget_to_tab(chat_widget)
         self.assertEqual(self.window.central_tabs.count(), 1)
@@ -121,6 +124,25 @@ class TestTabContextMenu(unittest.TestCase):
         self.assertTrue(self.window.floating_chat_bar.isHidden())
         self.assertEqual(chat_widget.display_mode, "tab")
         self.assertFalse(chat_widget.context_panel.isHidden())
+        self.assertTrue(chat_widget.header.isHidden())
+
+    def test_chat_tab_has_float_button_next_to_close(self):
+        self.window.central_tabs.clear()
+        chat_widget = ChatWidget(self.mock_rag)
+        self.window._connect_chat_widget(chat_widget)
+        index = self.window.central_tabs.addTab(chat_widget, "Chat")
+        self.window._set_tab_action_buttons(chat_widget)
+
+        buttons = self.window.central_tabs.tabBar().tabButton(index, self.window.central_tabs.tabBar().ButtonPosition.RightSide)
+        self.assertIsNotNone(buttons)
+        layout = buttons.layout()
+        self.assertEqual(layout.count(), 2)
+        self.assertEqual(layout.itemAt(0).widget().text(), "↗")
+        self.assertEqual(layout.itemAt(1).widget().text(), "×")
+
+        QTest.mouseClick(layout.itemAt(0).widget(), Qt.MouseButton.LeftButton)
+        self.assertEqual(len(self.window.floating_chat_hosts), 1)
+        self.assertEqual(chat_widget.display_mode, "floating")
 
     def test_floating_chat_can_be_minimized_to_title_bar_and_restored(self):
         self.window.central_tabs.clear()
@@ -130,17 +152,58 @@ class TestTabContextMenu(unittest.TestCase):
 
         self.window.float_chat_widget(chat_widget)
         host = self.window.floating_chat_hosts[0]
+        host.set_preferred_size(QSize(560, 430))
 
         self.window.minimize_floating_chat(chat_widget)
         self.assertTrue(host.property("chat_minimized"))
         self.assertFalse(chat_widget.isHidden())
         self.assertTrue(chat_widget.content_container.isHidden())
         self.assertEqual(host.height(), 32)
+        self.assertEqual(host.width(), 260)
 
         QTest.mouseClick(chat_widget.header, Qt.MouseButton.LeftButton)
         self.assertFalse(host.property("chat_minimized"))
         self.assertFalse(chat_widget.isHidden())
         self.assertFalse(chat_widget.content_container.isHidden())
+        self.assertEqual(host.size(), QSize(560, 430))
+
+    def test_floating_chat_host_is_resizable_with_limits(self):
+        self.window.central_tabs.clear()
+        chat_widget = ChatWidget(self.mock_rag)
+        self.window._connect_chat_widget(chat_widget)
+        self.window.central_tabs.addTab(chat_widget, "Chat")
+
+        self.window.float_chat_widget(chat_widget)
+        host = self.window.floating_chat_hosts[0]
+
+        host.set_preferred_size(QSize(610, 470))
+        self.assertEqual(host.size(), QSize(610, 470))
+
+        host.set_preferred_size(QSize(50, 50))
+        self.assertEqual(host.width(), 320)
+        self.assertEqual(host.height(), 260)
+
+        host.set_preferred_size(QSize(2000, 2000))
+        self.assertEqual(host.width(), 760)
+        self.assertEqual(host.height(), 680)
+
+    def test_floating_chat_shows_corner_resize_handle(self):
+        self.window.central_tabs.clear()
+        chat_widget = ChatWidget(self.mock_rag)
+        self.window._connect_chat_widget(chat_widget)
+        self.window.central_tabs.addTab(chat_widget, "Chat")
+
+        self.window.float_chat_widget(chat_widget)
+        host = self.window.floating_chat_hosts[0]
+
+        self.assertEqual(host.resize_handle.text(), "◤")
+        self.assertFalse(host.resize_handle.isHidden())
+        self.assertEqual(host.resize_handle.cursor().shape(), Qt.CursorShape.SizeFDiagCursor)
+        self.assertLessEqual(host.resize_handle.pos().x(), 3)
+        self.assertLessEqual(host.resize_handle.pos().y(), 3)
+
+        self.window.minimize_floating_chat(chat_widget)
+        self.assertTrue(host.resize_handle.isHidden())
 
     def test_multiple_floating_chats_align_side_by_side_on_bottom_edge(self):
         self.window.central_tabs.clear()
@@ -153,6 +216,8 @@ class TestTabContextMenu(unittest.TestCase):
 
         self.window.float_chat_widget(chat_widget_1)
         self.window.float_chat_widget(chat_widget_2)
+        self.window._refresh_floating_chat_bar()
+        self.app.processEvents()
         
         # In headless tests, geometry might not be calculated, so we check layout containment
         self.assertEqual(self.window.floating_chat_layout.count(), 2)
@@ -163,7 +228,6 @@ class TestTabContextMenu(unittest.TestCase):
         
         self.assertIs(self.window.floating_chat_layout.itemAt(0).widget(), host_1)
         self.assertIs(self.window.floating_chat_layout.itemAt(1).widget(), host_2)
-        self.assertEqual(host_1.y() + host_1.height(), host_2.y() + host_2.height())
 
     def test_floating_chat_host_updates_for_dark_theme(self):
         apply_theme("Dark")

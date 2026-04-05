@@ -18,6 +18,15 @@ from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QFormLayout, QLineEdit,
                              QHBoxLayout, QApplication, QTabWidget, QTextEdit, QScrollArea)
 from PyQt6.QtCore import QSettings, QStringListModel, Qt, QDate, QTimer, pyqtSignal
 from src.ui.styles import apply_theme
+from src.transcription_options import (
+    DEFAULT_TRANSCRIPTION_MODEL,
+    format_transcription_model_tooltip,
+    get_sherpa_model_type_options,
+    get_transcription_model_options,
+    normalize_sherpa_model_type,
+    normalize_transcription_model,
+)
+from src.worker import _default_sherpa_model_url
 
 # Default prompts for AI tasks
 DEFAULT_PROMPTS = {
@@ -48,16 +57,21 @@ The summary MUST be written in {language}.
 
 Recordings Content:
 {text}""",
-    "task_extraction": """Extract actionable tasks and to-do items from the transcription provided below.
+    "task_extraction": """Extract only explicit, actionable next-step tasks from the content below.
 
 Rules:
-- Format: A simple JSON array of strings.
-- Example: ["Task 1", "Task 2"]
-- If no tasks are found, return [].
+- Return a JSON array of strings and nothing else.
+- Each task must be concrete, specific, and executable by one person.
+- Start each task with a strong action verb.
+- Include the object or expected deliverable when present.
+- Keep each task concise, ideally under 16 words.
+- Do not create generic reminders, summaries, topics, or inferred workstreams.
+- Do not split one action into multiple tasks unless the content clearly separates them.
+- Ignore background discussion, context, decisions, and vague intentions.
+- If no clear actionable task exists, return [].
 - Language: {language}
-- Output ONLY the JSON array. Do not include markdown code blocks or any other text.
 
-Transcription:
+Content:
 <transcription>
 {text}
 </transcription>
@@ -417,13 +431,58 @@ class AudioSettingsPanel(QWidget):
         trans_label.setStyleSheet("font-size: 18px; font-weight: bold; color: #607D8B; margin-top: 20px;")
         form_layout.addRow(trans_label)
         
-        # Default Whisper Model
-        lbl_whisper = QLabel("Default Whisper Model:")
+        # Default transcription model
+        lbl_whisper = QLabel("Default Transcription Model:")
         lbl_whisper.setStyleSheet("font-weight: bold;")
         self.whisper_combo = QComboBox()
-        self.whisper_combo.addItems(["tiny", "base", "small", "medium", "large-v3"])
-        self.whisper_combo.setCurrentText(self.settings.value("whisper_model", "base"))
+        self.whisper_combo.addItems(get_transcription_model_options())
+        self.whisper_combo.setCurrentText(
+            normalize_transcription_model(
+                self.settings.value("whisper_model", DEFAULT_TRANSCRIPTION_MODEL)
+            )
+        )
+        self.whisper_combo.setToolTip(format_transcription_model_tooltip(get_transcription_model_options()))
         form_layout.addRow(lbl_whisper, self.whisper_combo)
+
+        lbl_sherpa_dir = QLabel("Sherpa-ONNX Model Dir:")
+        lbl_sherpa_dir.setStyleSheet("font-weight: bold;")
+        self.sherpa_model_dir_input = QLineEdit()
+        self.sherpa_model_dir_input.setPlaceholderText("models/sherpa-onnx")
+        self.sherpa_model_dir_input.setText(
+            self.settings.value("sherpa_onnx_model_dir", "models/sherpa-onnx")
+        )
+        self.sherpa_model_dir_input.setToolTip(
+            "Directory containing the local sherpa-onnx model files (tokens.txt and ONNX weights)."
+        )
+        form_layout.addRow(lbl_sherpa_dir, self.sherpa_model_dir_input)
+
+        lbl_sherpa_type = QLabel("Sherpa-ONNX Model Type:")
+        lbl_sherpa_type.setStyleSheet("font-weight: bold;")
+        self.sherpa_model_type_combo = QComboBox()
+        self.sherpa_model_type_combo.addItems(get_sherpa_model_type_options())
+        self.sherpa_model_type_combo.setCurrentText(
+            normalize_sherpa_model_type(self.settings.value("sherpa_onnx_model_type", "auto"))
+        )
+        form_layout.addRow(lbl_sherpa_type, self.sherpa_model_type_combo)
+
+        lbl_sherpa_download = QLabel("Sherpa Auto-download:")
+        lbl_sherpa_download.setStyleSheet("font-weight: bold;")
+        self.sherpa_auto_download_check = QCheckBox("Download default sherpa-onnx model automatically if missing")
+        self.sherpa_auto_download_check.setChecked(
+            self.settings.value("sherpa_onnx_auto_download", True, type=bool)
+        )
+        form_layout.addRow(lbl_sherpa_download, self.sherpa_auto_download_check)
+
+        lbl_sherpa_url = QLabel("Sherpa Model URL:")
+        lbl_sherpa_url.setStyleSheet("font-weight: bold;")
+        self.sherpa_model_url_input = QLineEdit()
+        self.sherpa_model_url_input.setText(
+            self.settings.value("sherpa_onnx_model_url", _default_sherpa_model_url())
+        )
+        self.sherpa_model_url_input.setToolTip(
+            "Official archive URL used when automatic download is enabled and the local model is missing."
+        )
+        form_layout.addRow(lbl_sherpa_url, self.sherpa_model_url_input)
         
         # Force CPU Setting
         lbl_force_cpu = QLabel("Force CPU:")
@@ -500,7 +559,9 @@ class AudioSettingsPanel(QWidget):
         
         layout.addLayout(form_layout)
         
-        info_label = QLabel("These settings affect how audio is captured and processed by the Whisper model.")
+        info_label = QLabel(
+            "These settings affect how audio is captured and processed by the transcription engine."
+        )
         info_label.setStyleSheet("color: gray; font-size: 13px; margin-top: 10px;")
         layout.addWidget(info_label)
         
@@ -555,6 +616,22 @@ class AudioSettingsPanel(QWidget):
         self.settings.setValue("default_mic_index", self.mic_combo.currentData())
         self.settings.setValue("capture_system_audio", self.sys_audio_check.isChecked())
         self.settings.setValue("whisper_model", self.whisper_combo.currentText())
+        self.settings.setValue(
+            "sherpa_onnx_model_dir",
+            self.sherpa_model_dir_input.text().strip() or "models/sherpa-onnx",
+        )
+        self.settings.setValue(
+            "sherpa_onnx_model_type",
+            self.sherpa_model_type_combo.currentText(),
+        )
+        self.settings.setValue(
+            "sherpa_onnx_auto_download",
+            self.sherpa_auto_download_check.isChecked(),
+        )
+        self.settings.setValue(
+            "sherpa_onnx_model_url",
+            self.sherpa_model_url_input.text().strip() or _default_sherpa_model_url(),
+        )
         self.settings.setValue("force_cpu", self.force_cpu_check.isChecked())
         self.settings.setValue("compute_type", self.compute_combo.currentText())
         self.settings.setValue("transcription_backend", self.backend_combo.currentText())

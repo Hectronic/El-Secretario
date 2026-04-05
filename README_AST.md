@@ -9,7 +9,7 @@ El Secretario ye una ferramienta intelixente de trescripción y organización d'
 ## Carauterístiques
 
 - **Grabación ya Importación d'Audio**: Graba audio direutamente na aplicación o importa archivos esistentes.
-- **Trescripción y Diarización**: Trescribe audio automáticamente ya identifica distintos falantes (diarización) usando Whisper d'OpenAI y pyannote.audio.
+- **Trescripción y Diarización**: Trescribe audio automáticamente ya identifica distintos falantes (diarización) usando backends llocales de Whisper, `sherpa-onnx` y pyannote.audio.
 - **Gueta Intelixente (RAG)**: Usa Xeneración Aumentada por Recuperación (RAG) pa charrar coles tos grabaciones y alcontrar información específica. Soporta Google Gemini y **Ollama** pa execución llocal.
 - **Ventanes de Chat Flexibles**: Los chats pueden quedar como pestañes normales, movese a la barra flotante y minimizase en fiches compactes pa restauralos rápido.
 - **Cuadernos y Coleiciones**: Organiza les tos grabaciones en cuadernos y coleiciones. Accede a elles direutamente dende la barra llateral.
@@ -61,6 +61,12 @@ Pa utilizar dafechu les funciones d'El Secretario, deberás configurar los token
     -   Asegúrate de que'l servidor d'Ollama tea funcionante antes d'entamar l'aplicación.
     -   Pues seleicionar el to modelu llocal preferíu (ex. `llama3`, `mistral`) na configuración de l'aplicación.
 
+4.  **Sherpa-ONNX**: (Opcional) Backend alternativu de trescripción llocal.
+    -   Instala les dependencies de `requirements.txt` pa disponer del paquete Python `sherpa-onnx`.
+    -   Descarga un modelu offline compatible nun direutoriu llocal, por exemplu `models/sherpa-onnx`.
+    -   Configura la ruta del modelu y el so tipu en **Ajustes -> Audio** si seleiciones `sherpa-onnx` como opción de trescripción.
+    -   Si falta'l modelu llocal configuráu, El Secretario pue descargar automáticamente nel primer usu l'archivu oficial por defeutu `sherpa-onnx-whisper-tiny`.
+
 ## Usu
 
 1.  **Executar l'aplicación:**
@@ -80,6 +86,8 @@ Pa utilizar dafechu les funciones d'El Secretario, deberás configurar los token
 - Les dependencies fixen `ctranslate2<4.7` en Windows pa evitar crashes nativos conocíos en versiones más nueves.
 - Si tolos intentos con faster-whisper se cayen en Windows, El Secretario usa un fallback de compatibilidá con `openai-whisper`.
 - El backend de trescripción pue configurase en Ajustes (`auto`, `faster-whisper`, `openai-whisper`).
+- El selector compartíu de trescripción ta unificáu en tola aplicación y agora tamién soporta `sherpa-onnx` pa inferencia totalmente llocal.
+- Los axustes de Sherpa-ONNX tamién soporten autodescarga del modelu nel primer usu y una URL d'archivu configurable.
 - Cuando un fallback funciona, El Secretario guarda automáticamente nos Ajustes la configuración de trescripción que funcionó.
 - L'autoindexáu RAG pue configurase n'Ajustes (`auto_index_rag`) y ta activáu por defeutu (`true`).
 - En Windows, les operaciones d'indexáu/gueta RAG aíllense en subprocesos por defeutu pa amenorgar crashes nativos de Chroma.

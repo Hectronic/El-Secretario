@@ -116,5 +116,29 @@ class TestNewFeaturesIntegrity(unittest.TestCase):
         self.assertEqual(widget.task_queue, self.task_queue)
         widget.deleteLater()
 
+    def test_weekly_summary_viewer_builds_tabs_and_recordings_panel(self):
+        summary_data = {"type": "weekly", "week_start": "2026-02-15", "summary": "Weekly summary"}
+        widget = SummaryViewerWidget(summary_data, db=self.db, task_queue=self.task_queue)
+        self.assertTrue(hasattr(widget, "weekly_tasks_tabs"))
+        self.assertTrue(hasattr(widget, "weekly_recordings_list"))
+        self.assertEqual(widget.weekly_tasks_tabs.count(), 3)
+        self.assertGreaterEqual(widget.weekly_recordings_list.count(), 1)
+        widget.deleteLater()
+
+    def test_weekly_summary_chat_signal_requests_floating_chat_with_week_context(self):
+        summary_data = {"type": "weekly", "week_start": "2026-02-15", "summary": "Weekly summary", "tags_filter": "ops,team"}
+        widget = SummaryViewerWidget(summary_data, db=self.db, task_queue=self.task_queue)
+        emitted = []
+        widget.start_chat_contexts_requested.connect(lambda contexts, floating: emitted.append((contexts, floating)))
+
+        widget._open_week_chat()
+
+        self.assertEqual(len(emitted), 1)
+        contexts, floating = emitted[0]
+        self.assertTrue(floating)
+        self.assertEqual(len([c for c in contexts if c.get("type") == "date_range"]), 1)
+        self.assertEqual(len([c for c in contexts if c.get("type") == "tag"]), 2)
+        widget.deleteLater()
+
 if __name__ == '__main__':
     unittest.main()

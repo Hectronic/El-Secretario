@@ -108,6 +108,14 @@ class TestWelcomeDailySummaryButton(unittest.TestCase):
         finally:
             widget.deleteLater()
 
+    def test_welcome_model_combo_includes_sherpa_onnx(self):
+        widget = WelcomeWidget(_FakeDB())
+        try:
+            options = [widget.model_combo.itemText(i) for i in range(widget.model_combo.count())]
+            self.assertIn("sherpa-onnx", options)
+        finally:
+            widget.deleteLater()
+
     def test_welcome_uses_scroll_area_container(self):
         widget = WelcomeWidget(_FakeDB())
         try:

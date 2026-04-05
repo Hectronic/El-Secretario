@@ -19,6 +19,7 @@ from PyQt6.QtCore import Qt, pyqtSignal, QTimer
 from src.database import DBManager
 from src.worker import TranscriberThread
 from PyQt6.QtCore import QSettings
+from src.transcription_options import get_saved_transcription_model
 
 class BatchProcessWidget(QWidget):
     finished = pyqtSignal()
@@ -205,13 +206,13 @@ class BatchProcessWidget(QWidget):
         force_cpu = settings.value("force_cpu", False, type=bool)
         compute_type = settings.value("compute_type", "auto")
         transcription_backend = settings.value("transcription_backend", "auto")
+        model_size = get_saved_transcription_model(settings)
         if compute_type == "auto":
             compute_type = None
         
-        # Use large-v3 and enable diarization as requested
         self.thread = TranscriberThread(
             file_path, 
-            model_size="large-v3", 
+            model_size=model_size,
             compute_type=compute_type,
             hf_token=hf_token, 
             enable_diarization=True,

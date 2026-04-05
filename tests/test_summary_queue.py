@@ -110,19 +110,60 @@ class TestSummaryQueue(unittest.TestCase):
         self.assertEqual(queued.get("type"), "task_extraction")
         self.assertEqual(queued.get("title"), "My Recording")
 
-    def test_daily_summary_enqueues_pending_recording_summaries_first(self):
-        rec1 = self.db.save("a.wav", "Tx A", 10.0, "A")
-        rec2 = self.db.save("b.wav", "Tx B", 10.0, "B")
-        self.db.update_ai_content(rec1, summary="Already done")
-
+    def test_daily_summary_only_enqueues_daily_summary_task(self):
         with patch('src.ui.summary_task_queue.AIAssistant'):
             self.queue_manager.enqueue_daily_summary({"date": "2026-02-27", "tags_filter": ""})
             queued = self.queue_manager.get_queue_list()
             current = self.queue_manager.get_current_task() or {}
             all_tasks = [current] + queued
-            # rec2 summary should be pending in queue and daily summary should also exist.
-            self.assertTrue(any(t.get("type") == "summary" and t.get("record_id") == rec2 for t in all_tasks))
             self.assertTrue(any(t.get("type") == "daily_summary" and t.get("date") == "2026-02-27" for t in all_tasks))
+            self.assertFalse(any(t.get("type") == "summary" for t in all_tasks))
+
+    def test_task_extraction_is_skipped_when_tasks_already_exist(self):
+        record_id = self.db.save("test.wav", "Transcription", 10.0, "Title")
+        self.db.save_task(record_id=record_id, content="Existing task", tags="tag1", is_ai_generated=True)
+
+        with patch('src.ui.summary_task_queue.AIAssistant') as MockAI:
+            result = self.queue_manager.enqueue_task_extraction(record_id, "Transcription", "tag1", "Title")
+
+        self.assertFalse(result)
+        MockAI.assert_not_called()
+        tasks = self.db.get_tasks_by_record(record_id)
+        self.assertEqual(len(tasks), 1)
+        self.assertEqual(tasks[0]["content"], "Existing task")
+
+    def test_daily_summary_completed_recording_can_enqueue_task_extraction_once(self):
+        record_id = self.db.save("test.wav", "Transcription", 10.0, "Title")
+
+        with patch.object(self.queue_manager, "enqueue_task_extraction") as enqueue_mock:
+            self.queue_manager._on_generator_recording_summary_completed(record_id, "Title")
+
+        enqueue_mock.assert_called_once()
+        args = enqueue_mock.call_args.args
+        self.assertEqual(args[0], record_id)
+        self.assertEqual(args[2], "")
+        self.assertEqual(args[3], "Title")
+
+    def test_daily_summary_completed_recording_skips_task_enqueue_when_tasks_exist(self):
+        record_id = self.db.save("test.wav", "Transcription", 10.0, "Title")
+        self.db.save_task(record_id=record_id, content="Existing task", is_ai_generated=True)
+
+        with patch.object(self.queue_manager, "enqueue_task_extraction") as enqueue_mock:
+            self.queue_manager._on_generator_recording_summary_completed(record_id, "Title")
+
+        enqueue_mock.assert_called_once()
+        # Central manager still receives the request, and decides to skip due to existing tasks.
+        self.assertEqual(enqueue_mock.call_args.args[0], record_id)
+
+    def test_task_extraction_does_not_skip_when_only_manual_tasks_exist(self):
+        record_id = self.db.save("test.wav", "Transcription", 10.0, "Title")
+        self.db.save_task(record_id=record_id, content="Manual task", tags="tag1", is_ai_generated=False)
+
+        with patch('src.ui.summary_task_queue.AIAssistant') as MockAI:
+            result = self.queue_manager.enqueue_task_extraction(record_id, "Transcription", "tag1", "Title")
+
+        self.assertTrue(result)
+        MockAI.assert_called_once()
 
     def test_session_history_records_queue_events(self):
         with patch('src.ui.summary_task_queue.AIAssistant'):
@@ -165,6 +206,28 @@ class TestSummaryQueue(unittest.TestCase):
             self.assertEqual(len(queued), 2)
             scopes = sorted([q.get("reindex_scope") for q in queued])
             self.assertEqual(scopes, ["all", "missing"])
+
+    def test_transcription_completion_persists_model_name(self):
+        record_id = self.db.save("test.wav", "", 10.0, "Title")
+        self.queue_manager._current_task = {
+            "type": "transcription",
+            "record_id": record_id,
+            "title": "Title",
+        }
+
+        with patch.object(self.queue_manager, "enqueue_recording_summary") as enqueue_summary:
+            self.queue_manager._on_worker_completed(
+                {
+                    "text": "recognized text",
+                    "model_name": "sherpa-onnx",
+                    "is_diarized": False,
+                }
+            )
+
+        record = self.db.fetch_record(record_id)
+        self.assertEqual(record["transcription"], "recognized text")
+        self.assertEqual(record["transcription_model"], "sherpa-onnx")
+        enqueue_summary.assert_called_once()
 
 if __name__ == '__main__':
     unittest.main()

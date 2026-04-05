@@ -185,22 +185,6 @@ class SummaryTaskQueueManager(QObject):
             self._append_history("skipped", summary_data, "Daily summary task missing date.")
             return False
 
-        # Before daily summary, ensure every unsummarized recording gets its own summary.
-        # This keeps daily/weekly layers coherent when users trigger day regeneration.
-        try:
-            pending_records = self.db.get_records_without_summary()
-            for rec in pending_records:
-                rec_id = rec.get("id")
-                if not isinstance(rec_id, int):
-                    continue
-                rec_text = self.db.compose_ai_text(rec.get("transcription", ""), rec.get("recording_notes", ""))
-                if not rec_text.strip():
-                    continue
-                rec_title = (rec.get("title") or f"Recording {rec_id}").strip()
-                self.enqueue_recording_summary(rec_id, rec_text, rec_title)
-        except Exception:
-            pass
-
         task = {
             "type": "daily_summary",
             "date": date,
@@ -226,7 +210,17 @@ class SummaryTaskQueueManager(QObject):
         }
         return self._enqueue_unique_task(task)
 
-    def enqueue_task_extraction(self, record_id: int, text: str, tags: str, title: str = "") -> bool:
+    def enqueue_task_extraction(self, record_id: int, text: str, tags: str, title: str = "", force: bool = False) -> bool:
+        if self.db.has_ai_tasks_for_record(record_id) and not force:
+            task = {
+                "type": "task_extraction",
+                "record_id": record_id,
+                "title": (title or f"Recording {record_id}").strip(),
+            }
+            self.task_skipped.emit(task, "Tasks already generated for this record.")
+            self._append_history("skipped", task, "Tasks already generated for this record.")
+            return False
+
         resolved_title = (title or "").strip()
         if not resolved_title:
             rec = self.db.fetch_record(record_id)
@@ -241,6 +235,7 @@ class SummaryTaskQueueManager(QObject):
             "text": text,
             "tags": tags,
             "title": resolved_title,
+            "force": bool(force),
         }
         return self._enqueue_unique_task(task)
 
@@ -385,6 +380,7 @@ class SummaryTaskQueueManager(QObject):
                     exclude_today=False,
                     parent=self,
                 )
+                worker.recording_summary_completed.connect(self._on_generator_recording_summary_completed)
                 worker.all_tasks_finished.connect(lambda *args: self._on_worker_completed())
                 worker.progress.connect(self._on_generator_progress)
             elif task_type == "transcription":
@@ -453,6 +449,23 @@ class SummaryTaskQueueManager(QObject):
             percent = int((current / total) * 100)
             self.task_progress.emit(percent)
 
+    def _on_generator_recording_summary_completed(self, record_id: int, title: str):
+        try:
+            rec = self.db.fetch_record(int(record_id))
+            if not isinstance(rec, dict):
+                return
+            ai_text = self.db.get_record_ai_text(int(record_id))
+            if not str(ai_text or "").strip():
+                return
+            self.enqueue_task_extraction(
+                int(record_id),
+                ai_text,
+                rec.get("tags") or "",
+                title or rec.get("title") or f"Recording {record_id}",
+            )
+        except Exception:
+            pass
+
     def _on_worker_completed(self, result: Any = None):
         task = self._current_task or {}
         import logging
@@ -481,15 +494,25 @@ class SummaryTaskQueueManager(QObject):
                     try:
                         tasks = json.loads(clean_result)
                         if isinstance(tasks, list):
-                            self.db.delete_tasks_by_record(task["record_id"])
+                            self.db.delete_ai_tasks_by_record(task["record_id"])
                             for t_content in tasks:
                                 if isinstance(t_content, str) and t_content.strip():
-                                    self.db.save_task(task["record_id"], t_content.strip(), task.get("tags"))
+                                    self.db.save_task(
+                                        task["record_id"],
+                                        t_content.strip(),
+                                        task.get("tags"),
+                                        is_ai_generated=True,
+                                    )
                     except: pass
                 elif t_type == "transcription":
                     # result is a dict from TranscriberThread
                     text = result["text"]
-                    self.db.update_transcription(task["record_id"], text, is_diarized=result.get("is_diarized", False), transcription_model=result.get("model_size"))
+                    self.db.update_transcription(
+                        task["record_id"],
+                        text,
+                        is_diarized=result.get("is_diarized", False),
+                        transcription_model=result.get("model_name"),
+                    )
                     # Auto chain summary
                     ai_text = self.db.get_record_ai_text(task["record_id"])
                     self.enqueue_recording_summary(task["record_id"], ai_text, task.get("title", ""))

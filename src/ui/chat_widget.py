@@ -651,15 +651,35 @@ class ChatWidget(QWidget):
                 if rid not in seen_ids:
                     seen_ids.add(rid)
                     records.append(rec)
+
+        tasks = []
+        if self.context_panel.current_week_monday:
+            start_date = self.context_panel.current_week_monday.toString("yyyy-MM-dd")
+            end_date = self.context_panel.current_date_filter
+            tasks = self.db.get_tasks_by_date_range(start_date, end_date, ",".join(tags) if tags else None)
+        elif self.context_panel.current_date_filter:
+            tasks = self.db.get_tasks_by_date(self.context_panel.current_date_filter, ",".join(tags) if tags else None)
+        elif tags:
+            tasks = self.db.get_tasks_by_date_range("1970-01-01", "2099-12-31", ",".join(tags))
         
         rag_ids = None
         if records:
             rag_ids = [str(r['id']) for r in records]
             for r in records:
                 composed = self.db.compose_ai_text(r.get("transcription"), r.get("recording_notes"))
+                record_label = "Meeting" if r.get("type") == "recording" else "Note"
                 context_text_parts.append(
-                    f"[Meeting: {r['title'] or 'Untitled'} ({r['created_at']})]\n{composed}"
+                    f"[{record_label}: {r['title'] or 'Untitled'} ({r['created_at']})]\n{composed}"
                 )
+
+        if tasks:
+            task_lines = []
+            for task in tasks:
+                status = "done" if task.get("is_completed") else "pending"
+                origin = (task.get("task_origin") or task.get("record_title") or "").strip()
+                origin_suffix = f" [{origin}]" if origin else ""
+                task_lines.append(f"- ({status}) {(task.get('content') or '').strip()}{origin_suffix}")
+            context_text_parts.append("[Tasks]\n" + "\n".join(task_lines))
 
         # 3. RAG Search
         if rag_ids or (not tags and not self.context_panel.current_date_filter):
@@ -703,7 +723,17 @@ class ChatWidget(QWidget):
         
         # Construct simplified context for saving
         save_contexts = []
-        if self.context_panel.current_date_filter:
+        if self.context_panel.current_week_monday and self.context_panel.current_date_filter:
+            save_contexts.append(
+                {
+                    "type": "date_range",
+                    "value": {
+                        "start": self.context_panel.current_week_monday.toString("yyyy-MM-dd"),
+                        "end": self.context_panel.current_date_filter,
+                    },
+                }
+            )
+        elif self.context_panel.current_date_filter:
             save_contexts.append({"type": "date", "value": self.context_panel.current_date_filter})
         for t in self.context_panel.get_active_tags():
             save_contexts.append({"type": "tag", "value": t})
@@ -849,6 +879,13 @@ class ChatWidget(QWidget):
             ctx_value = (ctx or {}).get("value")
             if ctx_type == "date" and ctx_value:
                 self.context_panel.current_date_filter = str(ctx_value)
+            elif ctx_type == "date_range" and isinstance(ctx_value, dict):
+                start = str(ctx_value.get("start") or "").strip()
+                end = str(ctx_value.get("end") or "").strip()
+                start_date = QDate.fromString(start, "yyyy-MM-dd")
+                if start_date.isValid() and end:
+                    self.context_panel.current_week_monday = start_date
+                    self.context_panel.current_date_filter = end
             elif ctx_type == "tag" and ctx_value:
                 tag_value = str(ctx_value).strip()
                 if tag_value and tag_value not in self.context_panel.active_global_tags:
@@ -896,6 +933,7 @@ class ChatWidget(QWidget):
         # Adjust margins to show the host's rounded corners and border
         m = 0 if not is_floating else 1
         self.layout().setContentsMargins(m, m, m, m)
+        self.header.setVisible(is_floating)
         
         self.mode_btn.setText("⇱" if is_floating else "↗")
         self.mode_btn.setToolTip("Move chat back to tab" if is_floating else "Move chat to floating bar")

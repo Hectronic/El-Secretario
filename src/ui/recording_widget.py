@@ -26,11 +26,12 @@ from PyQt6.QtMultimedia import QMediaPlayer, QAudioOutput
 from PyQt6.QtGui import QCursor
 
 from src.database import DBManager
-from src.worker import TranscriberThread
+from src.worker import TranscriberThread, get_transcription_preflight_error
 from src.ai_assistant import AIAssistant
 from src.ui.dialogs import SpeakerDialog
 from src.ui.components import TagsLineEdit
 from src.ui.tasks_list_widget import TasksListWidget
+from src.transcription_options import DEFAULT_TRANSCRIPTION_MODEL, get_transcription_model_options
 
 Recorder = None
 
@@ -89,8 +90,8 @@ class RecordingWidget(QWidget):
         transcription_layout.addWidget(QLabel("Retranscription Options:"))
         
         self.model_combo = QComboBox()
-        self.model_combo.addItems(["tiny", "base", "small", "medium", "large-v3"])
-        self.model_combo.setCurrentText("base")
+        self.model_combo.addItems(get_transcription_model_options())
+        self.model_combo.setCurrentText(DEFAULT_TRANSCRIPTION_MODEL)
         transcription_layout.addWidget(QLabel("Model:"))
         transcription_layout.addWidget(self.model_combo)
         
@@ -286,6 +287,7 @@ class RecordingWidget(QWidget):
             has_text = bool((record.get('transcription') or '').strip() or (record.get('recording_notes') or '').strip())
             self.summarize_btn.setEnabled(has_text)
             self.extract_tasks_btn.setEnabled(has_text)
+            self._update_extract_tasks_button()
             self.rename_speakers_btn.setEnabled(has_text)
             
             filename = record['filename']
@@ -335,6 +337,13 @@ class RecordingWidget(QWidget):
         force_cpu = settings.value("force_cpu", False, type=bool)
         compute_type = settings.value("compute_type", "auto")
         transcription_backend = settings.value("transcription_backend", "auto")
+        preflight_error = get_transcription_preflight_error(model_size, settings)
+        if preflight_error:
+            self.status_changed.emit("Failed.")
+            self.progress_changed.emit(-2)
+            self.retranscribe_btn.setEnabled(True)
+            QMessageBox.critical(self, "Transcription Error", preflight_error)
+            return
         if compute_type == "auto": compute_type = None
         duration = 0
         try:
@@ -357,7 +366,6 @@ class RecordingWidget(QWidget):
         self.transcriber_thread.status_update.connect(self._on_transcriber_status_update)
         self.transcriber_thread.error.connect(self.on_transcription_error)
         self.transcriber_thread.finished.connect(self._clear_transcriber_thread_ref)
-        self.transcriber_thread.error.connect(self._clear_transcriber_thread_ref)
         self.transcriber_thread.start()
 
     def on_transcription_finished(self, result):
@@ -464,13 +472,22 @@ class RecordingWidget(QWidget):
                 )
                 return
             elif task_type == "task_extraction":
+                force_reextract = bool(self.current_record_id and self.db.has_ai_tasks_for_record(self.current_record_id))
+                if force_reextract:
+                    self.db.delete_ai_tasks_by_record(self.current_record_id)
+                    self.tasks_widget.refresh()
+                    self._update_extract_tasks_button()
                 self.summary_task_queue.enqueue_task_extraction(
                     self.current_record_id, 
                     text, 
                     self.tags_input.text(),
-                    self.title_input.text() or f"Recording {self.current_record_id}"
+                    self.title_input.text() or f"Recording {self.current_record_id}",
+                    force=force_reextract,
                 )
                 return
+        elif task_type in {"summary", "task_extraction"}:
+            QMessageBox.warning(self, "Error", "Summary and task extraction must run through the central queue.")
+            return
 
         settings = QSettings("Hectronic", "Secretario")
         from src.ai_provider import validate_ai_provider_config
@@ -502,15 +519,8 @@ class RecordingWidget(QWidget):
                 text,
                 title,
             )
-            self.summary_task_queue.enqueue_task_extraction(
-                self.current_record_id,
-                text,
-                tags,
-                title,
-            )
         else:
-            self.run_ai_task("summary")
-            self.run_ai_task("task_extraction")
+            QMessageBox.warning(self, "Error", "Automatic summary requires the central queue to be available.")
 
     @staticmethod
     def _to_bool(value):
@@ -542,6 +552,15 @@ class RecordingWidget(QWidget):
             if hasattr(widget, "refresh_tasks_sidebar"):
                 widget.refresh_tasks_sidebar()
 
+    def _update_extract_tasks_button(self):
+        has_ai_tasks = False
+        if self.current_record_id:
+            try:
+                has_ai_tasks = self.db.has_ai_tasks_for_record(self.current_record_id)
+            except Exception:
+                has_ai_tasks = False
+        self.extract_tasks_btn.setText("Re-extract Tasks (AI)" if has_ai_tasks else "Extract Tasks (AI)")
+
     def refresh_from_background_queue(self, include_summary=False, include_tasks=False):
         """
         Refresh UI sections after queue-completed tasks while this tab is open.
@@ -555,6 +574,7 @@ class RecordingWidget(QWidget):
                 self.summary_display.setText(rec.get("summary") or "")
         if include_tasks:
             self.tasks_widget.refresh()
+        self._update_extract_tasks_button()
 
     def on_ai_error(self, err):
         self.status_changed.emit("AI Task Failed.")

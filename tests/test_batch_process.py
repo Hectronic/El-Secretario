@@ -69,7 +69,18 @@ class TestBatchProcess(unittest.TestCase):
         # Mock os.path.exists to return True
         with patch('os.path.exists', return_value=True):
             # Mock TranscriberThread
-            with patch('src.ui.batch_process_widget.TranscriberThread') as mock_thread:
+            with patch('src.ui.batch_process_widget.TranscriberThread') as mock_thread, \
+                 patch('src.ui.batch_process_widget.QSettings') as MockQSettings:
+                settings_instance = MagicMock()
+                settings_instance.value.side_effect = lambda key, default=None, type=None: {
+                    'hf_token': '',
+                    'force_cpu': False,
+                    'compute_type': 'auto',
+                    'transcription_backend': 'auto',
+                    'rec_config/model': 'sherpa-onnx',
+                    'whisper_model': 'base',
+                }.get(key, default)
+                MockQSettings.return_value = settings_instance
                 self.widget.start_processing()
                 
                 # Verify item is NOT removed from list yet
@@ -77,6 +88,7 @@ class TestBatchProcess(unittest.TestCase):
                 # But it should be marked as processing (yellow background)
                 item = self.widget.pending_list.item(0)
                 self.assertEqual(item.background(), Qt.GlobalColor.yellow)
+                self.assertEqual(mock_thread.call_args.kwargs["model_size"], "sherpa-onnx")
                 
     def test_on_file_finished_removes_item(self):
         # Setup processing state

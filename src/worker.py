@@ -20,9 +20,15 @@ import torch
 import gc
 import logging
 import multiprocessing as mp
+import shutil
+import tarfile
+import tempfile
+from pathlib import Path
 from importlib.metadata import PackageNotFoundError, version
 from types import SimpleNamespace
+from urllib.request import urlopen
 from src.whisper_subprocess import subprocess_transcribe_entry
+from src.transcription_options import is_sherpa_onnx_model, normalize_sherpa_model_type
 
 # Common resilience flag for Windows to avoid native crashes when multiple 
 # libraries (torch, onnx, ctranslate2) bring conflicting OpenMP DLLs.
@@ -31,6 +37,323 @@ if platform.system() == "Windows":
 
 _PYANNOTE_PIPELINE_CLS = None
 _PYANNOTE_IMPORT_ATTEMPTED = False
+
+
+def _find_existing_file(directory: str, patterns: list[str]) -> str:
+    root = Path(directory)
+    for pattern in patterns:
+        matches = sorted(root.glob(pattern))
+        for match in matches:
+            if match.is_file():
+                return str(match)
+    return ""
+
+
+def _default_sherpa_model_dir() -> str:
+    return os.path.join(os.getcwd(), "models", "sherpa-onnx")
+
+
+def _default_sherpa_model_url() -> str:
+    return (
+        "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/"
+        "sherpa-onnx-whisper-tiny.tar.bz2"
+    )
+
+
+def _iter_sherpa_candidate_dirs(model_dir: str):
+    root = Path(model_dir)
+    if not root.exists():
+        return
+    yield str(root)
+    for current_root, dirnames, filenames in os.walk(root):
+        if "tokens.txt" in filenames:
+            yield current_root
+        dirnames[:] = [d for d in dirnames if not d.startswith(".")]
+
+
+def _resolve_existing_sherpa_model_dir(model_dir: str, model_type: str) -> tuple[str, dict] | tuple[None, None]:
+    seen = set()
+    for candidate_dir in _iter_sherpa_candidate_dirs(model_dir):
+        if candidate_dir in seen:
+            continue
+        seen.add(candidate_dir)
+        try:
+            config = _resolve_sherpa_onnx_model_config(candidate_dir, model_type)
+            return candidate_dir, config
+        except RuntimeError:
+            continue
+    return None, None
+
+
+def _safe_extract_tarball(archive_path: str, destination_dir: str) -> None:
+    destination = os.path.abspath(destination_dir)
+    with tarfile.open(archive_path, "r:*") as tar:
+        for member in tar.getmembers():
+            member_path = os.path.abspath(os.path.join(destination, member.name))
+            if not member_path.startswith(destination + os.sep) and member_path != destination:
+                raise RuntimeError("Unsafe path detected while extracting Sherpa-ONNX archive.")
+        tar.extractall(destination)
+
+
+def _download_sherpa_onnx_model(url: str, destination_dir: str, status_callback=None) -> None:
+    os.makedirs(destination_dir, exist_ok=True)
+    fd, tmp_path = tempfile.mkstemp(prefix="sherpa_onnx_", suffix=".tar.bz2")
+    os.close(fd)
+    try:
+        if status_callback:
+            status_callback("Downloading sherpa-onnx model...")
+        with urlopen(url, timeout=1800) as response, open(tmp_path, "wb") as out:
+            shutil.copyfileobj(response, out)
+        if status_callback:
+            status_callback("Extracting sherpa-onnx model...")
+        _safe_extract_tarball(tmp_path, destination_dir)
+    except Exception as e:
+        raise RuntimeError(f"Could not download sherpa-onnx model from {url}: {e}") from e
+    finally:
+        try:
+            os.remove(tmp_path)
+        except OSError:
+            pass
+
+
+def _ensure_sherpa_onnx_model_ready(settings, status_callback=None) -> tuple[str, dict]:
+    model_dir = str(
+        settings.value("sherpa_onnx_model_dir", _default_sherpa_model_dir())
+        or _default_sherpa_model_dir()
+    ).strip()
+    if not model_dir:
+        model_dir = _default_sherpa_model_dir()
+
+    model_type = normalize_sherpa_model_type(settings.value("sherpa_onnx_model_type", "auto"))
+    resolved_dir, model_config = _resolve_existing_sherpa_model_dir(model_dir, model_type)
+    if resolved_dir and model_config:
+        if resolved_dir != model_dir:
+            settings.setValue("sherpa_onnx_model_dir", resolved_dir)
+            settings.sync()
+        return resolved_dir, model_config
+
+    auto_download = settings.value("sherpa_onnx_auto_download", True, type=bool)
+    if not auto_download:
+        if not os.path.isdir(model_dir):
+            raise RuntimeError(f"Sherpa-ONNX model directory does not exist: {model_dir}")
+        raise RuntimeError(
+            f"No compatible Sherpa-ONNX model was found in: {model_dir}\n\n"
+            "Download a compatible offline model or enable automatic download in Settings -> Audio."
+        )
+
+    model_url = str(
+        settings.value("sherpa_onnx_model_url", _default_sherpa_model_url())
+        or _default_sherpa_model_url()
+    ).strip()
+    _download_sherpa_onnx_model(model_url, model_dir, status_callback=status_callback)
+    resolved_dir, model_config = _resolve_existing_sherpa_model_dir(model_dir, model_type)
+    if not resolved_dir or not model_config:
+        raise RuntimeError(
+            f"Downloaded Sherpa-ONNX files from {model_url}, but no compatible model layout was found in {model_dir}."
+        )
+    settings.setValue("sherpa_onnx_model_dir", resolved_dir)
+    settings.sync()
+    return resolved_dir, model_config
+
+
+def _resolve_sherpa_onnx_model_config(model_dir: str, model_type: str) -> dict:
+    model_type = normalize_sherpa_model_type(model_type)
+    tokens = _find_existing_file(model_dir, ["tokens.txt", "*tokens.txt"])
+    if not tokens:
+        raise RuntimeError(
+            "Sherpa-ONNX model is missing tokens.txt in the configured model directory."
+        )
+
+    transducer_encoder = _find_existing_file(model_dir, ["encoder.onnx", "*encoder*.onnx"])
+    transducer_decoder = _find_existing_file(model_dir, ["decoder.onnx", "*decoder*.onnx"])
+    transducer_joiner = _find_existing_file(model_dir, ["joiner.onnx", "*joiner*.onnx"])
+    whisper_encoder = _find_existing_file(model_dir, ["*encoder*.onnx"])
+    whisper_decoder = _find_existing_file(model_dir, ["*decoder*.onnx"])
+    generic_model = _find_existing_file(model_dir, ["model.onnx", "*.onnx"])
+
+    if model_type == "auto":
+        if transducer_encoder and transducer_decoder and transducer_joiner:
+            model_type = "transducer"
+        elif whisper_encoder and whisper_decoder and "whisper" in Path(whisper_encoder).name.lower():
+            model_type = "whisper"
+        else:
+            hint = f"{model_dir} {Path(generic_model).name}".lower()
+            if "wenet" in hint:
+                model_type = "wenet-ctc"
+            elif "nemo" in hint or "citrinet" in hint or "conformer" in hint:
+                model_type = "nemo-ctc"
+            elif "tdnn" in hint:
+                model_type = "tdnn-ctc"
+            elif generic_model:
+                model_type = "paraformer"
+            elif whisper_encoder and whisper_decoder:
+                model_type = "whisper"
+            else:
+                raise RuntimeError(
+                    "Could not auto-detect the Sherpa-ONNX model layout. "
+                    "Configure 'Sherpa-ONNX Model Type' explicitly in Settings."
+                )
+
+    if model_type == "transducer":
+        if not (transducer_encoder and transducer_decoder and transducer_joiner):
+            raise RuntimeError("Sherpa-ONNX transducer models require encoder, decoder and joiner ONNX files.")
+        return {
+            "type": model_type,
+            "tokens": tokens,
+            "encoder": transducer_encoder,
+            "decoder": transducer_decoder,
+            "joiner": transducer_joiner,
+        }
+
+    if model_type == "whisper":
+        if not (whisper_encoder and whisper_decoder):
+            raise RuntimeError("Sherpa-ONNX whisper models require encoder and decoder ONNX files.")
+        return {
+            "type": model_type,
+            "tokens": tokens,
+            "encoder": whisper_encoder,
+            "decoder": whisper_decoder,
+        }
+
+    if not generic_model:
+        raise RuntimeError("Sherpa-ONNX model.onnx was not found in the configured model directory.")
+
+    return {
+        "type": model_type,
+        "tokens": tokens,
+        "model": generic_model,
+    }
+
+
+def _create_sherpa_onnx_recognizer(*, sherpa_onnx_module, model_config: dict, language: str):
+    common_kwargs = {
+        "tokens": model_config["tokens"],
+        "num_threads": 2,
+        "sample_rate": 16000,
+        "feature_dim": 80,
+        "decoding_method": "greedy_search",
+        "debug": False,
+    }
+    model_type = model_config["type"]
+
+    if model_type == "transducer":
+        return sherpa_onnx_module.OfflineRecognizer.from_transducer(
+            encoder=model_config["encoder"],
+            decoder=model_config["decoder"],
+            joiner=model_config["joiner"],
+            **common_kwargs,
+        )
+    if model_type == "paraformer":
+        return sherpa_onnx_module.OfflineRecognizer.from_paraformer(
+            paraformer=model_config["model"],
+            **common_kwargs,
+        )
+    if model_type == "nemo-ctc":
+        return sherpa_onnx_module.OfflineRecognizer.from_nemo_ctc(
+            model=model_config["model"],
+            **common_kwargs,
+        )
+    if model_type == "wenet-ctc":
+        return sherpa_onnx_module.OfflineRecognizer.from_wenet_ctc(
+            model=model_config["model"],
+            **common_kwargs,
+        )
+    if model_type == "tdnn-ctc":
+        return sherpa_onnx_module.OfflineRecognizer.from_tdnn_ctc(
+            model=model_config["model"],
+            **common_kwargs,
+        )
+    if model_type == "whisper":
+        return sherpa_onnx_module.OfflineRecognizer.from_whisper(
+            encoder=model_config["encoder"],
+            decoder=model_config["decoder"],
+            tokens=model_config["tokens"],
+            num_threads=1,
+            decoding_method="greedy_search",
+            debug=False,
+            language=language or "",
+            task="transcribe",
+            tail_paddings=-1,
+        )
+
+    raise RuntimeError(f"Unsupported Sherpa-ONNX model type: {model_type}")
+
+
+def _run_sherpa_onnx_transcription(*, audio_path: str, language: str, settings, status_callback=None) -> list[dict]:
+    try:
+        import numpy as np
+        import sherpa_onnx
+        import soundfile as sf
+    except ImportError as e:
+        raise RuntimeError(
+            "sherpa-onnx support requires the 'sherpa-onnx' package to be installed."
+        ) from e
+
+    model_dir, model_config = _ensure_sherpa_onnx_model_ready(settings, status_callback=status_callback)
+    recognizer = _create_sherpa_onnx_recognizer(
+        sherpa_onnx_module=sherpa_onnx,
+        model_config=model_config,
+        language=language,
+    )
+
+    audio, sample_rate = sf.read(audio_path, always_2d=False)
+    audio = np.asarray(audio, dtype=np.float32)
+    if audio.ndim > 1:
+        audio = np.mean(audio, axis=1).astype(np.float32)
+
+    stream = recognizer.create_stream()
+    stream.accept_waveform(sample_rate, audio)
+    recognizer.decode_streams([stream])
+    result = getattr(stream, "result", None)
+    text = str(getattr(result, "text", "") or "").strip()
+
+    if not text:
+        return []
+
+    duration = len(audio) / float(sample_rate) if sample_rate else 0.0
+    return [{"start": 0.0, "end": float(duration), "text": text}]
+
+
+def get_transcription_preflight_error(model_size: str, settings) -> str | None:
+    if not is_sherpa_onnx_model(model_size):
+        return None
+
+    auto_download = settings.value("sherpa_onnx_auto_download", True, type=bool)
+    model_dir = str(
+        settings.value("sherpa_onnx_model_dir", _default_sherpa_model_dir())
+        or _default_sherpa_model_dir()
+    ).strip()
+    if not model_dir:
+        if auto_download:
+            return None
+        return (
+            "Sherpa-ONNX model directory is empty. "
+            "Set it in Settings -> Audio before using sherpa-onnx."
+        )
+    if not os.path.isdir(model_dir):
+        if auto_download:
+            return None
+        return (
+            f"Sherpa-ONNX model directory does not exist: {model_dir}\n\n"
+            "Download a compatible offline model and set its directory in Settings -> Audio."
+        )
+    resolved_dir, _ = _resolve_existing_sherpa_model_dir(
+        model_dir,
+        settings.value("sherpa_onnx_model_type", "auto"),
+    )
+    if resolved_dir:
+        return None
+    if auto_download:
+        return None
+    if not os.path.isfile(os.path.join(model_dir, "tokens.txt")):
+        return (
+            f"Sherpa-ONNX model directory is missing tokens.txt: {model_dir}\n\n"
+            "Make sure the selected directory contains a valid sherpa-onnx model."
+        )
+    return (
+        f"No compatible Sherpa-ONNX model was found in: {model_dir}\n\n"
+        "Select a valid model directory or enable automatic download in Settings -> Audio."
+    )
 
 
 def get_optimal_device(force_cpu: bool = False, model_size: str = "base"):
@@ -353,9 +676,13 @@ class TranscriberThread(QThread):
         self.force_cpu = force_cpu
         self.backend_preference = backend_preference or "auto"
         self.effective_backend = "faster-whisper"
+        self.is_sherpa_onnx = is_sherpa_onnx_model(model_size)
         
         # Auto-detect optimal device if not explicitly provided
-        if device is None or compute_type is None:
+        if self.is_sherpa_onnx:
+            self.device = "cpu"
+            self.compute_type = "onnxruntime"
+        elif device is None or compute_type is None:
             auto_device, auto_compute = get_optimal_device(force_cpu, model_size)
             self.device = device if device else auto_device
             self.compute_type = compute_type if compute_type else auto_compute
@@ -364,7 +691,7 @@ class TranscriberThread(QThread):
             self.compute_type = compute_type
 
         # Protect Windows from unstable backend combinations that may crash the process.
-        if platform.system() == "Windows":
+        if platform.system() == "Windows" and not self.is_sherpa_onnx:
             if self.device == "cpu":
                 # int8_float32 is often more stable than pure float32/int8 on Windows CPU
                 # for preventing C0000005 Access Violations in ctranslate2.
@@ -411,6 +738,7 @@ class TranscriberThread(QThread):
         try:
             import time
             start_time = time.time()
+            settings = QSettings("Hectronic", "Secretario")
             
             logging.info(f"Starting transcription for {self.audio_path} (Model: {self.model_size}, Diarization: {self.enable_diarization})")
             _log_transcription_runtime_context(
@@ -426,10 +754,25 @@ class TranscriberThread(QThread):
             # On Windows, run faster-whisper in an isolated subprocess to avoid
             # bringing down the whole app if native libraries crash.
             use_subprocess_isolation = (
+                not self.is_sherpa_onnx
+                and
                 platform.system() == "Windows"
                 and self.backend_preference != "openai-whisper"
             )
-            if self.backend_preference == "openai-whisper":
+            if self.is_sherpa_onnx:
+                self.status_update.emit("Loading sherpa-onnx model...")
+                self.effective_backend = "sherpa-onnx"
+                serialized_segments = _run_sherpa_onnx_transcription(
+                    audio_path=self.audio_path,
+                    language=self.language,
+                    settings=settings,
+                    status_callback=self.status_update.emit,
+                )
+                whisper_segments = [SimpleNamespace(**s) for s in serialized_segments]
+                self.status_update.emit("Transcribing...")
+                if self.total_duration > 0:
+                    self.progress.emit(80)
+            elif self.backend_preference == "openai-whisper":
                 self.status_update.emit("Loading model...")
                 self.effective_backend = "openai-whisper"
                 serialized_segments = _run_openai_whisper_fallback(
