@@ -13,15 +13,17 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 import json
+import re
 import markdown
 from datetime import datetime
-from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QTextEdit, 
+from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QTextEdit,
                              QLineEdit, QPushButton, QComboBox, QLabel, QApplication,
                              QFrame, QDialog, QListWidget, QListWidgetItem, QTabWidget,
                              QDateEdit, QDialogButtonBox, QScrollArea, QSplitter,
-                             QGroupBox, QCheckBox, QCalendarWidget)
-from PyQt6.QtCore import Qt, QSettings, pyqtSignal, QSize, QDate
-from PyQt6.QtGui import QCursor, QIcon, QTextCharFormat, QColor
+                             QGroupBox, QCheckBox, QCalendarWidget, QToolButton,
+                             QMessageBox)
+from PyQt6.QtCore import Qt, QSettings, pyqtSignal, QSize, QDate, QEvent
+from PyQt6.QtGui import QCursor, QIcon, QTextCharFormat, QColor, QPalette
 from src.worker import ChatThread
 from src.database import DBManager
 from src.ui.styles import TEXT_EDIT_STYLE, BUTTON_PRIMARY_STYLE
@@ -319,7 +321,13 @@ class AddContextDialog(QDialog):
             self.reject() # Or show warning
 
 class ChatWidget(QWidget):
-    session_updated = pyqtSignal() 
+    session_updated = pyqtSignal()
+    float_requested = pyqtSignal(object)
+    tab_requested = pyqtSignal(object)
+    minimize_requested = pyqtSignal(object)
+    restore_requested = pyqtSignal(object)
+    close_requested = pyqtSignal(object)
+    title_changed = pyqtSignal(object, str)
 
     def __init__(self, rag_engine, session_id=None, parent=None, initial_contexts=None):
         super().__init__(parent)
@@ -331,6 +339,8 @@ class ChatWidget(QWidget):
         self.current_session_id = session_id
         self.forced_record_ids = set()
         self.forced_record_labels = []
+        self.display_mode = "tab"
+        self.floating_minimized = False
         
         self.init_ui()
         
@@ -341,8 +351,61 @@ class ChatWidget(QWidget):
         if self.current_session_id:
             self.load_session(self.current_session_id)
 
+    def _is_dark_theme(self):
+        app = QApplication.instance()
+        sheet = (app.styleSheet() if app else "").lower()
+        if "#2b2b2b" in sheet and "#eeeeee" in sheet:
+            return True
+        if "#f5f5f5" in sheet and "#333333" in sheet:
+            return False
+        return self.palette().color(QPalette.ColorRole.Window).lightness() < 128
+
     def init_ui(self):
-        main_layout = QHBoxLayout(self)
+        root_layout = QVBoxLayout(self)
+        root_layout.setContentsMargins(0, 0, 0, 0)
+        root_layout.setSpacing(0)
+
+        self.header = QFrame()
+        self.header.setObjectName("chatWidgetHeader")
+        self.header.setFixedHeight(32)
+        header_layout = QHBoxLayout(self.header)
+        header_layout.setContentsMargins(8, 3, 6, 3)
+        header_layout.setSpacing(4)
+
+        self.title_label = QLabel("New Chat")
+        header_layout.addWidget(self.title_label, 1)
+        self.header.installEventFilter(self)
+        self.title_label.installEventFilter(self)
+
+        self.mode_btn = QToolButton()
+        self.mode_btn.setAutoRaise(True)
+        self.mode_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.mode_btn.setFixedSize(20, 20)
+        self.mode_btn.clicked.connect(self._toggle_display_mode)
+        header_layout.addWidget(self.mode_btn)
+
+        self.minimize_btn = QToolButton()
+        self.minimize_btn.setText("_")
+        self.minimize_btn.setToolTip("Minimize to compact chip")
+        self.minimize_btn.setAutoRaise(True)
+        self.minimize_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.minimize_btn.setFixedSize(20, 20)
+        self.minimize_btn.clicked.connect(self._toggle_minimized_state)
+        header_layout.addWidget(self.minimize_btn)
+
+        self.close_btn = QToolButton()
+        self.close_btn.setText("×")
+        self.close_btn.setToolTip("Close chat")
+        self.close_btn.setAutoRaise(True)
+        self.close_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.close_btn.setFixedSize(20, 20)
+        self.close_btn.clicked.connect(lambda: self.close_requested.emit(self))
+        header_layout.addWidget(self.close_btn)
+
+        root_layout.addWidget(self.header)
+
+        self.content_container = QWidget()
+        main_layout = QHBoxLayout(self.content_container)
         main_layout.setContentsMargins(0, 0, 0, 0)
         main_layout.setSpacing(0)
         
@@ -356,7 +419,6 @@ class ChatWidget(QWidget):
         self.display = QTextEdit()
         self.display.setReadOnly(True)
         self.display.setPlaceholderText("Pregunta cualquier cosa sobre tus notas...")
-        self.display.setStyleSheet(TEXT_EDIT_STYLE)
         chat_layout.addWidget(self.display)
 
         # Input Area
@@ -368,7 +430,9 @@ class ChatWidget(QWidget):
 
         self.send_btn = QPushButton("Enviar")
         self.send_btn.clicked.connect(self.send_message)
-        self.send_btn.setStyleSheet(BUTTON_PRIMARY_STYLE)
+        self.send_btn.setProperty("class", "calendar-primary-btn")
+        self.send_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.send_btn.setFixedHeight(36)
         input_layout.addWidget(self.send_btn)
 
         chat_layout.addLayout(input_layout)
@@ -381,6 +445,95 @@ class ChatWidget(QWidget):
         
         self.splitter.setSizes([900, 350])
         main_layout.addWidget(self.splitter)
+        root_layout.addWidget(self.content_container)
+        self._apply_theme_styles()
+        self.set_display_mode("tab")
+        self._refresh_title()
+
+    def _apply_theme_styles(self):
+        is_dark = self._is_dark_theme()
+        header_bg = "rgba(33, 150, 243, 0.15)" if is_dark else "rgba(33, 150, 243, 0.10)"
+        header_border = "rgba(33, 150, 243, 0.45)" if is_dark else "rgba(33, 150, 243, 0.35)"
+        title_color = "#e8eef7" if is_dark else "#2b3b52"
+        btn_color = "#94a3b8" if is_dark else "#546E7A"
+        btn_hover = "rgba(255, 255, 255, 0.08)" if is_dark else "rgba(0, 0, 0, 0.05)"
+        display_bg = "#1f232a" if is_dark else "#ffffff"
+        display_text = "#f3f6fb" if is_dark else "#1a1c1e"
+        input_bg = "#2a2f37" if is_dark else "#f5f5f5"
+        input_border = "#4f5b6f" if is_dark else "#cccccc"
+        display_border = "#404b5c" if is_dark else "#cccccc"
+
+        self.header.setStyleSheet(f"""
+            QFrame#chatWidgetHeader {{
+                background-color: {header_bg};
+                border-bottom: 1px solid {header_border};
+                border-top-left-radius: 11px;
+                border-top-right-radius: 11px;
+            }}
+        """)
+        self.title_label.setStyleSheet(
+            f"font-weight: 600; font-size: 12px; color: {title_color};"
+        )
+
+        action_btn_style = f"""
+            QToolButton {{
+                border: none;
+                border-radius: 6px;
+                padding: 1px;
+                background: transparent;
+                color: {btn_color};
+                font-size: 11px;
+                font-weight: 700;
+            }}
+            QToolButton:hover {{
+                background-color: {btn_hover};
+                color: #2196F3;
+            }}
+        """
+        self.mode_btn.setStyleSheet(action_btn_style)
+        self.minimize_btn.setStyleSheet(action_btn_style)
+        self.close_btn.setStyleSheet(
+            action_btn_style
+            + """
+            QToolButton:hover {
+                background-color: rgba(244, 67, 54, 0.15);
+                color: #f44336;
+            }
+            """
+        )
+        self.display.setStyleSheet(f"""
+            QTextEdit {{
+                background-color: {display_bg};
+                color: {display_text};
+                border: 1px solid {display_border};
+                border-radius: 8px;
+                font-size: 14px;
+                padding: 10px;
+                line-height: 1.5;
+            }}
+        """)
+        self.display.document().setDefaultStyleSheet(
+            f"body {{ color: {display_text}; }} a {{ color: #64b5f6; }}"
+        )
+        self.input_field.setStyleSheet(f"""
+            QLineEdit {{
+                background-color: {input_bg};
+                color: {display_text};
+                border: 1px solid {input_border};
+                border-radius: 18px;
+                padding: 8px 15px;
+                font-size: 13px;
+            }}
+        """)
+
+    def changeEvent(self, event):
+        if event.type() in (
+            QEvent.Type.PaletteChange,
+            QEvent.Type.ApplicationPaletteChange,
+            QEvent.Type.StyleChange,
+        ):
+            self._apply_theme_styles()
+        super().changeEvent(event)
 
     def update_from_global_selection(self, monday, date_str, tags_str):
         """Called by MainWindow when sidebar selection changes."""
@@ -442,6 +595,7 @@ class ChatWidget(QWidget):
             for msg in self.chat_history:
                 role_name = "User" if msg['role'] == 'user' else "Assistant"
                 self.append_to_chat(role_name, msg['content'])
+            self._refresh_title(session.get("name"))
 
     def send_message(self):
         query = self.input_field.text().strip()
@@ -497,15 +651,35 @@ class ChatWidget(QWidget):
                 if rid not in seen_ids:
                     seen_ids.add(rid)
                     records.append(rec)
+
+        tasks = []
+        if self.context_panel.current_week_monday:
+            start_date = self.context_panel.current_week_monday.toString("yyyy-MM-dd")
+            end_date = self.context_panel.current_date_filter
+            tasks = self.db.get_tasks_by_date_range(start_date, end_date, ",".join(tags) if tags else None)
+        elif self.context_panel.current_date_filter:
+            tasks = self.db.get_tasks_by_date(self.context_panel.current_date_filter, ",".join(tags) if tags else None)
+        elif tags:
+            tasks = self.db.get_tasks_by_date_range("1970-01-01", "2099-12-31", ",".join(tags))
         
         rag_ids = None
         if records:
             rag_ids = [str(r['id']) for r in records]
             for r in records:
                 composed = self.db.compose_ai_text(r.get("transcription"), r.get("recording_notes"))
+                record_label = "Meeting" if r.get("type") == "recording" else "Note"
                 context_text_parts.append(
-                    f"[Meeting: {r['title'] or 'Untitled'} ({r['created_at']})]\n{composed}"
+                    f"[{record_label}: {r['title'] or 'Untitled'} ({r['created_at']})]\n{composed}"
                 )
+
+        if tasks:
+            task_lines = []
+            for task in tasks:
+                status = "done" if task.get("is_completed") else "pending"
+                origin = (task.get("task_origin") or task.get("record_title") or "").strip()
+                origin_suffix = f" [{origin}]" if origin else ""
+                task_lines.append(f"- ({status}) {(task.get('content') or '').strip()}{origin_suffix}")
+            context_text_parts.append("[Tasks]\n" + "\n".join(task_lines))
 
         # 3. RAG Search
         if rag_ids or (not tags and not self.context_panel.current_date_filter):
@@ -549,7 +723,17 @@ class ChatWidget(QWidget):
         
         # Construct simplified context for saving
         save_contexts = []
-        if self.context_panel.current_date_filter:
+        if self.context_panel.current_week_monday and self.context_panel.current_date_filter:
+            save_contexts.append(
+                {
+                    "type": "date_range",
+                    "value": {
+                        "start": self.context_panel.current_week_monday.toString("yyyy-MM-dd"),
+                        "end": self.context_panel.current_date_filter,
+                    },
+                }
+            )
+        elif self.context_panel.current_date_filter:
             save_contexts.append({"type": "date", "value": self.context_panel.current_date_filter})
         for t in self.context_panel.get_active_tags():
             save_contexts.append({"type": "tag", "value": t})
@@ -568,17 +752,88 @@ class ChatWidget(QWidget):
             collection = "Chat"
             self.current_session_id = self.db.save_chat_session(name, collection, messages_json, context_data=context_json)
             self.session_updated.emit()
+        self._refresh_title()
 
     def on_chat_error(self, error_msg):
         self.set_busy(False)
         self.append_to_chat("System", f"Error: {error_msg}")
 
     def append_to_chat(self, role, text):
-        color = "blue" if role == "User" else "green" if role == "Assistant" else "red"
+        is_dark = self._is_dark_theme()
+        if role == "User":
+            color = "#64b5f6" if is_dark else "#1565C0" # Bright blue / Deep blue
+        elif role == "Assistant":
+            color = "#81c784" if is_dark else "#2e7d32" # Bright green / Deep green
+        else:
+            color = "#ff8a80" if is_dark else "#d32f2f" # Bright red / Deep red
+            
+        # Forcing pure white/black for maximum contrast and slightly larger font
+        text_color = "#ffffff" if is_dark else "#000000"
+        font_size = "13px"
+        
         html_content = markdown.markdown(text)
-        formatted_text = f"<b><span style='color: {color};'>{role}:</span></b><br>{html_content}<br>"
-        self.display.append(formatted_text)
+        html_content = self._apply_message_html_theme(html_content, text_color, is_dark)
+        cursor = self.display.textCursor()
+        cursor.movePosition(cursor.MoveOperation.End)
+        cursor.insertHtml(
+            f"<div style='margin-bottom: 4px;'><b><span style='color: {color}; font-size: 12px;'>{role}:</span></b></div>"
+        )
+        body_start = cursor.position()
+        cursor.insertHtml(
+            f"<div style='font-size: {font_size}; line-height: 1.4;'>{html_content}</div>"
+        )
+        body_end = cursor.position()
+        cursor.setPosition(body_start)
+        cursor.setPosition(body_end, cursor.MoveMode.KeepAnchor)
+        body_format = cursor.charFormat()
+        body_format.setForeground(QColor(text_color))
+        cursor.mergeCharFormat(body_format)
+        cursor.clearSelection()
+        cursor.insertBlock()
+        self.display.setTextCursor(cursor)
         self.display.verticalScrollBar().setValue(self.display.verticalScrollBar().maximum())
+
+    def _apply_message_html_theme(self, html_content, text_color, is_dark):
+        code_bg = "#2a2f37" if is_dark else "#f3f5f7"
+        link_color = "#8fb8ff" if is_dark else "#1565C0"
+        themed_html = html_content
+
+        tag_styles = {
+            "p": f"color: {text_color};",
+            "li": f"color: {text_color};",
+            "ul": f"color: {text_color};",
+            "ol": f"color: {text_color};",
+            "strong": f"color: {text_color};",
+            "em": f"color: {text_color};",
+            "span": f"color: {text_color};",
+            "blockquote": f"color: {text_color};",
+            "code": f"color: {text_color}; background-color: {code_bg};",
+            "pre": f"color: {text_color}; background-color: {code_bg};",
+            "a": f"color: {link_color};",
+        }
+
+        for tag, style in tag_styles.items():
+            themed_html = re.sub(
+                rf"<{tag}(?P<attrs>[^>]*)>",
+                lambda m: self._merge_inline_style(tag, m.group("attrs"), style),
+                themed_html,
+                flags=re.IGNORECASE,
+            )
+
+        return themed_html
+
+    @staticmethod
+    def _merge_inline_style(tag, attrs, style):
+        attrs = attrs or ""
+        if "style=" in attrs:
+            return re.sub(
+                r'style=(["\'])(.*?)\1',
+                lambda m: f'style={m.group(1)}{m.group(2)} {style}{m.group(1)}',
+                f"<{tag}{attrs}>",
+                count=1,
+                flags=re.IGNORECASE,
+            )
+        return f"<{tag}{attrs} style=\"{style}\">"
 
     def set_busy(self, busy):
         self.send_btn.setEnabled(not busy)
@@ -624,6 +879,13 @@ class ChatWidget(QWidget):
             ctx_value = (ctx or {}).get("value")
             if ctx_type == "date" and ctx_value:
                 self.context_panel.current_date_filter = str(ctx_value)
+            elif ctx_type == "date_range" and isinstance(ctx_value, dict):
+                start = str(ctx_value.get("start") or "").strip()
+                end = str(ctx_value.get("end") or "").strip()
+                start_date = QDate.fromString(start, "yyyy-MM-dd")
+                if start_date.isValid() and end:
+                    self.context_panel.current_week_monday = start_date
+                    self.context_panel.current_date_filter = end
             elif ctx_type == "tag" and ctx_value:
                 tag_value = str(ctx_value).strip()
                 if tag_value and tag_value not in self.context_panel.active_global_tags:
@@ -662,3 +924,79 @@ class ChatWidget(QWidget):
             else:
                 forced_records.append({"id": rid, "title": f"Recording {rid}", "created_at": ""})
         self.context_panel.set_forced_records(forced_records)
+        self._refresh_title()
+
+    def set_display_mode(self, mode):
+        self.display_mode = "floating" if mode == "floating" else "tab"
+        is_floating = self.display_mode == "floating"
+        
+        # Adjust margins to show the host's rounded corners and border
+        m = 0 if not is_floating else 1
+        self.layout().setContentsMargins(m, m, m, m)
+        self.header.setVisible(is_floating)
+        
+        self.mode_btn.setText("⇱" if is_floating else "↗")
+        self.mode_btn.setToolTip("Move chat back to tab" if is_floating else "Move chat to floating bar")
+        self.minimize_btn.setVisible(is_floating)
+        self.context_panel.setVisible(not is_floating and not self.floating_minimized)
+        self.context_panel.setMinimumWidth(0 if is_floating else 280)
+        self.content_container.setVisible(not self.floating_minimized)
+        self.minimize_btn.setText("□" if self.floating_minimized else "_")
+        self.minimize_btn.setToolTip("Restore chat" if self.floating_minimized else "Minimize to title bar")
+        self.header.setCursor(
+            Qt.CursorShape.PointingHandCursor if self.floating_minimized else Qt.CursorShape.ArrowCursor
+        )
+        self.title_label.setCursor(
+            Qt.CursorShape.PointingHandCursor if self.floating_minimized else Qt.CursorShape.ArrowCursor
+        )
+        self.splitter.setSizes([740, 0] if is_floating else [900, 350])
+
+    def _toggle_display_mode(self):
+        if self.display_mode == "floating":
+            self.tab_requested.emit(self)
+        else:
+            self.float_requested.emit(self)
+
+    def _toggle_minimized_state(self):
+        if self.floating_minimized:
+            self.restore_requested.emit(self)
+        else:
+            self.minimize_requested.emit(self)
+
+    def set_floating_minimized(self, minimized):
+        self.floating_minimized = bool(minimized) and self.display_mode == "floating"
+        self.set_display_mode(self.display_mode)
+
+    def eventFilter(self, watched, event):
+        if (
+            watched in (self.header, self.title_label)
+            and self.floating_minimized
+            and event.type() == QEvent.Type.MouseButtonPress
+            and event.button() == Qt.MouseButton.LeftButton
+        ):
+            self.restore_requested.emit(self)
+            return True
+        return super().eventFilter(watched, event)
+
+    def get_chat_title(self):
+        if self.current_session_id:
+            sessions = self.db.fetch_chat_sessions()
+            session = next((s for s in sessions if s.get("id") == self.current_session_id), None)
+            if session and session.get("name"):
+                return session["name"]
+        if self.chat_history:
+            first_message = (self.chat_history[0].get("content") or "").strip()
+            if first_message:
+                return first_message[:30] + ("..." if len(first_message) > 30 else "")
+        labels = list(self.forced_record_labels)
+        labels.extend(self.context_panel.get_active_tags())
+        if self.context_panel.current_date_filter:
+            labels.append(self.context_panel.current_date_filter)
+        if labels:
+            return ", ".join(labels[:2]) + ("..." if len(labels) > 2 else "")
+        return "New Chat"
+
+    def _refresh_title(self, title=None):
+        resolved_title = (title or self.get_chat_title() or "New Chat").strip()
+        self.title_label.setText(resolved_title)
+        self.title_changed.emit(self, resolved_title)

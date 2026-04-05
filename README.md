@@ -11,8 +11,9 @@ Read this in [Español](README_ES.md) | [Asturianu](README_AST.md)
 ## Features
 
 - **Audio Recording & Import**: Record audio directly within the app or import existing files.
-- **Transcription & Diarization**: Automatically transcribe audio and identify different speakers (diarization) using OpenAI's Whisper and pyannote.audio.
+- **Transcription & Diarization**: Automatically transcribe audio and identify different speakers (diarization) using local Whisper backends, `sherpa-onnx`, and pyannote.audio.
 - **Intelligent Search (RAG)**: Use Retrieval-Augmented Generation (RAG) to chat with your recordings and find specific information. Supports Google Gemini and **Ollama** for local execution.
+- **Flexible Chat Windows**: Chats can stay as regular tabs, move to the floating bar, and be minimized into compact chips for quick restore.
 - **Notebooks & Collections**: Organize your recordings into notebooks and collections. Access them directly from the sidebar.
 - **Calendar View**: Browse your recordings by date.
 - **Unified Tools**: Storage cleanup, batch processing, and data export/import in one convenient tab.
@@ -62,6 +63,12 @@ To fully utilize the features of El Secretario, you will need to configure the A
     -   Ensure the Ollama server is running before starting the app.
     -   You can select your preferred local model (e.g., `llama3`, `mistral`) in the application settings.
 
+4.  **Sherpa-ONNX**: (Optional) Alternative local transcription backend.
+    -   Install dependencies from `requirements.txt` so the `sherpa-onnx` Python package is available.
+    -   Download a compatible offline model to a local directory, for example `models/sherpa-onnx`.
+    -   Configure the model directory and model type in **Settings -> Audio** if you select `sherpa-onnx` as your transcription option.
+    -   If the configured local model is missing, El Secretario can automatically download the default official `sherpa-onnx-whisper-tiny` archive on first use.
+
 ## Usage
 
 1.  **Run the application:**
@@ -96,6 +103,8 @@ You can also use:
 - Dependencies pin `ctranslate2<4.7` on Windows to avoid known native crashes in newer builds.
 - If all faster-whisper attempts crash on Windows, El Secretario uses an `openai-whisper` compatibility fallback.
 - Transcription backend is configurable in Settings (`auto`, `faster-whisper`, `openai-whisper`).
+- The shared transcription model selector is available across the application and now also supports `sherpa-onnx` for fully local inference.
+- Sherpa-ONNX settings also support automatic first-run model download and a configurable archive URL.
 - When a fallback path succeeds, El Secretario stores the working transcription configuration in Settings automatically.
 - RAG auto-indexing is configurable in Settings (`auto_index_rag`) and enabled by default (`true`).
 - On Windows, RAG indexing/search operations are isolated in subprocesses by default to reduce native Chroma crashes.

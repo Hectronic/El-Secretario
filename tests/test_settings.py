@@ -19,6 +19,10 @@ def clean_settings(monkeypatch):
     old_startup_daily = settings.value("startup_enqueue_previous_daily_summary")
     old_transcription_backend = settings.value("transcription_backend")
     old_auto_index_rag = settings.value("auto_index_rag")
+    old_sherpa_dir = settings.value("sherpa_onnx_model_dir")
+    old_sherpa_type = settings.value("sherpa_onnx_model_type")
+    old_sherpa_auto_download = settings.value("sherpa_onnx_auto_download")
+    old_sherpa_url = settings.value("sherpa_onnx_model_url")
     
     yield settings
     
@@ -51,6 +55,26 @@ def clean_settings(monkeypatch):
         settings.setValue("auto_index_rag", old_auto_index_rag)
     else:
         settings.remove("auto_index_rag")
+
+    if old_sherpa_dir is not None:
+        settings.setValue("sherpa_onnx_model_dir", old_sherpa_dir)
+    else:
+        settings.remove("sherpa_onnx_model_dir")
+
+    if old_sherpa_type is not None:
+        settings.setValue("sherpa_onnx_model_type", old_sherpa_type)
+    else:
+        settings.remove("sherpa_onnx_model_type")
+
+    if old_sherpa_auto_download is not None:
+        settings.setValue("sherpa_onnx_auto_download", old_sherpa_auto_download)
+    else:
+        settings.remove("sherpa_onnx_auto_download")
+
+    if old_sherpa_url is not None:
+        settings.setValue("sherpa_onnx_model_url", old_sherpa_url)
+    else:
+        settings.remove("sherpa_onnx_model_url")
 
     settings.sync()
     shutil.rmtree(temp_dir, ignore_errors=True)
@@ -169,21 +193,40 @@ def test_audio_panel_defaults_and_save(qtbot, clean_settings):
     clean_settings.remove("auto_index_rag")
     clean_settings.remove("audio_rescan_before_capture")
     clean_settings.remove("audio_prefer_device_index")
+    clean_settings.remove("sherpa_onnx_model_dir")
+    clean_settings.remove("sherpa_onnx_model_type")
+    clean_settings.remove("sherpa_onnx_auto_download")
+    clean_settings.remove("sherpa_onnx_model_url")
 
     widget = SettingsWidget()
     qtbot.addWidget(widget)
 
     assert widget.audio_panel.backend_combo.currentText() == "auto"
+    assert "sherpa-onnx" in [widget.audio_panel.whisper_combo.itemText(i) for i in range(widget.audio_panel.whisper_combo.count())]
+    assert widget.audio_panel.sherpa_model_dir_input.text() == "models/sherpa-onnx"
+    assert widget.audio_panel.sherpa_model_type_combo.currentText() == "auto"
+    assert widget.audio_panel.sherpa_auto_download_check.isChecked() is True
+    assert "github.com/k2-fsa/sherpa-onnx/releases" in widget.audio_panel.sherpa_model_url_input.text()
     assert widget.audio_panel.rag_auto_index_check.isChecked() is True
     assert widget.audio_panel.rescan_before_capture_check.isChecked() is True
     assert widget.audio_panel.prefer_index_check.isChecked() is False
 
+    widget.audio_panel.whisper_combo.setCurrentText("sherpa-onnx")
+    widget.audio_panel.sherpa_model_dir_input.setText("/tmp/sherpa-model")
+    widget.audio_panel.sherpa_model_type_combo.setCurrentText("paraformer")
+    widget.audio_panel.sherpa_auto_download_check.setChecked(False)
+    widget.audio_panel.sherpa_model_url_input.setText("https://example.com/custom-sherpa.tar.bz2")
     widget.audio_panel.backend_combo.setCurrentText("openai-whisper")
     widget.audio_panel.rag_auto_index_check.setChecked(False)
     widget.audio_panel.rescan_before_capture_check.setChecked(False)
     widget.audio_panel.prefer_index_check.setChecked(True)
     widget.save_settings()
 
+    assert clean_settings.value("whisper_model") == "sherpa-onnx"
+    assert clean_settings.value("sherpa_onnx_model_dir") == "/tmp/sherpa-model"
+    assert clean_settings.value("sherpa_onnx_model_type") == "paraformer"
+    assert clean_settings.value("sherpa_onnx_auto_download", True, type=bool) is False
+    assert clean_settings.value("sherpa_onnx_model_url") == "https://example.com/custom-sherpa.tar.bz2"
     assert clean_settings.value("transcription_backend") == "openai-whisper"
     assert clean_settings.value("auto_index_rag", True, type=bool) is False
     assert clean_settings.value("audio_rescan_before_capture", True, type=bool) is False

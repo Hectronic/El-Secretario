@@ -84,6 +84,15 @@ This guide summarizes the development history and evolution of the **Secretario*
 - **Features**:
     - Documented steps to run the application locally.
 
+### 14. Floating Chat UI Improvements (March 12, 2026)
+**Goal**: Fix alignment and overlapping issues in the floating chat bar.
+- **Features**:
+    - **Right Alignment**: Floating chats now align to the bottom right of the window for better accessibility.
+    - **Transparent Bar**: Removed the shared background/border from the bar, making each chat look like an independent floating window.
+    - **Better Resizing**: Improved logic for minimizing/restoring chats, ensuring the bar repositions correctly when its size changes.
+    - **Compact Layout**: Reduced the default width and improved spacing to prevent clutter.
+    - **Adaptive Theme Support**: Colors, borders, and buttons now adapt automatically to Light/Dark themes. Fixed an issue where the floating window background remained white in dark mode by using explicit theme-aware background colors and robust theme detection.
+
 ---
 
 ## Related Side Projects

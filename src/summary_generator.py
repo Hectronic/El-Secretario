@@ -33,6 +33,7 @@ class SummaryGenerator(QThread):
     
     progress = pyqtSignal(int, int)  # current, total
     item_completed = pyqtSignal(str, str, str)  # type ("daily"/"weekly"/"recording"), date/title, summary
+    recording_summary_completed = pyqtSignal(int, str)  # record_id, title
     all_tasks_finished = pyqtSignal(int, int, int)  # local_recordings_count, daily_count, weekly_count
     error = pyqtSignal(str)
     status_update = pyqtSignal(str)
@@ -131,26 +132,9 @@ The summary MUST be written in {language}.
 Transcription:
 {text}"""
             
-            default_task_prompt = """Extract actionable tasks and to-do items from the transcription provided below.
-
-Rules:
-- Format: A simple JSON array of strings.
-- Example: ["Task 1", "Task 2"]
-- If no tasks are found, return [].
-- Language: {language}
-- Output ONLY the JSON array. Do not include markdown code blocks or any other text.
-
-Transcription:
-<transcription>
-{text}
-</transcription>
-
-JSON:"""
-
             daily_prompt_template = settings.value("prompt_daily_summary", default_daily_prompt)
             weekly_prompt_template = settings.value("prompt_weekly_summary", default_weekly_prompt)
             recording_prompt_template = settings.value("prompt_summary", default_recording_prompt)
-            task_prompt_template = settings.value("prompt_task_extraction", default_task_prompt)
             
             language = settings.value("system_language", "Spanish")
             
@@ -198,37 +182,8 @@ JSON:"""
                                 self.db.update_ai_content(rec['id'], summary=rec_summary)
                                 recordings_count += 1
                                 self.item_completed.emit("recording", rec.get('title', 'Untitled'), rec_summary)
+                                self.recording_summary_completed.emit(int(rec['id']), rec.get('title', 'Untitled'))
                                 processed_rec_for_day = True
-                                
-                                # Task extraction
-                                task_prompt = task_prompt_template.replace("{text}", text)
-                                if "{language}" in task_prompt: task_prompt = task_prompt.replace("{language}", language)
-                                
-                                logging.info(f"SummaryGenerator: Requesting tasks for recording {rec['id']}")
-                                task_result = generate_content_with_retry(
-                                    provider=provider,
-                                    settings=settings,
-                                    prompt=task_prompt,
-                                    operation_name=f"SummaryGenerator.task_extraction[{rec['id']}]",
-                                    on_retry=lambda d, a, t, e, rid=rec.get("id"): self._emit_retry_wait("task_extraction", rid, d, a, t, e),
-                                )
-                                if task_result:
-                                    import json
-                                    import re
-                                    clean_tr = task_result.strip()
-                                    match = re.search(r'(\[.*\])', clean_tr, re.DOTALL)
-                                    if match: clean_tr = match.group(1)
-                                    
-                                    try:
-                                        tasks = json.loads(clean_tr)
-                                        if isinstance(tasks, list):
-                                            self.db.delete_tasks_by_record(rec['id'])
-                                            for t_content in tasks:
-                                                if isinstance(t_content, str) and t_content.strip():
-                                                    self.db.save_task(rec['id'], t_content.strip(), rec.get('tags'))
-                                            logging.info(f"SummaryGenerator: Saved {len(tasks)} tasks for record {rec['id']}")
-                                    except Exception as e:
-                                        logging.error(f"SummaryGenerator: Failed to parse tasks JSON for record {rec['id']}: {e}. Raw: {task_result}")
                                 
                     if not rec_summary and param_summary:
                         rec_summary = param_summary

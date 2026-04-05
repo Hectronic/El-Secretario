@@ -22,6 +22,11 @@ from PyQt6.QtCore import Qt, QTimer, pyqtSignal, QSettings
 import logging
 from src.database import DBManager
 from src.ui.components import TagsLineEdit
+from src.transcription_options import (
+    DEFAULT_TRANSCRIPTION_MODEL,
+    get_transcription_model_options,
+    normalize_transcription_model,
+)
 
 Recorder = None
 
@@ -170,8 +175,10 @@ class RecordingInProgressWidget(QWidget):
 
         # Model selector
         self.model_combo = QComboBox()
-        self.model_combo.addItems(["tiny", "base", "small", "medium", "large-v3"])
-        initial_model = self.config.get("model", "base")
+        self.model_combo.addItems(get_transcription_model_options())
+        initial_model = normalize_transcription_model(
+            self.config.get("model", DEFAULT_TRANSCRIPTION_MODEL)
+        )
         self.model_combo.setCurrentText(initial_model)
         options_layout.addRow("Model:", self.model_combo)
 

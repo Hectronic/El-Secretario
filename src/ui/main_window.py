@@ -21,8 +21,9 @@ from PyQt6.QtWidgets import (QMainWindow, QWidget, QVBoxLayout,
                              QHBoxLayout, QListWidget, QPushButton, QToolButton,
                              QLabel, QMessageBox, QListWidgetItem, QComboBox, QInputDialog,
                              QTabWidget, QSplitter, QApplication, QStyle, QLineEdit, QTabBar,
-                             QCalendarWidget, QCheckBox, QFileDialog, QMenu, QProgressBar, QDialog)
-from PyQt6.QtCore import Qt, QSettings, QUrl, QDate, QTimer
+                             QCalendarWidget, QCheckBox, QFileDialog, QMenu, QProgressBar, QDialog,
+                             QFrame)
+from PyQt6.QtCore import Qt, QSettings, QUrl, QDate, QTimer, QPoint, QEvent, QSize, pyqtSignal
 from PyQt6.QtGui import QAction, QIcon, QDesktopServices, QTextCharFormat, QColor, QCursor
 
 from src.database import DBManager
@@ -37,7 +38,12 @@ from src.ui.chat_widget import ChatWidget
 from src.ui.collection_widget import CollectionWidget
 from src.ui.calendar_widget import CalendarWidget
 from src.ui.styles import LIST_WIDGET_STYLE, NEW_CHAT_BUTTON_STYLE, apply_theme
-from src.ui.components import RecordingListItemWidget, SummaryListItemWidget, SidebarTaskCompactWidget
+from src.ui.components import (
+    RecordingListItemWidget,
+    SummaryListItemWidget,
+    SidebarChatSessionWidget,
+    SidebarTaskCompactWidget,
+)
 
 from src.ui.batch_process_widget import BatchProcessWidget
 from src.ui.summary_viewer import SummaryViewerWidget
@@ -53,6 +59,144 @@ from src.ui.chat_history_widget import ChatHistoryWidget
 from src.ui.tasks_list_widget import TasksListWidget, TaskEditDialog
 
 Recorder = None
+
+
+class FloatingChatHost(QFrame):
+    size_changed = pyqtSignal()
+
+    DEFAULT_WIDTH = 420
+    DEFAULT_HEIGHT = 380
+    MIN_WIDTH = 320
+    MIN_HEIGHT = 260
+    MAX_WIDTH = 760
+    MAX_HEIGHT = 680
+    MINIMIZED_WIDTH = 260
+    MINIMIZED_HEIGHT = 32
+    RESIZE_HANDLE_SIZE = 24
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self._preferred_size = QSize(self.DEFAULT_WIDTH, self.DEFAULT_HEIGHT)
+        self._min_size = QSize(self.MIN_WIDTH, self.MIN_HEIGHT)
+        self._max_size = QSize(self.MAX_WIDTH, self.MAX_HEIGHT)
+        self._resize_enabled = True
+        self._resizing = False
+        self._drag_origin = QPoint()
+        self._start_size = QSize(self._preferred_size)
+        self.setMouseTracking(True)
+        self.resize_handle = QLabel(self)
+        self.resize_handle.setObjectName("floatingChatResizeHandle")
+        self.resize_handle.setFixedSize(self.RESIZE_HANDLE_SIZE, self.RESIZE_HANDLE_SIZE)
+        self.resize_handle.setCursor(Qt.CursorShape.SizeFDiagCursor)
+        self.resize_handle.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.resize_handle.setToolTip("Drag to resize")
+        self.resize_handle.setMouseTracking(True)
+        self.resize_handle.installEventFilter(self)
+        self.resize_handle.raise_()
+
+    def sizeHint(self):
+        return QSize(self._preferred_size)
+
+    def minimumSizeHint(self):
+        return QSize(self.minimumWidth(), self.minimumHeight())
+
+    def set_preferred_size(self, size: QSize):
+        bounded = QSize(
+            max(self._min_size.width(), min(size.width(), self._max_size.width())),
+            max(self._min_size.height(), min(size.height(), self._max_size.height())),
+        )
+        self._preferred_size = bounded
+        self.setFixedSize(bounded)
+        self.updateGeometry()
+        self.size_changed.emit()
+
+    def set_size_bounds(self, min_size: QSize, max_size: QSize):
+        self._min_size = QSize(min_size)
+        self._max_size = QSize(max_size)
+
+    def set_resize_enabled(self, enabled: bool):
+        self._resize_enabled = bool(enabled)
+        self.resize_handle.setVisible(self._resize_enabled)
+        if not self._resize_enabled and not self._resizing:
+            self.unsetCursor()
+
+    def _position_resize_handle(self):
+        margin = 3
+        x = margin
+        y = margin
+        self.resize_handle.move(x, y)
+
+    def _in_resize_zone(self, pos):
+        return (
+            self._resize_enabled
+            and pos.x() <= self.RESIZE_HANDLE_SIZE
+            and pos.y() <= self.RESIZE_HANDLE_SIZE
+        )
+
+    def mousePressEvent(self, event):
+        if event.button() == Qt.MouseButton.LeftButton and self._in_resize_zone(event.position().toPoint()):
+            self._resizing = True
+            self._drag_origin = event.globalPosition().toPoint()
+            self._start_size = QSize(self._preferred_size)
+            event.accept()
+            return
+        super().mousePressEvent(event)
+
+    def mouseMoveEvent(self, event):
+        if self._resizing:
+            delta = self._drag_origin - event.globalPosition().toPoint()
+            self.set_preferred_size(
+                QSize(
+                    self._start_size.width() + delta.x(),
+                    self._start_size.height() + delta.y(),
+                )
+            )
+            event.accept()
+            return
+        if self._in_resize_zone(event.position().toPoint()):
+            self.setCursor(Qt.CursorShape.SizeFDiagCursor)
+        else:
+            self.unsetCursor()
+        super().mouseMoveEvent(event)
+
+    def mouseReleaseEvent(self, event):
+        if self._resizing and event.button() == Qt.MouseButton.LeftButton:
+            self._resizing = False
+            event.accept()
+            return
+        super().mouseReleaseEvent(event)
+
+    def leaveEvent(self, event):
+        if not self._resizing:
+            self.unsetCursor()
+        super().leaveEvent(event)
+
+    def resizeEvent(self, event):
+        self._position_resize_handle()
+        super().resizeEvent(event)
+
+    def eventFilter(self, watched, event):
+        if watched is self.resize_handle:
+            if event.type() == QEvent.Type.MouseButtonPress and event.button() == Qt.MouseButton.LeftButton:
+                self._resizing = True
+                self._drag_origin = event.globalPosition().toPoint()
+                self._start_size = QSize(self._preferred_size)
+                self.resize_handle.grabMouse(Qt.CursorShape.SizeFDiagCursor)
+                return True
+            if event.type() == QEvent.Type.MouseMove and self._resizing:
+                delta = self._drag_origin - event.globalPosition().toPoint()
+                self.set_preferred_size(
+                    QSize(
+                        self._start_size.width() + delta.x(),
+                        self._start_size.height() + delta.y(),
+                    )
+                )
+                return True
+            if event.type() == QEvent.Type.MouseButtonRelease and self._resizing:
+                self._resizing = False
+                self.resize_handle.releaseMouse()
+                return True
+        return super().eventFilter(watched, event)
 
 class MainWindow(QMainWindow):
     def __init__(self):
@@ -86,6 +230,7 @@ class MainWindow(QMainWindow):
         self._active_right_section = None
         self._right_sidebar_layout = None
         self._right_sidebar_bottom_spacer_index = None
+        self.floating_chat_hosts = []
         
         apply_theme()
         
@@ -440,7 +585,9 @@ class MainWindow(QMainWindow):
     def init_ui(self):
         central_widget = QWidget()
         self.setCentralWidget(central_widget)
-        main_layout = QHBoxLayout(central_widget)
+        main_layout = QVBoxLayout(central_widget)
+        main_layout.setContentsMargins(0, 0, 0, 0)
+        main_layout.setSpacing(0)
         
         self.splitter = QSplitter(Qt.Orientation.Horizontal)
         main_layout.addWidget(self.splitter)
@@ -810,6 +957,21 @@ class MainWindow(QMainWindow):
         
         self.splitter.addWidget(right_panel)
 
+        self.floating_chat_bar = QFrame(central_widget)
+        self.floating_chat_bar.setObjectName("floatingChatBar")
+        self.floating_chat_bar.setStyleSheet("""
+            QFrame#floatingChatBar {
+                background-color: transparent;
+                border: none;
+            }
+        """)
+        self.floating_chat_bar.setVisible(False)
+        self.floating_chat_layout = QHBoxLayout(self.floating_chat_bar)
+        self.floating_chat_layout.setContentsMargins(0, 0, 0, 0)
+        self.floating_chat_layout.setSpacing(12)
+        self.floating_chat_layout.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignBottom)
+        self.floating_chat_bar.raise_()
+
         # Set initial sizes for the three panels
         # Left: 300 (min), Middle: 700 (rest), Right: 300 (min)
         self.splitter.setSizes([300, 700, 300])
@@ -886,7 +1048,7 @@ class MainWindow(QMainWindow):
         
         # Add as first tab, not closable
         self.central_tabs.addTab(self.welcome_widget, "Welcome")
-        self.central_tabs.tabBar().setTabButton(0, QTabBar.ButtonPosition.RightSide, None) # Remove close button
+        self._set_tab_action_buttons(self.welcome_widget)
 
     def open_item_tab(self, record_id):
         """Open a tab for a record, deciding between recording and note."""
@@ -1065,6 +1227,368 @@ class MainWindow(QMainWindow):
 
 
 
+    def _connect_chat_widget(self, chat_widget):
+        chat_widget.session_updated.connect(self.load_chat_sessions)
+        chat_widget.float_requested.connect(self.float_chat_widget)
+        chat_widget.tab_requested.connect(self.dock_chat_widget_to_tab)
+        chat_widget.minimize_requested.connect(self.minimize_floating_chat)
+        chat_widget.restore_requested.connect(self.restore_floating_chat)
+        chat_widget.close_requested.connect(self.close_chat_widget)
+        chat_widget.title_changed.connect(self._sync_chat_widget_title)
+
+    def _find_chat_tab_index(self, session_id):
+        if session_id is None:
+            return -1
+        for i in range(self.central_tabs.count()):
+            widget = self.central_tabs.widget(i)
+            if isinstance(widget, ChatWidget) and widget.current_session_id == session_id:
+                return i
+        return -1
+
+    def _find_floating_chat_host(self, session_id):
+        if session_id is None:
+            return None
+        for host in self.floating_chat_hosts:
+            widget = host.property("chat_widget")
+            if isinstance(widget, ChatWidget) and widget.current_session_id == session_id:
+                return host
+        return None
+
+    def _is_dark_theme(self):
+        from PyQt6.QtGui import QPalette
+        app = QApplication.instance()
+        sheet = (app.styleSheet() if app else "").lower()
+        if "#2b2b2b" in sheet and "#eeeeee" in sheet:
+            return True
+        if "#f5f5f5" in sheet and "#333333" in sheet:
+            return False
+        return self.palette().color(QPalette.ColorRole.Window).lightness() < 128
+
+    def _apply_floating_chat_host_style(self, host):
+        if host is None:
+            return
+        is_dark = self._is_dark_theme()
+        border_color = "rgba(100, 181, 246, 0.55)" if is_dark else "rgba(84, 110, 122, 0.45)"
+        bg_color = "#232831" if is_dark else "#f5f7fb"
+        handle_color = "#d7e7ff" if is_dark else "#1f5f99"
+        handle_bg = "rgba(20, 26, 34, 0.82)" if is_dark else "rgba(255, 255, 255, 0.92)"
+        host.setStyleSheet(f"""
+            QFrame#floatingChatHost {{
+                background-color: {bg_color};
+                border: 1px solid {border_color};
+                border-radius: 12px;
+            }}
+        """)
+        host.resize_handle.setText("◤")
+        host.resize_handle.setStyleSheet(
+            "QLabel#floatingChatResizeHandle {"
+            f"color: {handle_color};"
+            f"background-color: {handle_bg};"
+            "border: 1px solid rgba(120, 140, 160, 0.35);"
+            "border-radius: 7px;"
+            "font-size: 16px;"
+            "font-weight: 700;"
+            "padding: 0px;"
+            "}"
+        )
+
+    def _wrap_floating_chat(self, chat_widget):
+        host = FloatingChatHost()
+        host.setObjectName("floatingChatHost")
+        host.setProperty("chat_widget", chat_widget)
+        host.setProperty("chat_minimized", False)
+        host.setProperty(
+            "normal_size",
+            QSize(FloatingChatHost.DEFAULT_WIDTH, FloatingChatHost.DEFAULT_HEIGHT),
+        )
+        self._apply_floating_chat_host_style(host)
+        host.set_size_bounds(
+            QSize(FloatingChatHost.MIN_WIDTH, FloatingChatHost.MIN_HEIGHT),
+            QSize(FloatingChatHost.MAX_WIDTH, FloatingChatHost.MAX_HEIGHT),
+        )
+        host.size_changed.connect(lambda h=host: self._on_floating_chat_host_size_changed(h))
+        host.set_preferred_size(QSize(FloatingChatHost.DEFAULT_WIDTH, FloatingChatHost.DEFAULT_HEIGHT))
+        layout = QVBoxLayout(host)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
+        layout.addWidget(chat_widget)
+        self._set_floating_chat_minimized(host, False)
+        return host
+
+    def _on_floating_chat_host_size_changed(self, host):
+        if host is None or host.property("chat_minimized"):
+            self._refresh_floating_chat_bar()
+            return
+        host.setProperty("normal_size", QSize(host.size()))
+        self._refresh_floating_chat_bar()
+
+    def _set_floating_chat_minimized(self, host, minimized):
+        if host is None:
+            return
+        chat_widget = host.property("chat_widget")
+        if chat_widget is None:
+            return
+        minimized = bool(minimized)
+        host.setProperty("chat_minimized", minimized)
+        chat_widget.setVisible(True)
+        chat_widget.set_floating_minimized(minimized)
+        if minimized:
+            if not host.property("normal_size"):
+                host.setProperty("normal_size", QSize(host.size()))
+            else:
+                host.setProperty("normal_size", QSize(host.size()))
+            host.set_size_bounds(
+                QSize(FloatingChatHost.MINIMIZED_WIDTH, FloatingChatHost.MINIMIZED_HEIGHT),
+                QSize(FloatingChatHost.MINIMIZED_WIDTH, FloatingChatHost.MINIMIZED_HEIGHT),
+            )
+            host.set_resize_enabled(False)
+            host.set_preferred_size(
+                QSize(FloatingChatHost.MINIMIZED_WIDTH, FloatingChatHost.MINIMIZED_HEIGHT)
+            )
+            return
+
+        normal_size = host.property("normal_size")
+        if not isinstance(normal_size, QSize):
+            normal_size = QSize(FloatingChatHost.DEFAULT_WIDTH, FloatingChatHost.DEFAULT_HEIGHT)
+        host.set_size_bounds(
+            QSize(FloatingChatHost.MIN_WIDTH, FloatingChatHost.MIN_HEIGHT),
+            QSize(FloatingChatHost.MAX_WIDTH, FloatingChatHost.MAX_HEIGHT),
+        )
+        host.set_resize_enabled(True)
+        host.set_preferred_size(normal_size)
+
+    def _find_floating_chat_host_by_widget(self, chat_widget):
+        return next((h for h in self.floating_chat_hosts if h.property("chat_widget") is chat_widget), None)
+
+    def _remove_floating_host(self, host):
+        if host is None:
+            return
+        self.floating_chat_layout.removeWidget(host)
+        if host in self.floating_chat_hosts:
+            self.floating_chat_hosts.remove(host)
+        host.deleteLater()
+        self._refresh_floating_chat_bar()
+
+    def _refresh_floating_chat_bar(self):
+        visible = bool(self.floating_chat_hosts)
+        self.floating_chat_bar.setVisible(visible)
+        if visible:
+            for host in self.floating_chat_hosts:
+                self._apply_floating_chat_host_style(host)
+                self.floating_chat_layout.setAlignment(host, Qt.AlignmentFlag.AlignBottom)
+            # Use singleShot to let the layout settle before calculating positions
+            QTimer.singleShot(0, self._reposition_floating_chat_bar)
+            self.floating_chat_bar.raise_()
+
+    def _reposition_floating_chat_bar(self):
+        if not hasattr(self, "floating_chat_bar") or self.floating_chat_bar is None:
+            return
+        parent = self.centralWidget()
+        if parent is None:
+            return
+        
+        margin = 16
+        spacing = self.floating_chat_layout.spacing()
+        
+        # Calculate required width based on children
+        total_width = 0
+        max_height = 0
+        visible_hosts = 0
+        for i in range(self.floating_chat_layout.count()):
+            item = self.floating_chat_layout.itemAt(i)
+            widget = item.widget()
+            if widget and widget.isVisible():
+                total_width += widget.width()
+                max_height = max(max_height, widget.height())
+                visible_hosts += 1
+        
+        if visible_hosts > 0:
+            total_width += spacing * (visible_hosts - 1)
+        
+        available_width = max(260, parent.width() - (margin * 2))
+        width = min(total_width, available_width)
+        height = max_height
+        
+        # Add layout margins to the final size
+        width += self.floating_chat_layout.contentsMargins().left() + self.floating_chat_layout.contentsMargins().right()
+        height += self.floating_chat_layout.contentsMargins().top() + self.floating_chat_layout.contentsMargins().bottom()
+
+        self.floating_chat_bar.resize(width, height)
+        
+        status = self.statusBar()
+        if status is not None and status.isVisible():
+            status_top = parent.mapFrom(self, QPoint(0, status.geometry().top())).y()
+            y = status_top - height
+        else:
+            y = parent.height() - height
+            
+        x = parent.width() - width - margin
+        self.floating_chat_bar.move(x, max(0, y))
+
+    def changeEvent(self, event):
+        if event.type() in (
+            QEvent.Type.PaletteChange,
+            QEvent.Type.ApplicationPaletteChange,
+            QEvent.Type.StyleChange,
+        ) and hasattr(self, "floating_chat_bar"):
+            self._refresh_floating_chat_bar()
+        super().changeEvent(event)
+
+    def _tab_title_for_chat(self, chat_widget):
+        return chat_widget.get_chat_title()
+
+    def _set_tab_action_buttons(self, widget):
+        if widget is None:
+            return
+        index = self.central_tabs.indexOf(widget)
+        if index == -1:
+            return
+
+        tab_bar = self.central_tabs.tabBar()
+
+        if isinstance(widget, WelcomeWidget):
+            tab_bar.setTabButton(index, QTabBar.ButtonPosition.LeftSide, None)
+            tab_bar.setTabButton(index, QTabBar.ButtonPosition.RightSide, None)
+            return
+
+        if not isinstance(widget, ChatWidget):
+            return
+
+        buttons = QWidget(tab_bar)
+        layout = QHBoxLayout(buttons)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(2)
+
+        float_btn = QToolButton(buttons)
+        float_btn.setText("↗")
+        float_btn.setToolTip("Move chat to floating window")
+        float_btn.setAutoRaise(True)
+        float_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        float_btn.setFixedSize(18, 18)
+        float_btn.setStyleSheet("""
+            QToolButton {
+                border: none;
+                border-radius: 6px;
+                padding: 0px;
+                background: transparent;
+                color: #6f8698;
+                font-size: 11px;
+                font-weight: 700;
+            }
+            QToolButton:hover {
+                background-color: rgba(33, 150, 243, 0.16);
+                color: #2196F3;
+            }
+        """)
+        float_btn.clicked.connect(lambda _checked=False, w=widget: self.float_chat_widget(w))
+        layout.addWidget(float_btn)
+
+        close_btn = QToolButton(buttons)
+        close_btn.setText("×")
+        close_btn.setToolTip("Close tab")
+        close_btn.setAutoRaise(True)
+        close_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        close_btn.setFixedSize(18, 18)
+        close_btn.setStyleSheet("""
+            QToolButton {
+                border: none;
+                border-radius: 6px;
+                padding: 0px;
+                background: transparent;
+                color: #6f8698;
+                font-size: 12px;
+                font-weight: 700;
+            }
+            QToolButton:hover {
+                background-color: rgba(244, 67, 54, 0.15);
+                color: #f44336;
+            }
+        """)
+        close_btn.clicked.connect(
+            lambda _checked=False, w=widget: self.close_tab(self.central_tabs.indexOf(w))
+        )
+        layout.addWidget(close_btn)
+
+        tab_bar.setTabButton(index, QTabBar.ButtonPosition.RightSide, buttons)
+
+    def _sync_chat_widget_title(self, chat_widget, title):
+        tab_index = self.central_tabs.indexOf(chat_widget)
+        if tab_index != -1:
+            self.central_tabs.setTabText(tab_index, title)
+        host = self._find_floating_chat_host_by_widget(chat_widget)
+        if host is not None:
+            host.setToolTip(title)
+
+    def float_chat_widget(self, chat_widget):
+        if not isinstance(chat_widget, ChatWidget):
+            return
+        host = self._find_floating_chat_host_by_widget(chat_widget)
+        if host is not None:
+            self._set_floating_chat_minimized(host, False)
+            return
+        tab_index = self.central_tabs.indexOf(chat_widget)
+        if tab_index != -1:
+            self.central_tabs.removeTab(tab_index)
+        chat_widget.setParent(None)
+        chat_widget.set_display_mode("floating")
+        host = self._wrap_floating_chat(chat_widget)
+        self.floating_chat_hosts.append(host)
+        self.floating_chat_layout.insertWidget(
+            self.floating_chat_layout.count(),
+            host,
+            0,
+            Qt.AlignmentFlag.AlignBottom,
+        )
+        self._sync_chat_widget_title(chat_widget, chat_widget.get_chat_title())
+        self._refresh_floating_chat_bar()
+
+    def minimize_floating_chat(self, chat_widget):
+        if not isinstance(chat_widget, ChatWidget):
+            return
+        host = self._find_floating_chat_host_by_widget(chat_widget)
+        if host is None:
+            self.float_chat_widget(chat_widget)
+            host = self._find_floating_chat_host_by_widget(chat_widget)
+        self._set_floating_chat_minimized(host, True)
+        self._refresh_floating_chat_bar()
+
+    def restore_floating_chat(self, chat_widget):
+        if not isinstance(chat_widget, ChatWidget):
+            return
+        host = self._find_floating_chat_host_by_widget(chat_widget)
+        self._set_floating_chat_minimized(host, False)
+        self._refresh_floating_chat_bar()
+
+    def dock_chat_widget_to_tab(self, chat_widget):
+        if not isinstance(chat_widget, ChatWidget):
+            return
+        host = self._find_floating_chat_host_by_widget(chat_widget)
+        if host is None:
+            tab_index = self.central_tabs.indexOf(chat_widget)
+            if tab_index != -1:
+                self.central_tabs.setCurrentIndex(tab_index)
+            return
+        self.floating_chat_layout.removeWidget(host)
+        if host in self.floating_chat_hosts:
+            self.floating_chat_hosts.remove(host)
+        chat_widget.setParent(None)
+        chat_widget.set_display_mode("tab")
+        host.deleteLater()
+        title = self._tab_title_for_chat(chat_widget)
+        index = self.central_tabs.addTab(chat_widget, title)
+        self.central_tabs.setCurrentIndex(index)
+        self._set_tab_action_buttons(chat_widget)
+        self._refresh_floating_chat_bar()
+
+    def close_chat_widget(self, chat_widget):
+        if not isinstance(chat_widget, ChatWidget):
+            return
+        tab_index = self.central_tabs.indexOf(chat_widget)
+        if tab_index != -1:
+            self.close_tab(tab_index)
+            return
+        self.close_floating_chat(chat_widget)
+
     def open_chat_tab(self, session_id=None, initial_contexts=None):
         if not self.rag:
             QMessageBox.warning(self, "RAG Error", "RAG Engine not initialized.")
@@ -1072,28 +1596,30 @@ class MainWindow(QMainWindow):
         
         # Check if already open (only for sessions)
         if session_id:
-            for i in range(self.central_tabs.count()):
-                widget = self.central_tabs.widget(i)
-                if isinstance(widget, ChatWidget):
-                    if widget.current_session_id == session_id:
-                        self.central_tabs.setCurrentIndex(i)
-                        return
+            tab_index = self._find_chat_tab_index(session_id)
+            if tab_index != -1:
+                self.central_tabs.setCurrentIndex(tab_index)
+                return self.central_tabs.widget(tab_index)
+            floating_host = self._find_floating_chat_host(session_id)
+            if floating_host is not None:
+                chat_widget = floating_host.property("chat_widget")
+                self.dock_chat_widget_to_tab(chat_widget)
+                return chat_widget
 
         chat_widget = ChatWidget(self.rag, session_id, self, initial_contexts=initial_contexts)
-        chat_widget.session_updated.connect(self.load_chat_sessions)
+        self._connect_chat_widget(chat_widget)
         
-        title = "New Chat"
-        if session_id:
-            sessions = self.db.fetch_chat_sessions()
-            session = next((s for s in sessions if s['id'] == session_id), None)
-            if session:
-                title = session['name']
-        elif initial_contexts:
-            labels = [c['label'] for c in initial_contexts]
-            title = f"Chat: {', '.join(labels)}"
+        title = self._tab_title_for_chat(chat_widget)
         
         index = self.central_tabs.addTab(chat_widget, title)
         self.central_tabs.setCurrentIndex(index)
+        self._set_tab_action_buttons(chat_widget)
+        return chat_widget
+
+    def open_floating_chat(self, session_id=None, initial_contexts=None):
+        chat_widget = self.open_chat_tab(session_id=session_id, initial_contexts=initial_contexts)
+        if isinstance(chat_widget, ChatWidget):
+            self.float_chat_widget(chat_widget)
         return chat_widget
 
     def open_chat_tab_from_current_context(self):
@@ -1188,12 +1714,34 @@ class MainWindow(QMainWindow):
         if self.central_tabs.count() == 0:
             self.show_welcome_screen()
 
+    def close_floating_chat(self, chat_widget):
+        if not isinstance(chat_widget, ChatWidget):
+            return
+        host = self._find_floating_chat_host_by_widget(chat_widget)
+        if host is None:
+            return
+        if hasattr(chat_widget, "cleanup"):
+            try:
+                chat_widget.cleanup()
+            except Exception:
+                pass
+        chat_widget.setParent(None)
+        self._remove_floating_host(host)
+        chat_widget.deleteLater()
+
     def show_tab_context_menu(self, point):
         index = self.central_tabs.tabBar().tabAt(point)
         if index == -1:
             return
 
         menu = QMenu(self)
+        widget = self.central_tabs.widget(index)
+
+        if isinstance(widget, ChatWidget):
+            float_action = QAction("Move to Floating Window", self)
+            float_action.triggered.connect(lambda: self.float_chat_widget(widget))
+            menu.addAction(float_action)
+            menu.addSeparator()
         
         close_action = QAction("Close", self)
         close_action.triggered.connect(lambda: self.close_tab(index))
@@ -1595,6 +2143,12 @@ class MainWindow(QMainWindow):
                 contexts.append({"type": "tag", "value": tag, "label": tag})
         self.open_chat_tab(initial_contexts=contexts)
 
+    def open_chat_with_contexts(self, contexts, floating=False):
+        normalized = list(contexts or [])
+        if floating:
+            return self.open_floating_chat(initial_contexts=normalized)
+        return self.open_chat_tab(initial_contexts=normalized)
+
     def on_history_item_clicked(self, item):
         data = item.data(Qt.ItemDataRole.UserRole)
         type_ = data.get('type', 'recording')
@@ -1630,6 +2184,7 @@ class MainWindow(QMainWindow):
         viewer.regenerate_requested.connect(self.regenerate_summary)
         viewer.open_recording_requested.connect(self.open_recording_tab)
         viewer.start_chat_requested.connect(self.open_chat_tab_with_filters)
+        viewer.start_chat_contexts_requested.connect(self.open_chat_with_contexts)
         # viewer.close_requested.connect(...) # If we added a close signal
         
         type_ = summary_data.get('type')
@@ -1686,9 +2241,13 @@ class MainWindow(QMainWindow):
         self.sessions_list.clear()
         sessions = self.db.fetch_chat_sessions()
         for s in sessions:
-            item = QListWidgetItem(f"{s['name']} ({s['created_at'][:16]})")
+            item = QListWidgetItem()
             item.setData(Qt.ItemDataRole.UserRole, s)
             self.sessions_list.addItem(item)
+            widget = SidebarChatSessionWidget(s, parent=self.sessions_list)
+            widget.expand_requested.connect(lambda _session_id=None: self.open_chat_history_tab())
+            item.setSizeHint(widget.sizeHint())
+            self.sessions_list.setItemWidget(item, widget)
         for i in range(self.central_tabs.count()):
             widget = self.central_tabs.widget(i)
             if isinstance(widget, ChatHistoryWidget):
@@ -1842,11 +2401,14 @@ class MainWindow(QMainWindow):
 
         menu = QMenu(self)
         open_action = menu.addAction("Open")
+        open_floating_action = menu.addAction("Open Floating")
         delete_action = menu.addAction("Delete")
 
         chosen = menu.exec(self.sessions_list.viewport().mapToGlobal(point))
         if chosen == open_action:
             self.open_chat_tab(session["id"])
+        elif chosen == open_floating_action:
+            self.open_floating_chat(session["id"])
         elif chosen == delete_action:
             self.delete_chat_session_by_id(session["id"])
 
@@ -1874,6 +2436,14 @@ class MainWindow(QMainWindow):
                 self.central_tabs.removeTab(i)
                 widget.deleteLater()
                 break
+        floating_host = self._find_floating_chat_host(session["id"])
+        if floating_host is not None:
+            widget = floating_host.property("chat_widget")
+            if isinstance(widget, ChatWidget):
+                widget.setParent(None)
+            self._remove_floating_host(floating_host)
+            if isinstance(widget, ChatWidget):
+                widget.deleteLater()
 
     def delete_selected_chat_session(self):
         item = self.sessions_list.currentItem()
@@ -1913,6 +2483,10 @@ class MainWindow(QMainWindow):
                 widget.update_from_global_selection(self.current_week_monday, self.current_date_filter, tags_filter or "")
             elif isinstance(widget, TasksListWidget):
                 widget.set_global_filters(self.current_week_monday, self.current_date_filter, tags_filter)
+        for host in self.floating_chat_hosts:
+            widget = host.property("chat_widget")
+            if isinstance(widget, ChatWidget):
+                widget.update_from_global_selection(self.current_week_monday, self.current_date_filter, tags_filter or "")
 
     def prev_week_sidebar(self):
         """Move to previous week, showing full week by default (selecting Sunday)."""
@@ -2228,6 +2802,14 @@ class MainWindow(QMainWindow):
                     widget.cleanup()
                 except Exception:
                     pass
+        for host in list(self.floating_chat_hosts):
+            widget = host.property("chat_widget")
+            if widget and hasattr(widget, "cleanup"):
+                try:
+                    widget.cleanup()
+                except Exception:
+                    pass
+            self._remove_floating_host(host)
 
         if self.recorder and self.recorder.is_recording:
             try:
@@ -2246,4 +2828,8 @@ class MainWindow(QMainWindow):
             pass
 
         super().closeEvent(event)
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        self._reposition_floating_chat_bar()
         logging.warning("MainWindow.closeEvent completed.")

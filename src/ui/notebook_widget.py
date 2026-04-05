@@ -19,7 +19,8 @@ from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QPushButton,
                              QLabel, QTextEdit, QDialog, QDialogButtonBox, QProgressBar)
 from PyQt6.QtCore import Qt, pyqtSignal, QTimer, QSettings
 from src.ui.styles import LIST_WIDGET_STYLE
-from src.worker import TranscriberThread
+from src.worker import TranscriberThread, get_transcription_preflight_error
+from src.transcription_options import get_saved_transcription_model
 
 class NoteEntryWidget(QWidget):
     def __init__(self, entry, parent=None):
@@ -296,13 +297,18 @@ class NotebookWidget(QWidget):
         force_cpu = settings.value("force_cpu", False, type=bool)
         compute_type = settings.value("compute_type", "auto")
         transcription_backend = settings.value("transcription_backend", "auto")
+        model_size = get_saved_transcription_model(settings)
+        preflight_error = get_transcription_preflight_error(model_size, settings)
+        if preflight_error:
+            QMessageBox.critical(self, "Transcription Error", preflight_error)
+            return
         if compute_type == "auto":
             compute_type = None
 
         self._cleanup_transcriber_thread()
         self.transcriber_thread = TranscriberThread(
             file_path,
-            model_size="base",
+            model_size=model_size,
             compute_type=compute_type,
             force_cpu=force_cpu,
             backend_preference=transcription_backend,
@@ -310,7 +316,6 @@ class NotebookWidget(QWidget):
         self.transcriber_thread.finished.connect(lambda res: self.on_transcription_finished(entry_id, res))
         self.transcriber_thread.error.connect(lambda err: self.on_transcription_error(entry_id, err))
         self.transcriber_thread.finished.connect(self._clear_transcriber_thread_ref)
-        self.transcriber_thread.error.connect(self._clear_transcriber_thread_ref)
         self.transcriber_thread.start()
 
     def on_transcription_finished(self, entry_id, result):

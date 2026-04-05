@@ -84,3 +84,14 @@ class TestRecordingInProgressLayout(unittest.TestCase):
         finally:
             widget.cleanup()
             widget.deleteLater()
+
+    @patch("src.ui.recording_in_progress_widget.DBManager")
+    def test_model_combo_includes_sherpa_onnx(self, mock_db):
+        mock_db.return_value.get_all_tags.return_value = []
+        widget = RecordingInProgressWidget(recorder=_FakeRecorder(), config={})
+        try:
+            options = [widget.model_combo.itemText(i) for i in range(widget.model_combo.count())]
+            self.assertIn("sherpa-onnx", options)
+        finally:
+            widget.cleanup()
+            widget.deleteLater()

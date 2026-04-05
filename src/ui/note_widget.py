@@ -183,6 +183,9 @@ class NoteWidget(QWidget):
                     self.title_input.text() or f"Note {self.current_record_id}"
                 )
                 return
+        elif task_type in {"summary", "task_extraction"}:
+            QMessageBox.warning(self, "Error", "Summary and task extraction must run through the central queue.")
+            return
 
         settings = QSettings("Hectronic", "Secretario")
         from src.ai_provider import validate_ai_provider_config

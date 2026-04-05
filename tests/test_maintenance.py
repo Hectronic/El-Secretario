@@ -77,20 +77,13 @@ class TestMaintenance(unittest.TestCase):
             os.path.join(self.test_dir, "test_maint_2.wav")
         ]
         
-        # Mock message box to return Yes
-        with patch('PyQt6.QtWidgets.QMessageBox.question', return_value=0x00004000): # Yes
-             self.widget.clean_up()
-             
-             # Since it uses a timer, we need to process events or wait
-             # But for unit test, we can just call process_next_file manually until done? 
-             # Or better, just refactor clean_up to be testable or trust the loop.
-             # Ideally we mock QTimer.singleShot to execute immediately.
-             
-        # Mock QTimer to run immediately
-        # Actually, let's just manually trigger the file processing loop for the test
-        # self.widget.files_to_delete has been set by clean_up
-        
-        while self.widget.files_to_delete:
+        # Keep dialogs patched while we force the processing loop.
+        with patch('PyQt6.QtWidgets.QMessageBox.question', return_value=0x00004000), \
+             patch('PyQt6.QtWidgets.QMessageBox.information') as _info_mock:
+            self.widget.clean_up()
+            while self.widget.files_to_delete:
+                self.widget.process_next_file()
+            # One extra tick to execute the "no pending files" branch and finish cleanup.
             self.widget.process_next_file()
             
         # Verify files are gone
@@ -99,6 +92,20 @@ class TestMaintenance(unittest.TestCase):
         
         # Verify non-diarized file still exists
         self.assertTrue(os.path.exists(os.path.join(self.test_dir, "test_maint_3.wav")))
+
+    def test_cleanup_finish_is_idempotent_with_manual_process_calls(self):
+        self.widget.reclaimable_files = [
+            os.path.join(self.test_dir, "test_maint_1.wav"),
+        ]
+        with patch('PyQt6.QtWidgets.QMessageBox.question', return_value=0x00004000), \
+             patch('PyQt6.QtWidgets.QMessageBox.information') as info_mock:
+            self.widget.clean_up()
+            # Manual invocations emulate old test behavior while timers are also queued.
+            self.widget.process_next_file()
+            self.widget.process_next_file()
+            self.widget.process_next_file()
+
+        self.assertEqual(info_mock.call_count, 1)
 
 if __name__ == '__main__':
     unittest.main()

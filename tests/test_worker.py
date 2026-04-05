@@ -15,10 +15,20 @@
 import unittest
 import sys
 import types
+import builtins
 from unittest.mock import MagicMock, patch
-from src.worker import TranscriberThread, SearchThread, ChatThread
+from src.worker import (
+    TranscriberThread,
+    SearchThread,
+    ChatThread,
+    _ensure_sherpa_onnx_model_ready,
+    get_transcription_preflight_error,
+    _resolve_sherpa_onnx_model_config,
+    _run_sherpa_onnx_transcription,
+)
 import os
 import numpy as np
+import tempfile
 
 class TestTranscriberThread(unittest.TestCase):
     @patch('src.worker.WhisperModel')
@@ -336,6 +346,158 @@ class TestTranscriberThread(unittest.TestCase):
                 )
 
         self.assertIn("FFmpeg is not installed", str(ctx.exception))
+
+    def test_resolve_sherpa_onnx_model_config_detects_transducer_layout(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            for filename in ("tokens.txt", "encoder.onnx", "decoder.onnx", "joiner.onnx"):
+                with open(os.path.join(tmpdir, filename), "w", encoding="utf-8") as f:
+                    f.write("x")
+
+            config = _resolve_sherpa_onnx_model_config(tmpdir, "auto")
+
+        self.assertEqual(config["type"], "transducer")
+        self.assertTrue(config["encoder"].endswith("encoder.onnx"))
+
+    def test_run_sherpa_onnx_transcription_requires_installed_package(self):
+        settings = MagicMock()
+        settings.value.side_effect = lambda key, default=None, type=None: {
+            "sherpa_onnx_model_dir": "/tmp/missing",
+            "sherpa_onnx_model_type": "auto",
+        }.get(key, default)
+
+        original_import = builtins.__import__
+
+        def failing_import(name, *args, **kwargs):
+            if name == "sherpa_onnx":
+                raise ImportError("missing sherpa_onnx")
+            return original_import(name, *args, **kwargs)
+
+        with patch("builtins.__import__", side_effect=failing_import):
+            with self.assertRaises(RuntimeError) as ctx:
+                _run_sherpa_onnx_transcription(
+                    audio_path="test.wav",
+                    language=None,
+                    settings=settings,
+                )
+
+        self.assertIn("sherpa-onnx", str(ctx.exception))
+
+    def test_run_sherpa_onnx_transcription_returns_single_segment(self):
+        fake_recognizer = MagicMock()
+        fake_stream = MagicMock()
+        fake_stream.result = types.SimpleNamespace(text="hello from sherpa")
+        fake_recognizer.create_stream.return_value = fake_stream
+        fake_module = types.SimpleNamespace(
+            OfflineRecognizer=types.SimpleNamespace(
+                from_paraformer=MagicMock(return_value=fake_recognizer)
+            )
+        )
+        fake_soundfile = types.SimpleNamespace(
+            read=MagicMock(return_value=(np.array([0.1, -0.2, 0.3], dtype=np.float32), 16000))
+        )
+        settings = MagicMock()
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            for filename in ("tokens.txt", "model.onnx"):
+                with open(os.path.join(tmpdir, filename), "w", encoding="utf-8") as f:
+                    f.write("x")
+            settings.value.side_effect = lambda key, default=None, type=None: {
+                "sherpa_onnx_model_dir": tmpdir,
+                "sherpa_onnx_model_type": "paraformer",
+            }.get(key, default)
+            with patch.dict(
+                sys.modules,
+                {
+                    "sherpa_onnx": fake_module,
+                    "soundfile": fake_soundfile,
+                },
+            ):
+                segments = _run_sherpa_onnx_transcription(
+                    audio_path="test.wav",
+                    language="es",
+                    settings=settings,
+                )
+
+        fake_recognizer.decode_streams.assert_called_once()
+        self.assertEqual(segments, [{"start": 0.0, "end": 3 / 16000, "text": "hello from sherpa"}])
+
+    def test_transcription_preflight_error_for_missing_sherpa_dir(self):
+        settings = MagicMock()
+        settings.value.side_effect = lambda key, default=None, type=None: {
+            "sherpa_onnx_model_dir": "/tmp/does-not-exist-secretario",
+            "sherpa_onnx_auto_download": False,
+        }.get(key, default)
+
+        error = get_transcription_preflight_error("sherpa-onnx", settings)
+
+        self.assertIn("does not exist", error)
+        self.assertIn("Settings -> Audio", error)
+
+    def test_transcription_preflight_allows_missing_sherpa_dir_when_auto_download_enabled(self):
+        settings = MagicMock()
+        settings.value.side_effect = lambda key, default=None, type=None: {
+            "sherpa_onnx_model_dir": "/tmp/does-not-exist-secretario",
+            "sherpa_onnx_auto_download": True,
+        }.get(key, default)
+
+        error = get_transcription_preflight_error("sherpa-onnx", settings)
+
+        self.assertIsNone(error)
+
+    @patch("src.worker._download_sherpa_onnx_model")
+    @patch("src.worker._resolve_existing_sherpa_model_dir")
+    def test_ensure_sherpa_model_ready_auto_downloads_when_missing(
+        self, mock_resolve_existing, mock_download
+    ):
+        settings = MagicMock()
+        settings.value.side_effect = lambda key, default=None, type=None: {
+            "sherpa_onnx_model_dir": "/tmp/sherpa-model",
+            "sherpa_onnx_model_type": "auto",
+            "sherpa_onnx_auto_download": True,
+            "sherpa_onnx_model_url": "https://example.com/model.tar.bz2",
+        }.get(key, default)
+        expected_config = {"type": "whisper", "tokens": "/tmp/sherpa-model/tokens.txt"}
+        mock_resolve_existing.side_effect = [
+            (None, None),
+            ("/tmp/sherpa-model/extracted", expected_config),
+        ]
+
+        model_dir, model_config = _ensure_sherpa_onnx_model_ready(settings)
+
+        mock_download.assert_called_once()
+        self.assertEqual(model_dir, "/tmp/sherpa-model/extracted")
+        self.assertEqual(model_config, expected_config)
+        settings.setValue.assert_any_call("sherpa_onnx_model_dir", "/tmp/sherpa-model/extracted")
+
+    @patch("src.worker.QSettings")
+    @patch("src.worker.os.path.getsize", return_value=100)
+    @patch("src.worker._run_sherpa_onnx_transcription")
+    def test_sherpa_onnx_model_uses_sherpa_backend_and_persists_settings(
+        self, mock_sherpa_run, _mock_getsize, MockQSettings
+    ):
+        mock_sherpa_run.return_value = [{"start": 0.0, "end": 1.0, "text": "local sherpa ok"}]
+        settings_instance = MagicMock()
+        MockQSettings.return_value = settings_instance
+
+        thread = TranscriberThread(
+            "test.wav",
+            model_size="sherpa-onnx",
+            backend_preference="auto",
+            total_duration=1.0,
+        )
+        thread.finished = MagicMock()
+        thread.progress = MagicMock()
+        thread.status_update = MagicMock()
+        thread.error = MagicMock()
+
+        thread.run()
+
+        mock_sherpa_run.assert_called_once()
+        self.assertEqual(thread.effective_backend, "sherpa-onnx")
+        settings_instance.setValue.assert_any_call("transcription_backend", "sherpa-onnx")
+        settings_instance.setValue.assert_any_call("whisper_model", "sherpa-onnx")
+        thread.finished.emit.assert_called_once()
+        thread.error.emit.assert_not_called()
 
     @patch("src.worker.QSettings")
     @patch("src.worker.os.path.getsize", return_value=100)

@@ -9,8 +9,9 @@ El Secretario es una herramienta inteligente de transcripción y organización d
 ## Características
 
 - **Grabación e Importación de Audio**: Graba audio directamente en la aplicación o importa archivos existentes.
-- **Transcripción y Diarización**: Transcribe audio automáticamente e identifica diferentes hablantes (diarización) utilizando Whisper de OpenAI y pyannote.audio.
+- **Transcripción y Diarización**: Transcribe audio automáticamente e identifica diferentes hablantes (diarización) utilizando backends locales de Whisper, `sherpa-onnx` y pyannote.audio.
 - **Búsqueda Inteligente (RAG)**: Utiliza Generación Aumentada por Recuperación (RAG) para chatear con tus grabaciones y encontrar información específica. Soporta Google Gemini y **Ollama** para ejecución local.
+- **Ventanas de Chat Flexibles**: Los chats pueden quedarse como pestañas normales, moverse a la barra flotante y minimizarse en fichas compactas para restaurarlos rápido.
 - **Libretas y Colecciones**: Organiza tus grabaciones en libretas y colecciones. Accede a ellas directamente desde la barra lateral.
 - **Vista de Calendario**: Explora tus grabaciones por fecha.
 - **Herramientas Unificadas**: Limpieza de almacenamiento, procesamiento por lotes y exportación/importación de datos en una sola pestaña.
@@ -60,6 +61,12 @@ Para utilizar plenamente las funciones de El Secretario, deberás configurar los
     -   Asegúrate de que el servidor de Ollama esté funcionando antes de iniciar la aplicación.
     -   Puedes seleccionar tu modelo local preferido (ej. `llama3`, `mistral`) en la configuración de la aplicación.
 
+4.  **Sherpa-ONNX**: (Opcional) Backend alternativo de transcripción local.
+    -   Instala las dependencias de `requirements.txt` para disponer del paquete Python `sherpa-onnx`.
+    -   Descarga un modelo offline compatible en un directorio local, por ejemplo `models/sherpa-onnx`.
+    -   Configura la ruta del modelo y su tipo en **Ajustes -> Audio** si seleccionas `sherpa-onnx` como opción de transcripción.
+    -   Si falta el modelo local configurado, El Secretario puede descargar automáticamente en el primer uso el archivo oficial por defecto `sherpa-onnx-whisper-tiny`.
+
 ## Uso
 
 1.  **Ejecutar la aplicación:**
@@ -79,6 +86,8 @@ Para utilizar plenamente las funciones de El Secretario, deberás configurar los
 - Las dependencias fijan `ctranslate2<4.7` en Windows para evitar crashes nativos conocidos en versiones más nuevas.
 - Si todos los intentos con faster-whisper se caen en Windows, El Secretario usa un fallback de compatibilidad con `openai-whisper`.
 - El backend de transcripción se puede configurar en Ajustes (`auto`, `faster-whisper`, `openai-whisper`).
+- El selector compartido de transcripción está unificado en toda la aplicación y ahora también soporta `sherpa-onnx` para inferencia totalmente local.
+- Los ajustes de Sherpa-ONNX también soportan autodescarga del modelo en el primer uso y una URL de archivo configurable.
 - Cuando un fallback funciona, El Secretario guarda automáticamente en Ajustes la configuración de transcripción que funcionó.
 - El autoindexado RAG se puede configurar en Ajustes (`auto_index_rag`) y está activado por defecto (`true`).
 - En Windows, las operaciones de indexado/búsqueda RAG se aíslan en subprocesos por defecto para reducir crashes nativos de Chroma.

@@ -14,8 +14,9 @@
 
 import hashlib
 
-from PyQt6.QtWidgets import (QWidget, QHBoxLayout, QVBoxLayout, QLabel, 
-                             QPushButton, QSizePolicy, QLineEdit, QCompleter, QCheckBox)
+from PyQt6.QtWidgets import (QWidget, QHBoxLayout, QVBoxLayout, QLabel,
+                             QPushButton, QSizePolicy, QLineEdit, QCompleter, QCheckBox,
+                             QToolButton)
 from PyQt6.QtCore import Qt, pyqtSignal, QStringListModel
 from PyQt6.QtGui import QIcon, QColor
 
@@ -150,6 +151,70 @@ class SidebarTaskCompactWidget(QWidget):
     def _on_toggle_completed(self, checked: bool):
         if isinstance(self.task_id, int):
             self.completion_toggled.emit(self.task_id, bool(checked))
+
+
+class SidebarChatSessionWidget(QWidget):
+    """Compact chat session row with inline expand affordance."""
+    expand_requested = pyqtSignal(int)
+    ROW_HEIGHT = 52
+
+    def __init__(self, session: dict, parent=None):
+        super().__init__(parent)
+        self.session = session or {}
+        self._build_ui()
+
+    def _build_ui(self):
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(8, 8, 8, 8)
+        layout.setSpacing(8)
+
+        text_column = QWidget(self)
+        text_layout = QVBoxLayout(text_column)
+        text_layout.setContentsMargins(0, 0, 0, 0)
+        text_layout.setSpacing(2)
+
+        title = (self.session.get("name") or "").strip() or "New Chat"
+        created_at = str(self.session.get("created_at") or "").strip()
+
+        self.title_label = QLabel(title, text_column)
+        self.title_label.setStyleSheet("font-size: 13px; font-weight: 600;")
+        self.title_label.setWordWrap(False)
+        self.title_label.setToolTip(title)
+        text_layout.addWidget(self.title_label)
+
+        self.meta_label = QLabel(created_at[:16], text_column)
+        self.meta_label.setStyleSheet("font-size: 11px; color: #78909C;")
+        text_layout.addWidget(self.meta_label)
+        layout.addWidget(text_column, 1)
+
+        self.expand_btn = QToolButton(self)
+        self.expand_btn.setText("⤢")
+        self.expand_btn.setToolTip("Open the full Chat History tab")
+        self.expand_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.expand_btn.setAutoRaise(True)
+        self.expand_btn.setFixedSize(24, 24)
+        self.expand_btn.setStyleSheet("""
+            QToolButton {
+                border: none;
+                border-radius: 8px;
+                padding: 2px;
+                background-color: transparent;
+                color: #607D8B;
+                font-size: 14px;
+            }
+            QToolButton:hover {
+                background-color: rgba(84, 110, 122, 0.16);
+            }
+        """)
+        self.expand_btn.clicked.connect(self._emit_expand_requested)
+        layout.addWidget(self.expand_btn, 0, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+
+        self.setFixedHeight(self.ROW_HEIGHT)
+
+    def _emit_expand_requested(self):
+        session_id = self.session.get("id")
+        if isinstance(session_id, int):
+            self.expand_requested.emit(session_id)
 
 
 class TagsLineEdit(QLineEdit):

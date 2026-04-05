@@ -8,6 +8,7 @@ from PyQt6.QtWidgets import QApplication, QDialog
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from src.ui.chat_widget import ChatWidget
+from src.ui.styles import apply_theme
 
 
 class TestChatWidgetContext(unittest.TestCase):
@@ -72,6 +73,47 @@ class TestChatWidgetContext(unittest.TestCase):
         finally:
             widget.deleteLater()
 
+    @patch("src.ui.chat_widget.ChatThread")
+    @patch("src.ai_provider.validate_ai_provider_config", return_value=(True, ""))
+    def test_week_range_context_includes_records_and_tasks(self, _mock_validate, mock_chat_thread):
+        weekly_record = {
+            "id": 8,
+            "title": "Weekly Sync",
+            "created_at": "2026-03-10 10:00:00",
+            "transcription": "Weekly transcript",
+            "recording_notes": "Weekly notes",
+            "type": "recording",
+            "tags": "ops",
+        }
+        self.mock_db.fetch_by_date_range.return_value = [weekly_record]
+        self.mock_db.fetch_record.return_value = weekly_record
+        self.mock_db.get_tasks_by_date_range.return_value = [
+            {"content": "Send recap", "is_completed": 0, "task_origin": "Weekly Sync", "record_title": "Weekly Sync"}
+        ]
+        worker = MagicMock()
+        mock_chat_thread.return_value = worker
+
+        widget = ChatWidget(
+            self.rag,
+            initial_contexts=[
+                {"type": "date_range", "value": {"start": "2026-03-09", "end": "2026-03-15"}, "label": "week"},
+                {"type": "recording", "value": 8, "label": "Weekly Sync"},
+                {"type": "tag", "value": "ops", "label": "ops"},
+            ],
+        )
+        try:
+            widget.input_field.setText("Summarize the week")
+            widget.send_message()
+
+            self.assertTrue(mock_chat_thread.called)
+            context_text = mock_chat_thread.call_args.args[2]
+            self.assertIn("Weekly transcript", context_text)
+            self.assertIn("Weekly notes", context_text)
+            self.assertIn("[Tasks]", context_text)
+            self.assertIn("Send recap", context_text)
+        finally:
+            widget.deleteLater()
+
     @patch("src.ui.chat_widget.AddContextDialog")
     def test_add_context_allows_manual_tag_extension(self, mock_dialog_cls):
         dialog = MagicMock()
@@ -86,3 +128,31 @@ class TestChatWidgetContext(unittest.TestCase):
         finally:
             widget.deleteLater()
 
+    def test_chat_widget_reapplies_dark_styles_when_theme_changes(self):
+        apply_theme("Light")
+        widget = ChatWidget(self.rag)
+        try:
+            self.assertIn("background-color: #ffffff", widget.display.styleSheet())
+            self.assertIn("background-color: #f5f5f5", widget.input_field.styleSheet())
+
+            apply_theme("Dark")
+            self.app.processEvents()
+
+            self.assertIn("background-color: #1f232a", widget.display.styleSheet())
+            self.assertIn("color: #f3f6fb", widget.display.styleSheet())
+            self.assertIn("background-color: #2a2f37", widget.input_field.styleSheet())
+            self.assertIn("color: #e8eef7", widget.title_label.styleSheet())
+        finally:
+            widget.deleteLater()
+            apply_theme("Light")
+
+    def test_chat_widget_dark_messages_force_light_markdown_text(self):
+        apply_theme("Dark")
+        widget = ChatWidget(self.rag)
+        try:
+            widget.append_to_chat("Assistant", "Texto normal\n\n- punto\n\n**negrita**")
+            html = widget.display.toHtml()
+            self.assertIn("#ffffff", html.lower())
+        finally:
+            widget.deleteLater()
+            apply_theme("Light")

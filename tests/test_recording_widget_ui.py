@@ -4,6 +4,8 @@ import os
 import unittest
 from unittest.mock import MagicMock, patch
 from PyQt6.QtWidgets import QApplication
+from PyQt6.QtCore import QSettings
+from PyQt6 import sip
 
 # Add project root to path
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
@@ -17,6 +19,13 @@ class TestRecordingWidgetUI(unittest.TestCase):
             cls.app = QApplication(sys.argv)
         else:
             cls.app = QApplication.instance()
+        cls.app.setQuitOnLastWindowClosed(False)
+
+    @classmethod
+    def tearDownClass(cls):
+        if QApplication.instance():
+            QApplication.instance().processEvents()
+            QApplication.instance().setQuitOnLastWindowClosed(True)
 
     def setUp(self):
         self.db_patcher = patch('src.ui.recording_widget.DBManager')
@@ -40,7 +49,9 @@ class TestRecordingWidgetUI(unittest.TestCase):
 
     def tearDown(self):
         self.widget.close()
-        self.widget.deleteLater()
+        sip.delete(self.widget)
+        if QApplication.instance():
+            QApplication.instance().processEvents()
         self.db_patcher.stop()
         self.media_player_patcher.stop()
         self.audio_output_patcher.stop()
@@ -64,6 +75,31 @@ class TestRecordingWidgetUI(unittest.TestCase):
         # We need to find the summarize button and check its parent layout
         # Or just checking attribute absence is enough for now given the implementation
         self.assertTrue(hasattr(self.widget, 'summarize_btn'))
+
+    def test_transcription_model_combo_includes_sherpa_onnx(self):
+        options = [self.widget.model_combo.itemText(i) for i in range(self.widget.model_combo.count())]
+        self.assertIn("sherpa-onnx", options)
+
+    def test_start_transcription_shows_error_without_starting_thread_when_sherpa_model_missing(self):
+        self.widget.model_combo.setCurrentText("sherpa-onnx")
+        fake_settings = MagicMock(spec=QSettings)
+        fake_settings.value.side_effect = lambda key, default=None, type=None: {
+            "hf_token": "",
+            "force_cpu": False,
+            "compute_type": "auto",
+            "transcription_backend": "auto",
+            "sherpa_onnx_model_dir": "/tmp/missing-sherpa-model",
+            "sherpa_onnx_auto_download": False,
+        }.get(key, default)
+
+        with patch("src.ui.recording_widget.QSettings", return_value=fake_settings), \
+             patch("src.ui.recording_widget.TranscriberThread") as mock_thread, \
+             patch("src.ui.recording_widget.QMessageBox.critical") as critical_mock:
+            self.widget.start_transcription("/tmp/fake.wav")
+
+        mock_thread.assert_not_called()
+        critical_mock.assert_called_once()
+        self.assertIn("does not exist", critical_mock.call_args.args[2])
 
     def test_load_record_does_not_fail(self):
         # Ensure loading a record doesn't crash due to missing cleaned_text logic
@@ -96,7 +132,7 @@ class TestRecordingWidgetUI(unittest.TestCase):
         # Check that we didn't crash and tabs are still correct
         self.assertEqual(self.widget.tabs.count(), 4)
 
-    def test_auto_summary_runs_after_transcription_when_enabled(self):
+    def test_auto_summary_without_queue_shows_warning(self):
         self.widget.current_record_id = 1
         self.widget.current_recording_path = "/tmp/test.wav"
         self.widget.auto_summarize_after_transcription = True
@@ -124,12 +160,11 @@ class TestRecordingWidgetUI(unittest.TestCase):
             "is_diarized": False,
         }
 
-        with patch.object(self.widget, "run_ai_task") as mock_run_ai:
+        with patch('src.ui.recording_widget.QMessageBox.warning') as warning_mock:
             self.widget.on_transcription_finished(result)
-            mock_run_ai.assert_any_call("summary")
-            mock_run_ai.assert_any_call("task_extraction")
+            warning_mock.assert_called_once()
 
-    def test_auto_summary_mode_enqueues_summary_and_tasks_in_queue(self):
+    def test_auto_summary_mode_enqueues_only_summary_in_queue(self):
         queue = MagicMock()
         self.widget.summary_task_queue = queue
         self.widget.current_record_id = 1
@@ -163,7 +198,31 @@ class TestRecordingWidgetUI(unittest.TestCase):
 
         self.widget.on_transcription_finished(result)
         queue.enqueue_recording_summary.assert_called_once()
-        queue.enqueue_task_extraction.assert_called_once()
+        queue.enqueue_task_extraction.assert_not_called()
+
+    def test_extract_button_switches_to_reextract_when_ai_tasks_exist(self):
+        self.widget.current_record_id = 7
+        self.mock_db.has_ai_tasks_for_record.return_value = True
+
+        self.widget._update_extract_tasks_button()
+
+        self.assertEqual(self.widget.extract_tasks_btn.text(), "Re-extract Tasks (AI)")
+
+    def test_reextract_deletes_ai_tasks_and_forces_queue_request(self):
+        queue = MagicMock()
+        self.widget.summary_task_queue = queue
+        self.widget.current_record_id = 7
+        self.widget.title_input.setText("Weekly sync")
+        self.widget.tags_input.setText("ops")
+        self.widget.text_display.setText("Transcript")
+        self.widget.notes_display.setText("")
+        self.mock_db.compose_ai_text.return_value = "Transcript"
+        self.mock_db.has_ai_tasks_for_record.return_value = True
+
+        self.widget.run_ai_task("task_extraction")
+
+        self.mock_db.delete_ai_tasks_by_record.assert_called_once_with(7)
+        queue.enqueue_task_extraction.assert_called_once_with(7, "Transcript", "ops", "Weekly sync", force=True)
 
     def test_refresh_from_background_queue_updates_summary_and_tasks(self):
         self.widget.current_record_id = 7

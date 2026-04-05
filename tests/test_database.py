@@ -91,6 +91,20 @@ class TestDBManager(unittest.TestCase):
 
         self.assertEqual(task["task_origin"], "Weekly Sync")
         self.assertEqual(task["tags"], "team, roadmap")
+        self.assertEqual(task["is_ai_generated"], 0)
+
+    def test_ai_task_flag_and_helpers(self):
+        rec_id = self.db.save("meeting.wav", "Tx", 10.0, "Weekly Sync")
+        self.db.save_task(rec_id, "AI action", is_ai_generated=True)
+        self.db.save_task(rec_id, "Manual action")
+
+        self.assertTrue(self.db.has_ai_tasks_for_record(rec_id))
+
+        self.db.delete_ai_tasks_by_record(rec_id)
+        tasks = self.db.get_tasks_by_record(rec_id)
+        self.assertEqual(len(tasks), 1)
+        self.assertEqual(tasks[0]["content"], "Manual action")
+        self.assertEqual(tasks[0]["is_ai_generated"], 0)
 
     def test_save_generic_task_has_no_origin(self):
         today = date.today().isoformat()

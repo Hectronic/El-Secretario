@@ -47,6 +47,10 @@ class MaintenanceWidget(QWidget):
         super().__init__(parent)
         self.db = db
         self.notebook_db = notebook_db
+        self.cleanup_in_progress = False
+        self.cleanup_finished = False
+        self.files_to_delete = []
+        self.deleted_count = 0
         
         self.init_ui()
         self.calculate_stats()
@@ -185,10 +189,15 @@ class MaintenanceWidget(QWidget):
             
             self.files_to_delete = list(self.reclaimable_files)
             self.deleted_count = 0
+            self.cleanup_in_progress = True
+            self.cleanup_finished = False
             QTimer.singleShot(10, self.process_next_file)
 
     def process_next_file(self):
+        if not self.cleanup_in_progress:
+            return
         if not self.files_to_delete:
+            self.cleanup_in_progress = False
             self.finish_cleanup()
             return
             
@@ -201,10 +210,13 @@ class MaintenanceWidget(QWidget):
             
         self.deleted_count += 1
         self.progressBar.setValue(self.deleted_count)
-        
-        QTimer.singleShot(5, self.process_next_file)
+        if self.cleanup_in_progress:
+            QTimer.singleShot(5, self.process_next_file)
         
     def finish_cleanup(self):
+        if self.cleanup_finished:
+            return
+        self.cleanup_finished = True
         QMessageBox.information(self, "Cleanup Complete", f"Successfully deleted {self.deleted_count} files.")
         self.progressBar.hide()
         self.calculate_stats() # Recalculate
