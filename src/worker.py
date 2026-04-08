@@ -671,8 +671,10 @@ class TranscriberThread(QThread):
 
     def __init__(self, audio_path, model_size="base", device=None, compute_type=None, language=None, hf_token=None, enable_diarization=False, total_duration=0, force_cpu=False, backend_preference="auto"):
         super().__init__()
+        from src.transcription_options import get_whisper_model_name
         self.audio_path = audio_path
-        self.model_size = model_size
+        self.ui_model_name = model_size # Store original UI name
+        self.model_size = get_whisper_model_name(model_size) # Use internal name
         self.force_cpu = force_cpu
         self.backend_preference = backend_preference or "auto"
         self.effective_backend = "faster-whisper"

@@ -6,17 +6,26 @@ from typing import Iterable
 
 
 WHISPER_TRANSCRIPTION_MODELS = (
-    "tiny",
-    "base",
-    "small",
-    "medium",
-    "large-v3",
+    "Whisper Tiny",
+    "Whisper Base",
+    "Whisper Small",
+    "Whisper Medium",
+    "Whisper Large-v3",
 )
-SHERPA_ONNX_OPTION = "sherpa-onnx"
+SHERPA_ONNX_OPTION = "Sherpa-ONNX (Local)"
+LEGACY_MAPPING = {
+    "tiny": "Whisper Tiny",
+    "base": "Whisper Base",
+    "small": "Whisper Small",
+    "medium": "Whisper Medium",
+    "large-v3": "Whisper Large-v3",
+    "sherpa-onnx": "Sherpa-ONNX (Local)",
+}
+
 TRANSCRIPTION_MODEL_OPTIONS = WHISPER_TRANSCRIPTION_MODELS + (SHERPA_ONNX_OPTION,)
 
-DEFAULT_TRANSCRIPTION_MODEL = "base"
-DEFAULT_WELCOME_TRANSCRIPTION_MODEL = "large-v3"
+DEFAULT_TRANSCRIPTION_MODEL = "Whisper Base"
+DEFAULT_WELCOME_TRANSCRIPTION_MODEL = "Whisper Large-v3"
 
 SHERPA_MODEL_TYPE_OPTIONS = (
     "auto",
@@ -45,7 +54,17 @@ def normalize_transcription_model(
     candidate = str(model_name or "").strip()
     if candidate in TRANSCRIPTION_MODEL_OPTIONS:
         return candidate
+    # Check if it's a legacy name (case-insensitive)
+    if candidate.lower() in LEGACY_MAPPING:
+        return LEGACY_MAPPING[candidate.lower()]
     return default
+
+
+def get_whisper_model_name(ui_model_name: str) -> str:
+    """Map UI model name (e.g. 'Whisper Tiny') to internal whisper name (e.g. 'tiny')."""
+    # Inverse of LEGACY_MAPPING for whisper models
+    inverse_mapping = {v: k for k, v in LEGACY_MAPPING.items() if v.startswith("Whisper")}
+    return inverse_mapping.get(ui_model_name, ui_model_name)
 
 
 def is_sherpa_onnx_model(model_name: str | None) -> bool:
