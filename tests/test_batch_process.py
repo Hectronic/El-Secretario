@@ -77,7 +77,7 @@ class TestBatchProcess(unittest.TestCase):
                     'force_cpu': False,
                     'compute_type': 'auto',
                     'transcription_backend': 'auto',
-                    'rec_config/model': 'sherpa-onnx',
+                    'rec_config/model': 'Sherpa-ONNX (Local)',
                     'whisper_model': 'base',
                 }.get(key, default)
                 MockQSettings.return_value = settings_instance
@@ -88,7 +88,7 @@ class TestBatchProcess(unittest.TestCase):
                 # But it should be marked as processing (yellow background)
                 item = self.widget.pending_list.item(0)
                 self.assertEqual(item.background(), Qt.GlobalColor.yellow)
-                self.assertEqual(mock_thread.call_args.kwargs["model_size"], "sherpa-onnx")
+                self.assertEqual(mock_thread.call_args.kwargs["model_size"], "Sherpa-ONNX (Local)")
                 
     def test_on_file_finished_removes_item(self):
         # Setup processing state

@@ -78,10 +78,10 @@ class TestRecordingWidgetUI(unittest.TestCase):
 
     def test_transcription_model_combo_includes_sherpa_onnx(self):
         options = [self.widget.model_combo.itemText(i) for i in range(self.widget.model_combo.count())]
-        self.assertIn("sherpa-onnx", options)
+        self.assertIn("Sherpa-ONNX (Local)", options)
 
     def test_start_transcription_shows_error_without_starting_thread_when_sherpa_model_missing(self):
-        self.widget.model_combo.setCurrentText("sherpa-onnx")
+        self.widget.model_combo.setCurrentText("Sherpa-ONNX (Local)")
         fake_settings = MagicMock(spec=QSettings)
         fake_settings.value.side_effect = lambda key, default=None, type=None: {
             "hf_token": "",
