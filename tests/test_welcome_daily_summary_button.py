@@ -112,7 +112,7 @@ class TestWelcomeDailySummaryButton(unittest.TestCase):
         widget = WelcomeWidget(_FakeDB())
         try:
             options = [widget.model_combo.itemText(i) for i in range(widget.model_combo.count())]
-            self.assertIn("sherpa-onnx", options)
+            self.assertIn("Sherpa-ONNX (Local)", options)
         finally:
             widget.deleteLater()
 

@@ -202,7 +202,7 @@ def test_audio_panel_defaults_and_save(qtbot, clean_settings):
     qtbot.addWidget(widget)
 
     assert widget.audio_panel.backend_combo.currentText() == "auto"
-    assert "sherpa-onnx" in [widget.audio_panel.whisper_combo.itemText(i) for i in range(widget.audio_panel.whisper_combo.count())]
+    assert "Sherpa-ONNX (Local)" in [widget.audio_panel.whisper_combo.itemText(i) for i in range(widget.audio_panel.whisper_combo.count())]
     assert widget.audio_panel.sherpa_model_dir_input.text() == "models/sherpa-onnx"
     assert widget.audio_panel.sherpa_model_type_combo.currentText() == "auto"
     assert widget.audio_panel.sherpa_auto_download_check.isChecked() is True
@@ -211,7 +211,7 @@ def test_audio_panel_defaults_and_save(qtbot, clean_settings):
     assert widget.audio_panel.rescan_before_capture_check.isChecked() is True
     assert widget.audio_panel.prefer_index_check.isChecked() is False
 
-    widget.audio_panel.whisper_combo.setCurrentText("sherpa-onnx")
+    widget.audio_panel.whisper_combo.setCurrentText("Sherpa-ONNX (Local)")
     widget.audio_panel.sherpa_model_dir_input.setText("/tmp/sherpa-model")
     widget.audio_panel.sherpa_model_type_combo.setCurrentText("paraformer")
     widget.audio_panel.sherpa_auto_download_check.setChecked(False)
@@ -222,7 +222,7 @@ def test_audio_panel_defaults_and_save(qtbot, clean_settings):
     widget.audio_panel.prefer_index_check.setChecked(True)
     widget.save_settings()
 
-    assert clean_settings.value("whisper_model") == "sherpa-onnx"
+    assert clean_settings.value("whisper_model") == "Sherpa-ONNX (Local)"
     assert clean_settings.value("sherpa_onnx_model_dir") == "/tmp/sherpa-model"
     assert clean_settings.value("sherpa_onnx_model_type") == "paraformer"
     assert clean_settings.value("sherpa_onnx_auto_download", True, type=bool) is False
