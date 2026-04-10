@@ -156,3 +156,31 @@ class TestChatWidgetContext(unittest.TestCase):
         finally:
             widget.deleteLater()
             apply_theme("Light")
+
+    def test_context_panel_toggle_button_collapses_and_restores(self):
+        widget = ChatWidget(self.rag)
+        try:
+            self.assertFalse(widget.context_panel.is_collapsed())
+            self.assertFalse(widget.context_panel.header_label.isHidden())
+            self.assertFalse(widget.context_panel.content_widget.isHidden())
+            self.assertEqual(widget.context_panel.toggle_btn.text(), "⟩")
+
+            widget.context_panel.toggle_btn.click()
+
+            self.assertTrue(widget.context_panel.is_collapsed())
+            self.assertTrue(widget.context_panel.header_label.isHidden())
+            self.assertTrue(widget.context_panel.content_widget.isHidden())
+            self.assertEqual(widget.context_panel.toggle_btn.text(), "⟨")
+            self.assertEqual(widget.context_panel.minimumWidth(), widget.context_panel.COLLAPSED_WIDTH)
+            self.assertEqual(widget.context_panel.maximumWidth(), widget.context_panel.COLLAPSED_WIDTH)
+
+            widget.context_panel.toggle_btn.click()
+
+            self.assertFalse(widget.context_panel.is_collapsed())
+            self.assertFalse(widget.context_panel.header_label.isHidden())
+            self.assertFalse(widget.context_panel.content_widget.isHidden())
+            self.assertEqual(widget.context_panel.toggle_btn.text(), "⟩")
+            self.assertEqual(widget.context_panel.minimumWidth(), 280)
+            self.assertGreater(widget.context_panel.maximumWidth(), 280)
+        finally:
+            widget.deleteLater()
