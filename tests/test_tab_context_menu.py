@@ -126,6 +126,61 @@ class TestTabContextMenu(unittest.TestCase):
         self.assertFalse(chat_widget.context_panel.isHidden())
         self.assertTrue(chat_widget.header.isHidden())
 
+    def test_chat_context_panel_collapse_survives_float_and_dock(self):
+        self.window.central_tabs.clear()
+        chat_widget = ChatWidget(self.mock_rag)
+        self.window._connect_chat_widget(chat_widget)
+        self.window.central_tabs.addTab(chat_widget, "Chat")
+
+        chat_widget.context_panel.toggle_btn.click()
+        self.assertTrue(chat_widget.context_panel.is_collapsed())
+        self.assertTrue(chat_widget.context_panel.content_widget.isHidden())
+        self.assertEqual(chat_widget.context_panel.toggle_btn.text(), "⟨")
+
+        self.window.float_chat_widget(chat_widget)
+        self.assertTrue(chat_widget.context_panel.isHidden())
+        self.assertTrue(chat_widget.context_panel.is_collapsed())
+
+        self.window.dock_chat_widget_to_tab(chat_widget)
+        self.assertFalse(chat_widget.context_panel.isHidden())
+        self.assertTrue(chat_widget.context_panel.is_collapsed())
+        self.assertTrue(chat_widget.context_panel.content_widget.isHidden())
+        self.assertEqual(chat_widget.context_panel.toggle_btn.text(), "⟨")
+
+    def test_chat_context_panel_collapse_survives_float_minimize_restore_and_dock(self):
+        self.window.central_tabs.clear()
+        chat_widget = ChatWidget(self.mock_rag)
+        self.window._connect_chat_widget(chat_widget)
+        self.window.central_tabs.addTab(chat_widget, "Chat")
+
+        chat_widget.collapse_context_panel()
+        self.assertTrue(chat_widget.context_panel.is_collapsed())
+        self.assertEqual(chat_widget.context_panel.toggle_btn.text(), "⟨")
+
+        self.window.float_chat_widget(chat_widget)
+        host = self.window.floating_chat_hosts[0]
+        self.assertTrue(chat_widget.context_panel.isHidden())
+        self.assertTrue(chat_widget.context_panel.is_collapsed())
+
+        self.window.minimize_floating_chat(chat_widget)
+        self.assertTrue(host.property("chat_minimized"))
+        self.assertTrue(chat_widget.floating_minimized)
+        self.assertTrue(chat_widget.context_panel.isHidden())
+        self.assertTrue(chat_widget.context_panel.is_collapsed())
+
+        self.window.restore_floating_chat(chat_widget)
+        self.assertFalse(host.property("chat_minimized"))
+        self.assertFalse(chat_widget.floating_minimized)
+        self.assertTrue(chat_widget.context_panel.isHidden())
+        self.assertTrue(chat_widget.context_panel.is_collapsed())
+
+        self.window.dock_chat_widget_to_tab(chat_widget)
+        self.assertEqual(chat_widget.display_mode, "tab")
+        self.assertFalse(chat_widget.context_panel.isHidden())
+        self.assertTrue(chat_widget.context_panel.is_collapsed())
+        self.assertTrue(chat_widget.context_panel.content_widget.isHidden())
+        self.assertEqual(chat_widget.context_panel.toggle_btn.text(), "⟨")
+
     def test_chat_tab_has_float_button_next_to_close(self):
         self.window.central_tabs.clear()
         chat_widget = ChatWidget(self.mock_rag)

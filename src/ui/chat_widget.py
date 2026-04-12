@@ -32,11 +32,14 @@ from src.notebook_database import NotebookDBManager
 class ContextManagerPanel(QWidget):
     """Side panel for ChatWidget to manage context synchronized with main sidebar."""
     context_changed = pyqtSignal()
+    toggle_requested = pyqtSignal()
+    COLLAPSED_WIDTH = 44
     
     def __init__(self, db, notebook_db, parent=None):
         super().__init__(parent)
         self.db = db
         self.notebook_db = notebook_db
+        self._collapsed = False
         
         # Selection State (Synced from Global)
         self.current_week_monday = None
@@ -58,6 +61,45 @@ class ContextManagerPanel(QWidget):
         panel_text = "#e8eef7" if is_dark else "#2b3b52"
         meta_text = "#b8c1cf" if is_dark else "#666666"
 
+        header = QWidget()
+        header_layout = QHBoxLayout(header)
+        header_layout.setContentsMargins(0, 0, 0, 0)
+        header_layout.setSpacing(6)
+
+        self.header_label = QLabel("Chat Context")
+        self.header_label.setStyleSheet("font-size: 14px; font-weight: 700;")
+        header_layout.addWidget(self.header_label, 1)
+
+        self.toggle_btn = QToolButton()
+        self.toggle_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.toggle_btn.setAutoRaise(True)
+        self.toggle_btn.setFixedSize(24, 24)
+        self.toggle_btn.setToolTip("Collapse context panel")
+        self.toggle_btn.clicked.connect(self.toggle_requested.emit)
+        self.toggle_btn.setText("⟩")
+        self.toggle_btn.setStyleSheet("""
+            QToolButton {
+                border: none;
+                border-radius: 6px;
+                padding: 0px;
+                background: transparent;
+                color: #607D8B;
+                font-size: 15px;
+                font-weight: 700;
+            }
+            QToolButton:hover {
+                background-color: rgba(33, 150, 243, 0.14);
+                color: #2196F3;
+            }
+        """)
+        header_layout.addWidget(self.toggle_btn, 0, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        layout.addWidget(header)
+
+        self.content_widget = QWidget()
+        content_layout = QVBoxLayout(self.content_widget)
+        content_layout.setContentsMargins(0, 0, 0, 0)
+        content_layout.setSpacing(12)
+
         # --- Entries (Context) List ---
         entries_group = QGroupBox("Detected Context Entries")
         entries_layout = QVBoxLayout(entries_group)
@@ -73,10 +115,10 @@ class ContextManagerPanel(QWidget):
         self.entries_count_lbl.setStyleSheet(f"color: {meta_text}; font-size: 11px;")
         entries_layout.addWidget(self.entries_count_lbl)
         
-        layout.addWidget(entries_group)
+        content_layout.addWidget(entries_group)
         
         # --- Context Status ---
-        status_group = QGroupBox("Chat Context")
+        status_group = QGroupBox("Selection Context")
         status_layout = QVBoxLayout(status_group)
         
         self.sync_cb = QCheckBox("Sync with App")
@@ -95,7 +137,7 @@ class ContextManagerPanel(QWidget):
         self.tags_lbl.setWordWrap(True)
         status_layout.addWidget(self.tags_lbl)
         
-        layout.addWidget(status_group)
+        content_layout.addWidget(status_group)
         
         # --- Notebooks Section ---
         nb_group = QGroupBox("Include Notebooks")
@@ -104,20 +146,22 @@ class ContextManagerPanel(QWidget):
         self.nb_list.setFixedHeight(120)
         self.nb_list.itemChanged.connect(self.on_metadata_changed)
         nb_layout.addWidget(self.nb_list)
-        layout.addWidget(nb_group)
+        content_layout.addWidget(nb_group)
         
         # --- Tools ---
         self.add_context_btn = QPushButton("Add Context")
         self.add_context_btn.clicked.connect(self.parent().add_context)
-        layout.addWidget(self.add_context_btn)
+        content_layout.addWidget(self.add_context_btn)
 
         self.reset_context_btn = QPushButton("Reset Extra Context")
         self.reset_context_btn.clicked.connect(self.parent().reset_extra_context)
-        layout.addWidget(self.reset_context_btn)
+        content_layout.addWidget(self.reset_context_btn)
 
         self.clear_chat_btn = QPushButton("Clear Chat History")
         self.clear_chat_btn.clicked.connect(self.parent().clear_history)
-        layout.addWidget(self.clear_chat_btn)
+        content_layout.addWidget(self.clear_chat_btn)
+
+        layout.addWidget(self.content_widget)
         
         layout.addStretch()
 
@@ -207,6 +251,16 @@ class ContextManagerPanel(QWidget):
                 self.entries_list.addItem(item)
                 
         self.entries_count_lbl.setText(f"{self.entries_list.count()} entries in context")
+
+    def set_collapsed(self, collapsed):
+        self._collapsed = bool(collapsed)
+        self.header_label.setVisible(not self._collapsed)
+        self.content_widget.setVisible(not self._collapsed)
+        self.toggle_btn.setText("⟨" if self._collapsed else "⟩")
+        self.toggle_btn.setToolTip("Expand context panel" if self._collapsed else "Collapse context panel")
+
+    def is_collapsed(self):
+        return self._collapsed
 
     def reset_all(self):
         self.current_date_filter = None
@@ -341,6 +395,8 @@ class ChatWidget(QWidget):
         self.forced_record_labels = []
         self.display_mode = "tab"
         self.floating_minimized = False
+        self.context_panel_collapsed = False
+        self._context_panel_saved_sizes = [900, 350]
         
         self.init_ui()
         
@@ -441,7 +497,9 @@ class ChatWidget(QWidget):
         
         # --- Right Side: Context Manager Panel ---
         self.context_panel = ContextManagerPanel(self.db, self.notebook_db, self)
+        self.context_panel.toggle_requested.connect(self.toggle_context_panel)
         self.splitter.addWidget(self.context_panel)
+        self.splitter.splitterMoved.connect(self._remember_context_panel_sizes)
         
         self.splitter.setSizes([900, 350])
         main_layout.addWidget(self.splitter)
@@ -538,6 +596,38 @@ class ChatWidget(QWidget):
     def update_from_global_selection(self, monday, date_str, tags_str):
         """Called by MainWindow when sidebar selection changes."""
         self.context_panel.sync_with_global(monday, date_str, tags_str)
+
+    def _remember_context_panel_sizes(self, *_args):
+        if self.display_mode == "floating" or self.floating_minimized or self.context_panel_collapsed:
+            return
+        sizes = self.splitter.sizes()
+        if len(sizes) == 2 and sizes[1] > 0:
+            self._context_panel_saved_sizes = list(sizes)
+
+    def _apply_context_panel_visibility(self):
+        is_floating = self.display_mode == "floating"
+        visible = not is_floating and not self.floating_minimized
+
+        self.context_panel.setVisible(visible)
+        if not visible:
+            self.context_panel.setMinimumWidth(0)
+            self.context_panel.setMaximumWidth(16777215)
+            return
+
+        self.context_panel.set_collapsed(self.context_panel_collapsed)
+        if self.context_panel_collapsed:
+            width = self.context_panel.COLLAPSED_WIDTH
+            self.context_panel.setMinimumWidth(width)
+            self.context_panel.setMaximumWidth(width)
+            self.splitter.setSizes([max(1, self.width() - width), width])
+            return
+
+        self.context_panel.setMinimumWidth(280)
+        self.context_panel.setMaximumWidth(16777215)
+        if len(self._context_panel_saved_sizes) == 2 and sum(self._context_panel_saved_sizes) > 0:
+            self.splitter.setSizes(self._context_panel_saved_sizes)
+        else:
+            self.splitter.setSizes([900, 350])
 
     def clear_history(self):
         reply = QMessageBox.question(self, "Clear History", "Are you sure you want to clear this chat history?",
@@ -938,8 +1028,6 @@ class ChatWidget(QWidget):
         self.mode_btn.setText("⇱" if is_floating else "↗")
         self.mode_btn.setToolTip("Move chat back to tab" if is_floating else "Move chat to floating bar")
         self.minimize_btn.setVisible(is_floating)
-        self.context_panel.setVisible(not is_floating and not self.floating_minimized)
-        self.context_panel.setMinimumWidth(0 if is_floating else 280)
         self.content_container.setVisible(not self.floating_minimized)
         self.minimize_btn.setText("□" if self.floating_minimized else "_")
         self.minimize_btn.setToolTip("Restore chat" if self.floating_minimized else "Minimize to title bar")
@@ -949,7 +1037,8 @@ class ChatWidget(QWidget):
         self.title_label.setCursor(
             Qt.CursorShape.PointingHandCursor if self.floating_minimized else Qt.CursorShape.ArrowCursor
         )
-        self.splitter.setSizes([740, 0] if is_floating else [900, 350])
+        self._apply_context_panel_visibility()
+        self.splitter.setSizes([740, 0] if is_floating else (self._context_panel_saved_sizes if not self.context_panel_collapsed else [max(1, self.width() - self.context_panel.COLLAPSED_WIDTH), self.context_panel.COLLAPSED_WIDTH]))
 
     def _toggle_display_mode(self):
         if self.display_mode == "floating":
@@ -966,6 +1055,29 @@ class ChatWidget(QWidget):
     def set_floating_minimized(self, minimized):
         self.floating_minimized = bool(minimized) and self.display_mode == "floating"
         self.set_display_mode(self.display_mode)
+
+    def collapse_context_panel(self):
+        if self.display_mode == "floating" or self.floating_minimized:
+            return
+        if self.context_panel_collapsed:
+            return
+        sizes = self.splitter.sizes()
+        if len(sizes) == 2 and sizes[1] > 0:
+            self._context_panel_saved_sizes = list(sizes)
+        self.context_panel_collapsed = True
+        self._apply_context_panel_visibility()
+
+    def expand_context_panel(self):
+        if not self.context_panel_collapsed:
+            return
+        self.context_panel_collapsed = False
+        self._apply_context_panel_visibility()
+
+    def toggle_context_panel(self):
+        if self.context_panel_collapsed:
+            self.expand_context_panel()
+        else:
+            self.collapse_context_panel()
 
     def eventFilter(self, watched, event):
         if (
