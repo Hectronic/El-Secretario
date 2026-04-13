@@ -241,8 +241,10 @@ class TestMainWindowDailySummaryIntegration(unittest.TestCase):
         self.window.load_collections()
 
         self.assertIn("tags", self.window._right_sidebar_sections)
+        self.assertIn("chat_context", self.window._right_sidebar_sections)
         self.assertEqual(self.window.collections_list.count(), 2)
         self.assertEqual(self.window.collections_list.item(0).text(), "alpha")
+        self.assertTrue(self.window._right_sidebar_sections["chat_context"]["container"].isHidden())
 
         self.window._set_active_right_section("tags")
         for key, section in self.window._right_sidebar_sections.items():

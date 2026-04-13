@@ -33,13 +33,18 @@ class ContextManagerPanel(QWidget):
     """Side panel for ChatWidget to manage context synchronized with main sidebar."""
     context_changed = pyqtSignal()
     toggle_requested = pyqtSignal()
+    add_context_requested = pyqtSignal()
+    reset_extra_context_requested = pyqtSignal()
+    clear_chat_requested = pyqtSignal()
     COLLAPSED_WIDTH = 44
     
-    def __init__(self, db, notebook_db, parent=None):
+    def __init__(self, db, notebook_db, parent=None, show_header=True, interactive=True):
         super().__init__(parent)
         self.db = db
         self.notebook_db = notebook_db
         self._collapsed = False
+        self._show_header = bool(show_header)
+        self._interactive = bool(interactive)
         
         # Selection State (Synced from Global)
         self.current_week_monday = None
@@ -62,6 +67,7 @@ class ContextManagerPanel(QWidget):
         meta_text = "#b8c1cf" if is_dark else "#666666"
 
         header = QWidget()
+        self.header = header
         header_layout = QHBoxLayout(header)
         header_layout.setContentsMargins(0, 0, 0, 0)
         header_layout.setSpacing(6)
@@ -150,20 +156,26 @@ class ContextManagerPanel(QWidget):
         
         # --- Tools ---
         self.add_context_btn = QPushButton("Add Context")
-        self.add_context_btn.clicked.connect(self.parent().add_context)
+        self.add_context_btn.clicked.connect(self.add_context_requested.emit)
         content_layout.addWidget(self.add_context_btn)
 
         self.reset_context_btn = QPushButton("Reset Extra Context")
-        self.reset_context_btn.clicked.connect(self.parent().reset_extra_context)
+        self.reset_context_btn.clicked.connect(self.reset_extra_context_requested.emit)
         content_layout.addWidget(self.reset_context_btn)
 
         self.clear_chat_btn = QPushButton("Clear Chat History")
-        self.clear_chat_btn.clicked.connect(self.parent().clear_history)
+        self.clear_chat_btn.clicked.connect(self.clear_chat_requested.emit)
         content_layout.addWidget(self.clear_chat_btn)
 
         layout.addWidget(self.content_widget)
         
         layout.addStretch()
+
+        self.set_interactive(self._interactive)
+        self.header.setVisible(self._show_header)
+        self.toggle_btn.setVisible(self._show_header)
+        if not self._show_header:
+            self.content_widget.setVisible(True)
 
     def load_notebooks(self):
         self.nb_list.clear()
@@ -253,6 +265,13 @@ class ContextManagerPanel(QWidget):
         self.entries_count_lbl.setText(f"{self.entries_list.count()} entries in context")
 
     def set_collapsed(self, collapsed):
+        if not self._show_header:
+            self._collapsed = False
+            self.header_label.setVisible(True)
+            self.content_widget.setVisible(True)
+            self.toggle_btn.setText("⟩")
+            self.toggle_btn.setToolTip("Collapse context panel")
+            return
         self._collapsed = bool(collapsed)
         self.header_label.setVisible(not self._collapsed)
         self.content_widget.setVisible(not self._collapsed)
@@ -298,6 +317,69 @@ class ContextManagerPanel(QWidget):
         self.tags_lbl.setText(
             f"Tags: {', '.join(self.active_global_tags) if self.active_global_tags else 'all'}"
         )
+
+    def set_interactive(self, interactive: bool):
+        self._interactive = bool(interactive)
+        for widget in (
+            self.sync_cb,
+            self.nb_list,
+            self.add_context_btn,
+            self.reset_context_btn,
+            self.clear_chat_btn,
+            self.toggle_btn,
+        ):
+            widget.setEnabled(self._interactive)
+        if not self._show_header:
+            self.toggle_btn.setVisible(False)
+
+    def serialize_state(self):
+        notebook_ids = []
+        for i in range(self.nb_list.count()):
+            item = self.nb_list.item(i)
+            if item.checkState() == Qt.CheckState.Checked:
+                notebook_ids.append(item.data(Qt.ItemDataRole.UserRole))
+
+        return {
+            "current_week_monday": self.current_week_monday.toString("yyyy-MM-dd") if self.current_week_monday else None,
+            "current_date_filter": self.current_date_filter,
+            "active_global_tags": list(self.active_global_tags),
+            "notebook_ids": notebook_ids,
+            "forced_records": [dict(record) for record in self.forced_records],
+            "sync_enabled": self.sync_cb.isChecked(),
+            "collapsed": self.is_collapsed(),
+        }
+
+    def apply_state(self, state):
+        state = state or {}
+        monday_text = state.get("current_week_monday")
+        monday = QDate.fromString(str(monday_text or ""), "yyyy-MM-dd") if monday_text else QDate()
+        self.current_week_monday = monday if monday.isValid() else None
+        date_filter = state.get("current_date_filter")
+        self.current_date_filter = str(date_filter) if date_filter else None
+        self.active_global_tags = [str(tag).strip() for tag in state.get("active_global_tags") or [] if str(tag).strip()]
+
+        notebook_ids = {item_id for item_id in state.get("notebook_ids") or []}
+        self.nb_list.blockSignals(True)
+        for i in range(self.nb_list.count()):
+            item = self.nb_list.item(i)
+            item.setCheckState(
+                Qt.CheckState.Checked
+                if item.data(Qt.ItemDataRole.UserRole) in notebook_ids
+                else Qt.CheckState.Unchecked
+            )
+        self.nb_list.blockSignals(False)
+
+        self.forced_records = [dict(record) for record in state.get("forced_records") or []]
+        self.sync_cb.setChecked(bool(state.get("sync_enabled", True)))
+        self._collapsed = bool(state.get("collapsed", False))
+        self._update_status_labels()
+        self.refresh_entries()
+        self.set_collapsed(self._collapsed)
+
+    def restore_from_panel(self, panel):
+        if panel is None:
+            return
+        self.apply_state(panel.serialize_state())
 
 class AddContextDialog(QDialog):
     def __init__(self, db_manager, notebook_db, parent=None):
@@ -498,6 +580,9 @@ class ChatWidget(QWidget):
         # --- Right Side: Context Manager Panel ---
         self.context_panel = ContextManagerPanel(self.db, self.notebook_db, self)
         self.context_panel.toggle_requested.connect(self.toggle_context_panel)
+        self.context_panel.add_context_requested.connect(self.add_context)
+        self.context_panel.reset_extra_context_requested.connect(self.reset_extra_context)
+        self.context_panel.clear_chat_requested.connect(self.clear_history)
         self.splitter.addWidget(self.context_panel)
         self.splitter.splitterMoved.connect(self._remember_context_panel_sizes)
         

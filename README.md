@@ -14,6 +14,7 @@ Read this in [Español](README_ES.md) | [Asturianu](README_AST.md)
 - **Transcription & Diarization**: Automatically transcribe audio and identify different speakers (diarization) using local Whisper backends, `sherpa-onnx`, and pyannote.audio.
 - **Intelligent Search (RAG)**: Use Retrieval-Augmented Generation (RAG) to chat with your recordings and find specific information. Supports Google Gemini and **Ollama** for local execution.
 - **Flexible Chat Windows**: Chats can stay as regular tabs, move to the floating bar, and be minimized into compact chips for quick restore.
+- **Active Chat Context Sidebar**: When a chat tab is active, the app's right sidebar shows a collapsible, auto-opened mirror of the chat context and hides it again when you switch tabs or close the chat.
 - **Notebooks & Collections**: Organize your recordings into notebooks and collections. Access them directly from the sidebar.
 - **Calendar View**: Browse your recordings by date.
 - **Unified Tools**: Storage cleanup, batch processing, and data export/import in one convenient tab.
@@ -79,6 +80,9 @@ To fully utilize the features of El Secretario, you will need to configure the A
 2.  **Start Recording**: Click the microphone icon to start recording.
 3.  **Import Audio**: Use the import button to add existing audio files.
 4.  **Chat**: Open a recording or a collection to start chatting with your data.
+5.  **Active Chat Context Sidebar**: When a chat tab is active, the right app sidebar shows the same context panel you see inside the chat. It is expanded by default and disappears when you switch to another tab or close the chat.
+
+**Note:** this sidebar is read-only mirroring of the active chat context. It does not stay visible for inactive chats or floating/minimized chat windows.
 
 ## Running Tests
 
