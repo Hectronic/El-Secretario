@@ -12,6 +12,7 @@ El Secretario es una herramienta inteligente de transcripción y organización d
 - **Transcripción y Diarización**: Transcribe audio automáticamente e identifica diferentes hablantes (diarización) utilizando backends locales de Whisper, `sherpa-onnx` y pyannote.audio.
 - **Búsqueda Inteligente (RAG)**: Utiliza Generación Aumentada por Recuperación (RAG) para chatear con tus grabaciones y encontrar información específica. Soporta Google Gemini y **Ollama** para ejecución local.
 - **Ventanas de Chat Flexibles**: Los chats pueden quedarse como pestañas normales, moverse a la barra flotante y minimizarse en fichas compactas para restaurarlos rápido.
+- **Contexto Activo del Chat en la Barra Lateral**: Cuando una pestaña de chat está activa, la barra lateral derecha de la app muestra una copia desplegable y abierta por defecto del contexto del chat, y la oculta al cambiar de pestaña o cerrar el chat.
 - **Libretas y Colecciones**: Organiza tus grabaciones en libretas y colecciones. Accede a ellas directamente desde la barra lateral.
 - **Vista de Calendario**: Explora tus grabaciones por fecha.
 - **Herramientas Unificadas**: Limpieza de almacenamiento, procesamiento por lotes y exportación/importación de datos en una sola pestaña.
@@ -77,6 +78,9 @@ Para utilizar plenamente las funciones de El Secretario, deberás configurar los
 2.  **Iniciar Grabación**: Haz clic en el icono del micrófono para comenzar a grabar.
 3.  **Importar Audio**: Usa el botón de importar para añadir archivos de audio existentes.
 4.  **Chat**: Abre una grabación o una colección para comenzar a chatear con tus datos.
+5.  **Barra Lateral de Contexto Activo**: Cuando una pestaña de chat está activa, la barra lateral derecha de la app muestra el mismo panel de contexto que ves dentro del chat. Se abre por defecto y desaparece al cambiar a otra pestaña o cerrar el chat.
+
+**Nota:** esta barra lateral es una copia de solo lectura del contexto del chat activo. No permanece visible para chats inactivos ni para ventanas flotantes/minimizadas.
 
 ## Estabilidad de transcripción en Windows
 

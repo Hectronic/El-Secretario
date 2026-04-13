@@ -147,6 +147,45 @@ class TestTabContextMenu(unittest.TestCase):
         self.assertTrue(chat_widget.context_panel.content_widget.isHidden())
         self.assertEqual(chat_widget.context_panel.toggle_btn.text(), "⟨")
 
+    def test_active_chat_context_sidebar_follows_current_tab_and_disappears_on_close(self):
+        self.window.central_tabs.clear()
+        self.mock_chat_db.fetch_record.return_value = {
+            "id": 5,
+            "title": "Design Review",
+            "created_at": "2026-03-09 09:00:00",
+            "transcription": "Transcript body",
+            "recording_notes": "Important notes",
+            "type": "recording",
+            "tags": "",
+        }
+        chat_widget = self.window.open_chat_tab(
+            initial_contexts=[{"type": "recording", "value": 5, "label": "Design Review"}],
+        )
+
+        section = self.window._right_sidebar_sections["chat_context"]
+        self.assertFalse(section["container"].isHidden())
+        self.assertFalse(section["content"].isHidden())
+        self.assertEqual(section["context_panel"].entries_list.count(), 1)
+        self.assertEqual(
+            section["context_panel"].entries_list.item(0).text(),
+            chat_widget.context_panel.entries_list.item(0).text(),
+        )
+        self.assertEqual(self.window._active_right_section, "chat_context")
+
+        other_tab = QWidget()
+        self.window.central_tabs.addTab(other_tab, "Other")
+        self.window.central_tabs.setCurrentWidget(other_tab)
+        self.assertTrue(section["container"].isHidden())
+        self.assertNotEqual(self.window._active_right_section, "chat_context")
+
+        self.window.central_tabs.setCurrentWidget(chat_widget)
+        self.assertFalse(section["container"].isHidden())
+        self.assertFalse(section["content"].isHidden())
+
+        self.window.close_chat_widget(chat_widget)
+        self.assertTrue(section["container"].isHidden())
+        self.assertNotEqual(self.window._active_right_section, "chat_context")
+
     def test_chat_context_panel_collapse_survives_float_minimize_restore_and_dock(self):
         self.window.central_tabs.clear()
         chat_widget = ChatWidget(self.mock_rag)

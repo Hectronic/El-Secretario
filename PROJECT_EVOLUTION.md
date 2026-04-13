@@ -93,6 +93,14 @@ This guide summarizes the development history and evolution of the **Secretario*
     - **Compact Layout**: Reduced the default width and improved spacing to prevent clutter.
     - **Adaptive Theme Support**: Colors, borders, and buttons now adapt automatically to Light/Dark themes. Fixed an issue where the floating window background remained white in dark mode by using explicit theme-aware background colors and robust theme detection.
 
+### 15. Active Chat Context Sidebar (April 12, 2026)
+**Goal**: Mirror the active chat context in the app sidebar for faster at-a-glance visibility.
+- **Features**:
+    - **Sidebar Mirror**: Added a new collapsible section in the right app sidebar that mirrors the currently active chat context panel.
+    - **Auto-Open Behavior**: The section is expanded by default whenever a chat tab is active.
+    - **Lifecycle Sync**: The section disappears automatically when the user switches away from the chat tab or closes the chat.
+    - **Read-Only Scope**: The sidebar view reflects the active chat context only; it does not persist for inactive or minimized chat windows.
+
 ---
 
 ## Related Side Projects

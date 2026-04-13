@@ -35,6 +35,7 @@ from src.ui.recording_widget import RecordingWidget
 from src.ui.recording_in_progress_widget import RecordingInProgressWidget
 from src.ui.search_results_widget import SearchResultsWidget
 from src.ui.chat_widget import ChatWidget
+from src.ui.chat_widget import ContextManagerPanel
 from src.ui.collection_widget import CollectionWidget
 from src.ui.calendar_widget import CalendarWidget
 from src.ui.styles import LIST_WIDGET_STYLE, NEW_CHAT_BUTTON_STYLE, apply_theme
@@ -230,6 +231,7 @@ class MainWindow(QMainWindow):
         self._active_right_section = None
         self._right_sidebar_layout = None
         self._right_sidebar_bottom_spacer_index = None
+        self._right_sidebar_last_non_chat_section = "tasks"
         self.floating_chat_hosts = []
         
         apply_theme()
@@ -690,7 +692,7 @@ class MainWindow(QMainWindow):
         self.central_tabs = QTabWidget()
         self.central_tabs.setTabsClosable(True)
         self.central_tabs.tabCloseRequested.connect(self.close_tab)
-        self.central_tabs.currentChanged.connect(lambda _: self.refresh_tasks_sidebar())
+        self.central_tabs.currentChanged.connect(self._on_central_tab_changed)
         self.central_tabs.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.central_tabs.customContextMenuRequested.connect(self.show_tab_context_menu)
         self.splitter.addWidget(self.central_tabs)
@@ -771,6 +773,7 @@ class MainWindow(QMainWindow):
                 "header": header_btn,
                 "header_shell": header_shell,
                 "content": content_widget,
+                "container": container,
             }
             return container
 
@@ -932,6 +935,24 @@ class MainWindow(QMainWindow):
         right_layout.addWidget(tags_section)
         self._right_sidebar_sections["tags"]["index"] = right_layout.indexOf(tags_section)
 
+        # 5. Active Chat Context Section
+        self.chat_context_panel = ContextManagerPanel(
+            self.db,
+            self.notebook_db,
+            parent=right_panel,
+            show_header=False,
+            interactive=False,
+        )
+        self.chat_context_section = create_section(
+            "chat_context",
+            "💬 Active Chat Context",
+            top_widget=self.chat_context_panel,
+        )
+        self._right_sidebar_sections["chat_context"]["context_panel"] = self.chat_context_panel
+        right_layout.addWidget(self.chat_context_section)
+        self._right_sidebar_sections["chat_context"]["index"] = right_layout.indexOf(self.chat_context_section)
+        self._right_sidebar_sections["chat_context"]["container"].setVisible(False)
+
         right_layout.addStretch(1)
         self._right_sidebar_bottom_spacer_index = right_layout.count() - 1
 
@@ -1009,6 +1030,8 @@ class MainWindow(QMainWindow):
             return
 
         self._active_right_section = section_key
+        if section_key not in (None, "chat_context"):
+            self._right_sidebar_last_non_chat_section = section_key
         for key, section in self._right_sidebar_sections.items():
             is_active = section_key is not None and key == section_key
             section["header"].blockSignals(True)
@@ -1030,6 +1053,43 @@ class MainWindow(QMainWindow):
                 self._right_sidebar_bottom_spacer_index,
                 0 if section_key is not None else 1,
             )
+
+    def _on_central_tab_changed(self, _index):
+        self.refresh_tasks_sidebar()
+        self._sync_chat_context_section()
+
+    def _current_chat_widget(self):
+        widget = self.central_tabs.currentWidget() if hasattr(self, "central_tabs") else None
+        return widget if isinstance(widget, ChatWidget) else None
+
+    def _sync_chat_context_section(self, chat_widget=None):
+        section = self._right_sidebar_sections.get("chat_context")
+        if section is None:
+            return
+
+        if chat_widget is None:
+            chat_widget = self._current_chat_widget()
+
+        container = section.get("container")
+        if not isinstance(chat_widget, ChatWidget):
+            if container is not None:
+                container.setVisible(False)
+            if self._active_right_section == "chat_context":
+                fallback = self._right_sidebar_last_non_chat_section
+                if fallback not in self._right_sidebar_sections:
+                    fallback = "tasks" if "tasks" in self._right_sidebar_sections else None
+                self._set_active_right_section(fallback)
+            return
+
+        if container is not None:
+            container.setVisible(True)
+        sidebar_panel = section.get("context_panel")
+        if sidebar_panel is not None and hasattr(chat_widget, "context_panel"):
+            try:
+                sidebar_panel.restore_from_panel(chat_widget.context_panel)
+            except Exception:
+                logging.exception("Failed to sync active chat context sidebar")
+        self._set_active_right_section("chat_context")
 
     def show_welcome_screen(self):
         self.welcome_widget = WelcomeWidget(self.db)
@@ -1235,6 +1295,9 @@ class MainWindow(QMainWindow):
         chat_widget.restore_requested.connect(self.restore_floating_chat)
         chat_widget.close_requested.connect(self.close_chat_widget)
         chat_widget.title_changed.connect(self._sync_chat_widget_title)
+        chat_widget.context_panel.context_changed.connect(
+            lambda w=chat_widget: self._sync_chat_context_section(w)
+        )
 
     def _find_chat_tab_index(self, session_id):
         if session_id is None:
@@ -1541,6 +1604,7 @@ class MainWindow(QMainWindow):
         )
         self._sync_chat_widget_title(chat_widget, chat_widget.get_chat_title())
         self._refresh_floating_chat_bar()
+        self._sync_chat_context_section()
 
     def minimize_floating_chat(self, chat_widget):
         if not isinstance(chat_widget, ChatWidget):
@@ -1579,6 +1643,7 @@ class MainWindow(QMainWindow):
         self.central_tabs.setCurrentIndex(index)
         self._set_tab_action_buttons(chat_widget)
         self._refresh_floating_chat_bar()
+        self._sync_chat_context_section(chat_widget)
 
     def close_chat_widget(self, chat_widget):
         if not isinstance(chat_widget, ChatWidget):
@@ -1588,6 +1653,7 @@ class MainWindow(QMainWindow):
             self.close_tab(tab_index)
             return
         self.close_floating_chat(chat_widget)
+        self._sync_chat_context_section()
 
     def open_chat_tab(self, session_id=None, initial_contexts=None):
         if not self.rag:
@@ -1599,6 +1665,7 @@ class MainWindow(QMainWindow):
             tab_index = self._find_chat_tab_index(session_id)
             if tab_index != -1:
                 self.central_tabs.setCurrentIndex(tab_index)
+                self._sync_chat_context_section(self.central_tabs.widget(tab_index))
                 return self.central_tabs.widget(tab_index)
             floating_host = self._find_floating_chat_host(session_id)
             if floating_host is not None:
@@ -1614,6 +1681,7 @@ class MainWindow(QMainWindow):
         index = self.central_tabs.addTab(chat_widget, title)
         self.central_tabs.setCurrentIndex(index)
         self._set_tab_action_buttons(chat_widget)
+        self._sync_chat_context_section(chat_widget)
         return chat_widget
 
     def open_floating_chat(self, session_id=None, initial_contexts=None):
@@ -1713,6 +1781,7 @@ class MainWindow(QMainWindow):
         
         if self.central_tabs.count() == 0:
             self.show_welcome_screen()
+        self._sync_chat_context_section()
 
     def close_floating_chat(self, chat_widget):
         if not isinstance(chat_widget, ChatWidget):
@@ -2444,6 +2513,7 @@ class MainWindow(QMainWindow):
             self._remove_floating_host(floating_host)
             if isinstance(widget, ChatWidget):
                 widget.deleteLater()
+        self._sync_chat_context_section()
 
     def delete_selected_chat_session(self):
         item = self.sessions_list.currentItem()
