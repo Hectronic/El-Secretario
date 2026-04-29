@@ -79,7 +79,7 @@ class TestNewFeaturesIntegrity(unittest.TestCase):
 
         widget._queue_rag_reindex()
 
-        self.task_queue.enqueue_rag_reindex.assert_called_once_with(scope="missing")
+        self.task_queue.enqueue_rag_reindex.assert_called_once_with(scope="missing", source="tools")
         self.assertIn("missing records only", widget.rag_status_lbl.text())
         widget.deleteLater()
 

@@ -1,29 +1,7 @@
 import pytest
-import os
-import torch
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 from PyQt6.QtCore import QCoreApplication
 from src.worker import TranscriberThread
-
-# Mocking WhisperModel to simulate OOM
-class MockWhisperModel:
-    def __init__(self, model_size, device, compute_type, **kwargs):
-        self.model_size = model_size
-        self.device = device
-        self.compute_type = compute_type
-        
-        # Simulate CUDA OOM on the first attempt if device is cuda
-        if device == "cuda" and not getattr(MockWhisperModel, "_fallback_happened", False):
-            MockWhisperModel._fallback_happened = True
-            raise RuntimeError("CUDA failed with error out of memory")
-    
-    def transcribe(self, audio_path, **kwargs):
-        # Mock segments: just one segment for testing
-        mock_segment = MagicMock()
-        mock_segment.text = "Mocked transcription text"
-        mock_segment.start = 0.0
-        mock_segment.end = 1.0
-        return [mock_segment], MagicMock()
 
 @pytest.fixture
 def app(qtbot):
@@ -31,18 +9,21 @@ def app(qtbot):
     return QCoreApplication.instance() or QCoreApplication([])
 
 def test_transcriber_thread_oom_fallback(app, tmp_path):
-    # Reset the flag
-    MockWhisperModel._fallback_happened = False
-    
     # Create a dummy audio file
     dummy_audio = tmp_path / "test.wav"
     dummy_audio.write_bytes(b"dummy data")
     
-    # Force TranscriberThread to start with cuda (mocking torch.cuda.is_available)
+    # Force TranscriberThread to start with cuda. The subprocess should fail once
+    # with OOM and then retry on CPU.
     with patch("torch.cuda.is_available", return_value=True), \
          patch("src.worker.platform.system", return_value="Linux"), \
-         patch("src.worker.WhisperModel", side_effect=MockWhisperModel), \
+         patch("src.worker._run_transcription_in_subprocess") as mock_run_subprocess, \
          patch("src.worker.os.path.getsize", return_value=100):
+
+        mock_run_subprocess.side_effect = [
+            RuntimeError("CUDA failed with error out of memory"),
+            [{"start": 0.0, "end": 1.0, "text": "Mocked transcription text"}],
+        ]
         
         # Create thread
         thread = TranscriberThread(
@@ -63,12 +44,12 @@ def test_transcriber_thread_oom_fallback(app, tmp_path):
         thread.run()
         
         # Assertions
-        assert MockWhisperModel._fallback_happened is True
         assert thread.device == "cpu"
         assert thread.force_cpu is True
-        assert "CUDA OOM detected. Falling back to CPU..." in status_updates
+        assert any("Retrying after crash" in msg for msg in status_updates)
         assert len(finished_results) == 1
         assert finished_results[0]["text"] == "Mocked transcription text"
+        assert mock_run_subprocess.call_count == 2
         print("\nOOM Fallback Test Passed Successfully!")
 
 if __name__ == "__main__":

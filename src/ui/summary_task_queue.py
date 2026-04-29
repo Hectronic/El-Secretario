@@ -1,4 +1,5 @@
 from collections import deque
+import logging
 from typing import Deque, Dict, Optional, Tuple, Any, List
 
 from PyQt6.QtCore import QObject, pyqtSignal, QSettings, QTimer, QThread
@@ -189,33 +190,37 @@ class SummaryTaskQueueManager(QObject):
             "type": "daily_summary",
             "date": date,
             "tags_filter": summary_data.get("tags_filter") or "",
+            "source": self._normalize_source(summary_data.get("source"), "manual"),
         }
         return self._enqueue_unique_task(task)
 
-    def enqueue_recording_summary(self, record_id: int, text: str, title: str) -> bool:
+    def enqueue_recording_summary(self, record_id: int, text: str, title: str, source: str = "manual") -> bool:
         task = {
             "type": "summary", 
             "record_id": record_id,
             "text": text,
-            "title": title
+            "title": title,
+            "source": self._normalize_source(source, "manual"),
         }
         return self._enqueue_unique_task(task)
 
-    def enqueue_weekly_summary(self, week_sunday: str, text: str, tags_filter: str = "") -> bool:
+    def enqueue_weekly_summary(self, week_sunday: str, text: str, tags_filter: str = "", source: str = "manual") -> bool:
         task = {
             "type": "weekly_summary",
             "date": week_sunday,
             "text": text,
-            "tags_filter": tags_filter
+            "tags_filter": tags_filter,
+            "source": self._normalize_source(source, "manual"),
         }
         return self._enqueue_unique_task(task)
 
-    def enqueue_task_extraction(self, record_id: int, text: str, tags: str, title: str = "", force: bool = False) -> bool:
+    def enqueue_task_extraction(self, record_id: int, text: str, tags: str, title: str = "", force: bool = False, source: str = "manual") -> bool:
         if self.db.has_ai_tasks_for_record(record_id) and not force:
             task = {
                 "type": "task_extraction",
                 "record_id": record_id,
                 "title": (title or f"Recording {record_id}").strip(),
+                "source": self._normalize_source(source, "manual"),
             }
             self.task_skipped.emit(task, "Tasks already generated for this record.")
             self._append_history("skipped", task, "Tasks already generated for this record.")
@@ -236,10 +241,11 @@ class SummaryTaskQueueManager(QObject):
             "tags": tags,
             "title": resolved_title,
             "force": bool(force),
+            "source": self._normalize_source(source, "manual"),
         }
         return self._enqueue_unique_task(task)
 
-    def enqueue_transcription(self, record_id: int, audio_path: str, model_size: str = "base", language: str = None, diarization: bool = False, title: str = "") -> bool:
+    def enqueue_transcription(self, record_id: int, audio_path: str, model_size: str = "base", language: str = None, diarization: bool = False, title: str = "", source: str = "manual") -> bool:
         task = {
             "type": "transcription",
             "record_id": record_id,
@@ -247,11 +253,12 @@ class SummaryTaskQueueManager(QObject):
             "model_size": model_size,
             "language": language,
             "diarization": diarization,
-            "title": title
+            "title": title,
+            "source": self._normalize_source(source, "manual"),
         }
         return self._enqueue_unique_task(task)
 
-    def enqueue_rag_reindex(self, scope: str = "all") -> bool:
+    def enqueue_rag_reindex(self, scope: str = "all", source: str = "manual") -> bool:
         normalized_scope = (scope or "all").strip().lower()
         if normalized_scope not in {"all", "missing"}:
             normalized_scope = "all"
@@ -259,6 +266,7 @@ class SummaryTaskQueueManager(QObject):
             "type": "rag_reindex",
             "title": "RAG Reindex",
             "reindex_scope": normalized_scope,
+            "source": self._normalize_source(source, "manual"),
         }
         return self._enqueue_unique_task(task)
 
@@ -306,7 +314,10 @@ class SummaryTaskQueueManager(QObject):
                     self._current_worker.cancel()
                 self._current_worker.requestInterruption()
                 self._current_worker.quit()
-                self._current_worker.wait(3000)
+                if not self._current_worker.wait(15000) and hasattr(self._current_worker, "terminate"):
+                    logging.warning("Forcing queue worker shutdown during cancel_all.")
+                    self._current_worker.terminate()
+                    self._current_worker.wait(5000)
             except Exception:
                 pass
         self._current_worker = None
@@ -333,6 +344,10 @@ class SummaryTaskQueueManager(QObject):
                 worker.requestInterruption()
             if hasattr(worker, "quit"):
                 worker.quit()
+            if worker.isRunning() and not worker.wait(15000) and hasattr(worker, "terminate"):
+                logging.warning("Forcing queue worker shutdown during cancel_current.")
+                worker.terminate()
+                worker.wait(5000)
         except Exception:
             pass
 
@@ -350,6 +365,10 @@ class SummaryTaskQueueManager(QObject):
             task.get("audio_path", ""),
             task.get("reindex_scope", ""),
         )
+
+    def _normalize_source(self, source: Optional[str], default: str = "manual") -> str:
+        value = str(source or "").strip().lower().replace(" ", "_")
+        return value or default
 
     def _emit_queue_state(self):
         self.queue_changed.emit(self.pending_count, self._current_worker is not None)
@@ -457,11 +476,13 @@ class SummaryTaskQueueManager(QObject):
             ai_text = self.db.get_record_ai_text(int(record_id))
             if not str(ai_text or "").strip():
                 return
+            source = (self._current_task or {}).get("source") or "summary"
             self.enqueue_task_extraction(
                 int(record_id),
                 ai_text,
                 rec.get("tags") or "",
                 title or rec.get("title") or f"Recording {record_id}",
+                source=source,
             )
         except Exception:
             pass
@@ -483,6 +504,7 @@ class SummaryTaskQueueManager(QObject):
                             ai_text,
                             rec.get("tags") or "",
                             rec.get("title") or f"Recording {task['record_id']}",
+                            source=task.get("source") or "summary",
                         )
                 elif t_type == "weekly_summary":
                     self.db.save_weekly_summary(task["date"], str(result), task.get("tags_filter"))
@@ -515,7 +537,12 @@ class SummaryTaskQueueManager(QObject):
                     )
                     # Auto chain summary
                     ai_text = self.db.get_record_ai_text(task["record_id"])
-                    self.enqueue_recording_summary(task["record_id"], ai_text, task.get("title", ""))
+                    self.enqueue_recording_summary(
+                        task["record_id"],
+                        ai_text,
+                        task.get("title", ""),
+                        source=task.get("source") or "transcription",
+                    )
                 elif t_type == "rag_reindex" and isinstance(result, dict):
                     indexed = int(result.get("indexed", 0))
                     skipped = int(result.get("skipped", 0))

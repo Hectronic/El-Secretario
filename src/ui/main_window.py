@@ -32,6 +32,7 @@ from src.worker import SearchThread
 from src.ui.dialogs import SettingsWidget, SpeakerDialog
 from src.ui.welcome_widget import WelcomeWidget
 from src.ui.recording_widget import RecordingWidget
+from src.ui.audio_editor_widget import AudioEditorWidget
 from src.ui.recording_in_progress_widget import RecordingInProgressWidget
 from src.ui.search_results_widget import SearchResultsWidget
 from src.ui.chat_widget import ChatWidget
@@ -350,7 +351,7 @@ class MainWindow(QMainWindow):
         if not full_text.strip():
             return
 
-        self.summary_task_queue.enqueue_weekly_summary(week_sunday_str, full_text, "")
+        self.summary_task_queue.enqueue_weekly_summary(week_sunday_str, full_text, "", source="startup")
 
     def _enqueue_missing_previous_daily_summary_if_enabled(self):
         settings = QSettings("Hectronic", "Secretario")
@@ -366,6 +367,7 @@ class MainWindow(QMainWindow):
             {
                 "date": target_day,
                 "tags_filter": "",
+                "source": "startup",
             }
         )
 
@@ -552,16 +554,19 @@ class MainWindow(QMainWindow):
             label.setText(message)
 
     def handle_progress(self, value):
-        # If the queue is running, don't let individual widgets interfere with the progress bar
+        # When the queue is running, its own state drives the global progress bar.
         if self.summary_task_queue.is_running:
             return
 
         if value == -1: # Indeterminate
             self.task_queue_progress.setRange(0, 0)
             self.task_queue_progress.setVisible(True)
+            return
         elif value == -2: # Hide
             self.task_queue_progress.setRange(0, 1)
             self.task_queue_progress.setValue(0)
+            self.task_queue_progress.setVisible(True)
+            return
         else:
             self.task_queue_progress.setRange(0, 100)
             self.task_queue_progress.setValue(value)
@@ -684,6 +689,8 @@ class MainWindow(QMainWindow):
         self.history_list.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         # self.history_list.setStyleSheet(LIST_WIDGET_STYLE) # Use Global Theme
         self.history_list.itemClicked.connect(self.on_history_item_clicked)
+        self.history_list.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self.history_list.customContextMenuRequested.connect(self.show_history_item_context_menu)
         left_layout.addWidget(self.history_list)
 
         self.splitter.addWidget(left_widget)
@@ -1128,7 +1135,8 @@ class MainWindow(QMainWindow):
         today_str = date.today().isoformat()
         self.summary_task_queue.enqueue_daily_summary({
             "date": today_str,
-            "tags_filter": ""
+            "tags_filter": "",
+            "source": "startup",
         })
 
     def start_new_recording(self, config):
@@ -1157,21 +1165,76 @@ class MainWindow(QMainWindow):
         index = self.central_tabs.addTab(rec_widget, "Recording...")
         self.central_tabs.setCurrentIndex(index)
 
-    def open_recording_tab(self, record_id, config=None):
-        """Open a recording tab for an existing record."""
-        # Check if already open
+    def _recording_tab_title(self, record):
+        if not record:
+            return "Recording"
+        return record['title'] if record.get('title') else f"Recording {record['id']}"
+
+    def _find_recording_tabs(self, record_id):
+        tabs = []
         for i in range(self.central_tabs.count()):
             widget = self.central_tabs.widget(i)
-            if isinstance(widget, RecordingWidget) and widget.current_record_id == record_id and record_id is not None:
-                self.central_tabs.setCurrentIndex(i)
-                return widget
+            if isinstance(widget, RecordingWidget) and widget.current_record_id == record_id:
+                tabs.append(widget)
+        return tabs
+
+    def _sync_recording_tab_titles(self, record_id):
+        record = self.db.fetch_record(record_id)
+        title = self._recording_tab_title(record) if record else f"Recording {record_id}"
+        for i in range(self.central_tabs.count()):
+            widget = self.central_tabs.widget(i)
+            if isinstance(widget, RecordingWidget) and widget.current_record_id == record_id:
+                self.central_tabs.setTabText(i, title)
+
+    def _handle_recording_widget_saved(self, rec_widget):
+        record_id = getattr(rec_widget, "current_record_id", None)
+        if record_id is None:
+            return
+        self.load_history()
+        self.request_sidebar_reload(include_tags=True, include_history=True)
+        self._sync_recording_tab_titles(record_id)
+
+    def _handle_recording_widget_deleted(self, record_id):
+        self._close_recording_tabs(record_id)
+        self.load_history()
+        self.request_sidebar_reload(include_tags=True, include_history=True)
+
+    def _close_recording_tabs(self, record_id):
+        removed = False
+        for i in range(self.central_tabs.count() - 1, -1, -1):
+            widget = self.central_tabs.widget(i)
+            if isinstance(widget, RecordingWidget) and widget.current_record_id == record_id:
+                if hasattr(widget, "cleanup"):
+                    try:
+                        widget.cleanup()
+                    except Exception:
+                        pass
+                self.central_tabs.removeTab(i)
+                widget.deleteLater()
+                removed = True
+        if removed and self.central_tabs.count() == 0:
+            self.show_welcome_screen()
+        if removed:
+            self._sync_chat_context_section()
+
+    def open_recording_tab(self, record_id, config=None, force_new=False):
+        """Open a recording tab for an existing record."""
+        # Check if already open
+        if record_id is not None and not force_new:
+            for i in range(self.central_tabs.count()):
+                widget = self.central_tabs.widget(i)
+                if isinstance(widget, RecordingWidget) and widget.current_record_id == record_id:
+                    self.central_tabs.setCurrentIndex(i)
+                    return widget
 
         # Create new tab for existing recording
         rec_widget = RecordingWidget(self.rag, recorder=self.recorder, record_id=record_id, task_queue=self.summary_task_queue)
-        rec_widget.recording_saved.connect(self.load_history)
+        rec_widget.recording_saved.connect(lambda w=rec_widget: self._handle_recording_widget_saved(w))
+        rec_widget.recording_deleted.connect(self._handle_recording_widget_deleted)
         rec_widget.status_changed.connect(self.handle_status_message)
         rec_widget.progress_changed.connect(self.handle_progress)
         rec_widget.start_chat_requested.connect(lambda contexts: self.open_chat_tab(initial_contexts=contexts))
+        rec_widget.open_audio_editor_requested.connect(self.open_recording_editor_tab)
         rec_widget.close_requested.connect(lambda: self.close_tab(self.central_tabs.indexOf(rec_widget)))
         
         # If config is provided, set the widget's transcription settings
@@ -1185,8 +1248,35 @@ class MainWindow(QMainWindow):
                 records = self.db.fetch_all()
                 record = next((r for r in records if r['id'] == record_id), None)
             if record:
-                title = record['title'] if record['title'] else f"Recording {record['id']}"
-        
+                title = self._recording_tab_title(record)
+
+        index = self.central_tabs.addTab(rec_widget, title)
+        self.central_tabs.setCurrentIndex(index)
+        return rec_widget
+
+    def open_recording_editor_tab(self, record_id, config=None):
+        """Open a dedicated audio-editing tab for an existing recording."""
+        rec_widget = AudioEditorWidget(
+            self.rag,
+            recorder=self.recorder,
+            record_id=record_id,
+            task_queue=self.summary_task_queue,
+        )
+        rec_widget.recording_saved.connect(lambda w=rec_widget: self._handle_recording_widget_saved(w))
+        rec_widget.recording_deleted.connect(self._handle_recording_widget_deleted)
+        rec_widget.status_changed.connect(self.handle_status_message)
+        rec_widget.progress_changed.connect(self.handle_progress)
+        rec_widget.close_requested.connect(lambda: self.close_tab(self.central_tabs.indexOf(rec_widget)))
+
+        title = "Audio Editor"
+        if record_id:
+            record = self.db.fetch_record(record_id)
+            if not isinstance(record, dict):
+                records = self.db.fetch_all()
+                record = next((r for r in records if r['id'] == record_id), None)
+            if record:
+                title = f"{self._recording_tab_title(record)} - Editor"
+
         index = self.central_tabs.addTab(rec_widget, title)
         self.central_tabs.setCurrentIndex(index)
         return rec_widget
@@ -1765,11 +1855,20 @@ class MainWindow(QMainWindow):
                 widget.finish_recording()
                 return
         if isinstance(widget, RecordingWidget):
-             # Check for unsaved changes? 
-             # For now, RecordingWidget handles its own cleanup/saving via signals mostly.
-             # But if we close it forcefully, we might lose unsaved title/tags if not saved.
-             # Ideally call a method on widget to check.
-             pass
+            if hasattr(widget, "has_unsaved_changes") and widget.has_unsaved_changes():
+                reply = QMessageBox.question(
+                    self,
+                    "Unsaved Changes",
+                    "This recording has unsaved changes. Save them before closing?",
+                    QMessageBox.StandardButton.Save
+                    | QMessageBox.StandardButton.Discard
+                    | QMessageBox.StandardButton.Cancel,
+                )
+                if reply == QMessageBox.StandardButton.Cancel:
+                    return
+                if reply == QMessageBox.StandardButton.Save:
+                    if hasattr(widget, "save_all_changes") and not widget.save_all_changes():
+                        return
         if hasattr(widget, "cleanup"):
             try:
                 widget.cleanup()
@@ -1811,6 +1910,13 @@ class MainWindow(QMainWindow):
             float_action.triggered.connect(lambda: self.float_chat_widget(widget))
             menu.addAction(float_action)
             menu.addSeparator()
+        elif isinstance(widget, RecordingWidget):
+            editor_action = QAction("Open Audio Editor Tab", self)
+            editor_action.triggered.connect(
+                lambda: self.open_recording_editor_tab(widget.current_record_id)
+            )
+            menu.addAction(editor_action)
+            menu.addSeparator()
         
         close_action = QAction("Close", self)
         close_action.triggered.connect(lambda: self.close_tab(index))
@@ -1825,6 +1931,35 @@ class MainWindow(QMainWindow):
         menu.addAction(close_all_action)
         
         menu.exec(self.central_tabs.mapToGlobal(point))
+
+    def show_history_item_context_menu(self, point):
+        item = self.history_list.itemAt(point)
+        if item is None:
+            return
+
+        data = item.data(Qt.ItemDataRole.UserRole) or {}
+        item_type = data.get("type", "recording")
+        menu = QMenu(self)
+
+        if item_type == "recording":
+            open_action = QAction("Open", self)
+            open_action.triggered.connect(lambda: self.open_recording_tab(data["id"]))
+            open_new_action = QAction("Open Audio Editor Tab", self)
+            open_new_action.triggered.connect(
+                lambda: self.open_recording_editor_tab(data["id"])
+            )
+            menu.addAction(open_action)
+            menu.addAction(open_new_action)
+        elif item_type == "note":
+            open_action = QAction("Open", self)
+            open_action.triggered.connect(lambda: self.open_note_tab(data["id"]))
+            menu.addAction(open_action)
+        else:
+            open_action = QAction("Open", self)
+            open_action.triggered.connect(lambda: self.open_summary_tab(data))
+            menu.addAction(open_action)
+
+        menu.exec(self.history_list.viewport().mapToGlobal(point))
 
     def close_other_tabs(self, keep_index):
         # We need to be careful with indices shifting.
@@ -2266,7 +2401,9 @@ class MainWindow(QMainWindow):
         date = summary_data.get('date')
         if not date:
             return
-        self.summary_task_queue.enqueue_daily_summary(summary_data)
+        payload = dict(summary_data or {})
+        payload.setdefault("source", "welcome")
+        self.summary_task_queue.enqueue_daily_summary(payload)
 
 
 
@@ -2694,14 +2831,7 @@ class MainWindow(QMainWindow):
                     print(f"Error deleting from RAG: {e}")
             
             self.load_history()
-            
-            # Close tab if open
-            for i in range(self.central_tabs.count()):
-                widget = self.central_tabs.widget(i)
-                if isinstance(widget, RecordingWidget) and widget.current_record_id == record_id:
-                    self.central_tabs.removeTab(i)
-                    widget.deleteLater()
-                    break
+            self._close_recording_tabs(record_id)
 
     def open_settings_tab(self):
         """Open settings as a tab."""
@@ -2720,7 +2850,7 @@ class MainWindow(QMainWindow):
             lambda cfg: self._build_rag_engine(cfg, reason="reload")
         )
         settings_widget.rag_reindex_requested.connect(
-            lambda: self.summary_task_queue.enqueue_rag_reindex()
+            lambda: self.summary_task_queue.enqueue_rag_reindex(source="settings")
         )
         index = self.central_tabs.addTab(settings_widget, "Settings")
         self.central_tabs.setCurrentIndex(index)

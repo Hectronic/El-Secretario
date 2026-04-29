@@ -233,6 +233,7 @@ class TestMainWindowDailySummaryIntegration(unittest.TestCase):
             {
                 "date": date.today().isoformat(),
                 "tags_filter": "",
+                "source": "startup",
             }
         )
 
@@ -609,6 +610,7 @@ class TestMainWindowDailySummaryIntegration(unittest.TestCase):
                 {
                     "date": "2026-02-27",
                     "tags_filter": "",
+                    "source": "startup",
                 }
             )
 

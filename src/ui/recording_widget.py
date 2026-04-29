@@ -18,7 +18,7 @@ import logging
 import soundfile as sf
 from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QTextEdit, 
                              QPushButton, QLabel, QComboBox, QFormLayout, 
-                             QLineEdit, QGroupBox, QTabWidget, QFrame, 
+                             QLineEdit, QGroupBox, QTabWidget, QFrame, QDoubleSpinBox,
                              QMessageBox, QStyle, QSlider, QProgressBar, QApplication, QCheckBox,
                              QListWidget, QListWidgetItem)
 from PyQt6.QtCore import Qt, QSettings, QUrl, pyqtSignal
@@ -26,6 +26,7 @@ from PyQt6.QtMultimedia import QMediaPlayer, QAudioOutput
 from PyQt6.QtGui import QCursor
 
 from src.database import DBManager
+from src.audio import trim_audio_segment
 from src.worker import TranscriberThread, get_transcription_preflight_error
 from src.ai_assistant import AIAssistant
 from src.ui.dialogs import SpeakerDialog
@@ -37,12 +38,14 @@ Recorder = None
 
 class RecordingWidget(QWidget):
     recording_saved = pyqtSignal() # To refresh history list in MainWindow
+    recording_deleted = pyqtSignal(int) # Notify MainWindow so duplicate tabs can close
     close_requested = pyqtSignal() # To request closing the tab
     start_chat_requested = pyqtSignal(list) # Emits initial chat contexts
+    open_audio_editor_requested = pyqtSignal(int) # Request opening the audio editor tab
     status_changed = pyqtSignal(str)
     progress_changed = pyqtSignal(int)
 
-    def __init__(self, rag_engine, recorder=None, record_id=None, task_queue=None, parent=None):
+    def __init__(self, rag_engine, recorder=None, record_id=None, task_queue=None, parent=None, audio_edit_mode=False):
         super().__init__(parent)
         self.rag = rag_engine
         self.db = DBManager()
@@ -57,8 +60,13 @@ class RecordingWidget(QWidget):
         self.summary_task_queue = task_queue
         self.current_record_id = record_id
         self.current_recording_path = None
+        self.audio_edit_mode = audio_edit_mode
         self.transcriber_thread = None
         self.ai_thread = None
+        self._suppress_dirty_tracking = False
+        self._has_unsaved_changes = False
+        self._audio_edit_start = 0.0
+        self._audio_edit_end = 0.0
         settings = QSettings("Hectronic", "Secretario")
         self.auto_summarize_after_transcription = settings.value(
             "rec_config/auto_summarize_after_transcription",
@@ -75,15 +83,21 @@ class RecordingWidget(QWidget):
         self.player.playbackStateChanged.connect(self.media_state_changed)
 
         self.init_ui()
+        self._connect_dirty_tracking()
         
         if self.current_record_id:
             self.load_record(self.current_record_id)
         else:
             self.status_changed.emit("Ready to record")
+            self._set_audio_edit_enabled(False)
 
     def init_ui(self):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(10, 10, 10, 10)
+
+        if self.audio_edit_mode:
+            self._build_audio_editor_ui(layout)
+            return
 
         # Transcription Controls (for retranscription)
         transcription_layout = QHBoxLayout()
@@ -125,6 +139,14 @@ class RecordingWidget(QWidget):
         self.stop_btn.clicked.connect(self.stop_audio)
         self.stop_btn.setEnabled(False)
         playback_layout.addWidget(self.stop_btn)
+
+        self.edit_audio_btn = QPushButton("Edit Audio in New Tab")
+        self.edit_audio_btn.setProperty("class", "calendar-primary-btn")
+        self.edit_audio_btn.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
+        self.edit_audio_btn.setMinimumHeight(38)
+        self.edit_audio_btn.clicked.connect(self.open_audio_editor)
+        self.edit_audio_btn.setEnabled(False)
+        playback_layout.addWidget(self.edit_audio_btn)
         
         self.slider = QSlider(Qt.Orientation.Horizontal)
         self.slider.setRange(0, 0)
@@ -144,6 +166,58 @@ class RecordingWidget(QWidget):
         self.audio_output.setVolume(0.7)
         playback_layout.addWidget(self.volume_slider)
         layout.addLayout(playback_layout)
+
+        self.audio_edit_group = None
+        if self.audio_edit_mode:
+            edit_group = QGroupBox("Audio Edit")
+            edit_layout = QVBoxLayout(edit_group)
+            edit_layout.setSpacing(8)
+
+            edit_row = QHBoxLayout()
+            self.trim_start_spin = QDoubleSpinBox()
+            self.trim_start_spin.setDecimals(2)
+            self.trim_start_spin.setSingleStep(0.5)
+            self.trim_start_spin.setMinimum(0.0)
+            self.trim_start_spin.setMaximum(0.0)
+            self.trim_start_spin.setSuffix(" s")
+            edit_row.addWidget(QLabel("Start:"))
+            edit_row.addWidget(self.trim_start_spin)
+
+            self.trim_end_spin = QDoubleSpinBox()
+            self.trim_end_spin.setDecimals(2)
+            self.trim_end_spin.setSingleStep(0.5)
+            self.trim_end_spin.setMinimum(0.0)
+            self.trim_end_spin.setMaximum(0.0)
+            self.trim_end_spin.setSuffix(" s")
+            edit_row.addWidget(QLabel("End:"))
+            edit_row.addWidget(self.trim_end_spin)
+
+            self.mark_start_btn = QPushButton("Mark Start")
+            self.mark_start_btn.clicked.connect(self.mark_trim_start_from_playhead)
+            edit_row.addWidget(self.mark_start_btn)
+
+            self.mark_end_btn = QPushButton("Mark End")
+            self.mark_end_btn.clicked.connect(self.mark_trim_end_from_playhead)
+            edit_row.addWidget(self.mark_end_btn)
+            edit_row.addStretch()
+            edit_layout.addLayout(edit_row)
+
+            trim_row = QHBoxLayout()
+            self.trim_btn = QPushButton("Trim and Retranscribe")
+            self.trim_btn.setProperty("class", "calendar-primary-btn")
+            self.trim_btn.clicked.connect(self.trim_audio_selection)
+            trim_row.addWidget(self.trim_btn)
+            trim_row.addStretch()
+            edit_layout.addLayout(trim_row)
+
+            layout.addWidget(edit_group)
+            self.audio_edit_group = edit_group
+        else:
+            self.trim_start_spin = None
+            self.trim_end_spin = None
+            self.mark_start_btn = None
+            self.mark_end_btn = None
+            self.trim_btn = None
         
         line = QFrame()
         line.setFrameShape(QFrame.Shape.HLine)
@@ -267,9 +341,196 @@ class RecordingWidget(QWidget):
 
         layout.addLayout(bottom_actions_layout)
 
+    def _build_audio_editor_ui(self, layout):
+        playback_layout = QHBoxLayout()
+        self.play_btn = QPushButton()
+        self.play_btn.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_MediaPlay))
+        self.play_btn.clicked.connect(self.play_audio)
+        self.play_btn.setEnabled(False)
+        playback_layout.addWidget(self.play_btn)
+
+        self.pause_btn = QPushButton()
+        self.pause_btn.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_MediaPause))
+        self.pause_btn.clicked.connect(self.pause_audio)
+        self.pause_btn.setEnabled(False)
+        playback_layout.addWidget(self.pause_btn)
+
+        self.stop_btn = QPushButton()
+        self.stop_btn.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_MediaStop))
+        self.stop_btn.clicked.connect(self.stop_audio)
+        self.stop_btn.setEnabled(False)
+        playback_layout.addWidget(self.stop_btn)
+
+        self.slider = QSlider(Qt.Orientation.Horizontal)
+        self.slider.setRange(0, 0)
+        self.slider.sliderMoved.connect(self.set_position)
+        playback_layout.addWidget(self.slider)
+
+        self.time_label = QLabel("00:00 / 00:00")
+        playback_layout.addWidget(self.time_label)
+
+        vol_label = QLabel("Vol:")
+        playback_layout.addWidget(vol_label)
+        self.volume_slider = QSlider(Qt.Orientation.Horizontal)
+        self.volume_slider.setRange(0, 100)
+        self.volume_slider.setValue(70)
+        self.volume_slider.setFixedWidth(80)
+        self.volume_slider.valueChanged.connect(self.audio_output.setVolume)
+        self.audio_output.setVolume(0.7)
+        playback_layout.addWidget(self.volume_slider)
+        layout.addLayout(playback_layout)
+
+        edit_group = QGroupBox("Audio Edit")
+        edit_layout = QVBoxLayout(edit_group)
+        edit_layout.setSpacing(8)
+
+        edit_row = QHBoxLayout()
+        self.trim_start_spin = QDoubleSpinBox()
+        self.trim_start_spin.setDecimals(2)
+        self.trim_start_spin.setSingleStep(0.5)
+        self.trim_start_spin.setMinimum(0.0)
+        self.trim_start_spin.setMaximum(0.0)
+        self.trim_start_spin.setSuffix(" s")
+        edit_row.addWidget(QLabel("Start:"))
+        edit_row.addWidget(self.trim_start_spin)
+
+        self.trim_end_spin = QDoubleSpinBox()
+        self.trim_end_spin.setDecimals(2)
+        self.trim_end_spin.setSingleStep(0.5)
+        self.trim_end_spin.setMinimum(0.0)
+        self.trim_end_spin.setMaximum(0.0)
+        self.trim_end_spin.setSuffix(" s")
+        edit_row.addWidget(QLabel("End:"))
+        edit_row.addWidget(self.trim_end_spin)
+
+        self.mark_start_btn = QPushButton("Mark Start")
+        self.mark_start_btn.clicked.connect(self.mark_trim_start_from_playhead)
+        edit_row.addWidget(self.mark_start_btn)
+
+        self.mark_end_btn = QPushButton("Mark End")
+        self.mark_end_btn.clicked.connect(self.mark_trim_end_from_playhead)
+        edit_row.addWidget(self.mark_end_btn)
+        edit_row.addStretch()
+        edit_layout.addLayout(edit_row)
+
+        trim_row = QHBoxLayout()
+        self.trim_btn = QPushButton("Trim and Retranscribe")
+        self.trim_btn.setProperty("class", "calendar-primary-btn")
+        self.trim_btn.clicked.connect(self.trim_audio_selection)
+        trim_row.addWidget(self.trim_btn)
+        trim_row.addStretch()
+        edit_layout.addLayout(trim_row)
+
+        layout.addWidget(edit_group)
+        self.audio_edit_group = edit_group
+
+        line = QFrame()
+        line.setFrameShape(QFrame.Shape.HLine)
+        line.setFrameShadow(QFrame.Shadow.Sunken)
+        layout.addWidget(line)
+
+        self.duration_label = None
+        self.model_combo = None
+        self.lang_combo = None
+        self.diarization_check = None
+        self.title_input = None
+        self.save_all_btn = None
+        self.date_label = None
+        self.duration_label = None
+        self.tags_input = None
+        self.is_diarized_check_meta = None
+        self.tabs = None
+        self.text_display = None
+        self.notes_display = None
+        self.summary_display = None
+        self.tasks_widget = None
+        self.summarize_btn = None
+        self.extract_tasks_btn = None
+        self.retranscribe_btn = None
+        self.ask_meeting_btn = None
+        self.delete_btn = None
+        self.rename_speakers_btn = None
+        return
+
+    def _connect_dirty_tracking(self):
+        for widget_name, signal_name in (
+            ("title_input", "textChanged"),
+            ("text_display", "textChanged"),
+            ("notes_display", "textChanged"),
+            ("tags_input", "textChanged"),
+            ("is_diarized_check_meta", "stateChanged"),
+            ("trim_start_spin", "valueChanged"),
+            ("trim_end_spin", "valueChanged"),
+        ):
+            widget = getattr(self, widget_name, None)
+            if widget is None:
+                continue
+            signal = getattr(widget, signal_name, None)
+            if signal is not None:
+                signal.connect(self._mark_dirty)
+
+    def _mark_dirty(self, *_args):
+        if self._suppress_dirty_tracking:
+            return
+        self._has_unsaved_changes = True
+
+    def _set_dirty(self, is_dirty: bool):
+        self._has_unsaved_changes = bool(is_dirty)
+
+    def has_unsaved_changes(self):
+        return self._has_unsaved_changes
+
+    def _set_audio_edit_enabled(self, enabled: bool):
+        if not self.audio_edit_group:
+            return
+        for widget in (
+            self.audio_edit_group,
+            self.trim_start_spin,
+            self.trim_end_spin,
+            self.mark_start_btn,
+            self.mark_end_btn,
+            self.trim_btn,
+        ):
+            widget.setEnabled(enabled)
+
+    def _configure_audio_edit_bounds(self, duration_seconds: float):
+        duration_seconds = max(0.0, float(duration_seconds or 0.0))
+        self._audio_edit_start = 0.0
+        self._audio_edit_end = duration_seconds
+        if not self.audio_edit_group:
+            return
+        self.trim_start_spin.blockSignals(True)
+        self.trim_end_spin.blockSignals(True)
+        self.trim_start_spin.setRange(0.0, duration_seconds)
+        self.trim_end_spin.setRange(0.0, duration_seconds)
+        self.trim_start_spin.setValue(0.0)
+        self.trim_end_spin.setValue(duration_seconds)
+        self.trim_start_spin.blockSignals(False)
+        self.trim_end_spin.blockSignals(False)
+        self._set_audio_edit_enabled(duration_seconds > 0.0)
+
+    def _current_playhead_seconds(self):
+        return max(0.0, float(self.player.position()) / 1000.0)
+
     def load_record(self, record_id):
         record = self.db.fetch_record(record_id)
         if record:
+            if self.audio_edit_mode:
+                self.current_record_id = record['id']
+                filename = record['filename']
+                self.current_recording_path = os.path.join(os.getcwd(), "recordings", filename)
+                self._configure_audio_edit_bounds(record['duration'])
+                if os.path.exists(self.current_recording_path):
+                    self.enable_playback_controls()
+                    self.player.setSource(QUrl.fromLocalFile(self.current_recording_path))
+                else:
+                    self.disable_playback_controls()
+                    self.status_changed.emit("Audio file not found.")
+                self._set_audio_edit_enabled(os.path.exists(self.current_recording_path) and record['duration'] > 0.0)
+                self._set_dirty(False)
+                return
+
+            self._suppress_dirty_tracking = True
             self.current_record_id = record['id']
             self.text_display.setText(record['transcription'])
             self.notes_display.setText(record.get('recording_notes') or "")
@@ -283,6 +544,7 @@ class RecordingWidget(QWidget):
             self.save_all_btn.setEnabled(True)
             self.date_label.setText(record['created_at'])
             self.duration_label.setText(f"{record['duration']:.1f}s")
+            self._configure_audio_edit_bounds(record['duration'])
             
             has_text = bool((record.get('transcription') or '').strip() or (record.get('recording_notes') or '').strip())
             self.summarize_btn.setEnabled(has_text)
@@ -303,8 +565,14 @@ class RecordingWidget(QWidget):
             self.tasks_widget.record_id = self.current_record_id
             self.tasks_widget.refresh()
             self.ask_meeting_btn.setEnabled(True)
+            self.edit_audio_btn.setEnabled(os.path.exists(self.current_recording_path) and record['duration'] > 0.0)
+            self._set_audio_edit_enabled(os.path.exists(self.current_recording_path) and record['duration'] > 0.0)
+            self._set_dirty(False)
+            self._suppress_dirty_tracking = False
 
     def set_transcription_config(self, config):
+        if not getattr(self, "model_combo", None):
+            return
         if config.get("model"):
             index = self.model_combo.findText(config["model"])
             if index >= 0: self.model_combo.setCurrentIndex(index)
@@ -366,6 +634,7 @@ class RecordingWidget(QWidget):
         self.transcriber_thread.status_update.connect(self._on_transcriber_status_update)
         self.transcriber_thread.error.connect(self.on_transcription_error)
         self.transcriber_thread.finished.connect(self._clear_transcriber_thread_ref)
+        self.transcriber_thread.error.connect(self._clear_transcriber_thread_ref)
         self.transcriber_thread.start()
 
     def on_transcription_finished(self, result):
@@ -377,7 +646,7 @@ class RecordingWidget(QWidget):
             compute_type = result.get("compute_type", "unknown")
             self.summary_task_queue.add_external_trace(
                 f"Direct transcription finished: backend={backend}, model={model_name}, device={device}, compute={compute_type}",
-                {"type": "transcription", "record_id": self.current_record_id or -1},
+                {"type": "transcription", "record_id": self.current_record_id or -1, "source": "recording"},
                 event="finished",
             )
         logging.info("Post-transcription checkpoint P2: queue trace emitted")
@@ -423,7 +692,7 @@ class RecordingWidget(QWidget):
         if self.summary_task_queue and hasattr(self.summary_task_queue, "add_external_trace"):
             self.summary_task_queue.add_external_trace(
                 f"Direct transcription failed: {err}",
-                {"type": "transcription", "record_id": self.current_record_id or -1},
+                {"type": "transcription", "record_id": self.current_record_id or -1, "source": "recording"},
                 event="failed",
             )
         self.status_changed.emit("Failed.")
@@ -436,7 +705,7 @@ class RecordingWidget(QWidget):
         if self.summary_task_queue and hasattr(self.summary_task_queue, "add_external_trace"):
             self.summary_task_queue.add_external_trace(
                 message,
-                {"type": "transcription", "record_id": self.current_record_id or -1},
+                {"type": "transcription", "record_id": self.current_record_id or -1, "source": "recording"},
                 event="trace",
             )
 
@@ -456,8 +725,11 @@ class RecordingWidget(QWidget):
                 if self._should_auto_index_rag(settings):
                     ai_text = self.db.compose_ai_text(new_text, new_notes)
                     self.rag.add_document(self.current_record_id, ai_text, {"title": new_title, "date": self.date_label.text(), "tags": new_tags})
+            self._set_dirty(False)
             self.recording_saved.emit()
             self.status_changed.emit("Saved.")
+            return True
+        return False
 
     def run_ai_task(self, task_type):
         text = self.db.compose_ai_text(self.text_display.toPlainText(), self.notes_display.toPlainText())
@@ -468,7 +740,8 @@ class RecordingWidget(QWidget):
                 self.summary_task_queue.enqueue_recording_summary(
                     self.current_record_id, 
                     text, 
-                    self.title_input.text() or f"Recording {self.current_record_id}"
+                    self.title_input.text() or f"Recording {self.current_record_id}",
+                    source="recording"
                 )
                 return
             elif task_type == "task_extraction":
@@ -483,6 +756,7 @@ class RecordingWidget(QWidget):
                     self.tags_input.text(),
                     self.title_input.text() or f"Recording {self.current_record_id}",
                     force=force_reextract,
+                    source="recording",
                 )
                 return
         elif task_type in {"summary", "task_extraction"}:
@@ -518,6 +792,7 @@ class RecordingWidget(QWidget):
                 self.current_record_id,
                 text,
                 title,
+                source="recording",
             )
         else:
             QMessageBox.warning(self, "Error", "Automatic summary requires the central queue to be available.")
@@ -612,8 +887,67 @@ class RecordingWidget(QWidget):
                 if self.rag:
                     try: self.rag.delete_document(str(self.current_record_id))
                     except Exception: pass
-                self.recording_saved.emit()
-                self.close_requested.emit()
+                self.recording_deleted.emit(self.current_record_id)
+
+    def open_audio_editor(self):
+        if self.current_record_id is None:
+            return
+        self.open_audio_editor_requested.emit(int(self.current_record_id))
+
+    def mark_trim_start_from_playhead(self):
+        if not self.trim_start_spin:
+            return
+        self.trim_start_spin.setValue(self._current_playhead_seconds())
+        if self.trim_start_spin.value() > self.trim_end_spin.value():
+            self.trim_end_spin.setValue(self.trim_start_spin.value())
+
+    def mark_trim_end_from_playhead(self):
+        if not self.trim_end_spin:
+            return
+        self.trim_end_spin.setValue(self._current_playhead_seconds())
+        if self.trim_end_spin.value() < self.trim_start_spin.value():
+            self.trim_start_spin.setValue(self.trim_end_spin.value())
+
+    def trim_audio_selection(self):
+        if not self.audio_edit_group:
+            return
+        if not self.current_recording_path or not os.path.exists(self.current_recording_path):
+            QMessageBox.warning(self, "Error", "Audio file not available.")
+            return
+
+        start_seconds = float(self.trim_start_spin.value())
+        end_seconds = float(self.trim_end_spin.value())
+        if end_seconds <= start_seconds:
+            QMessageBox.warning(self, "Error", "The trim end must be greater than the start.")
+            return
+
+        try:
+            backup_path = f"{self.current_recording_path}.orig"
+            if not os.path.exists(backup_path):
+                try:
+                    import shutil
+                    shutil.copy2(self.current_recording_path, backup_path)
+                except Exception:
+                    logging.exception("Unable to create backup copy before trimming")
+
+            duration = trim_audio_segment(
+                self.current_recording_path,
+                start_seconds,
+                end_seconds,
+                self.current_recording_path,
+            )
+            self.db.update_duration(self.current_record_id, duration)
+            if getattr(self, "duration_label", None):
+                self.duration_label.setText(f"{duration:.1f}s")
+            self._configure_audio_edit_bounds(duration)
+            self.player.setSource(QUrl.fromLocalFile(self.current_recording_path))
+            self._set_dirty(False)
+            self.recording_saved.emit()
+            self.status_changed.emit("Audio trimmed. Retranscribing...")
+            self.start_transcription(self.current_recording_path)
+        except Exception as exc:
+            logging.exception("Failed to trim audio for record_id=%s", self.current_record_id)
+            QMessageBox.critical(self, "Trim Error", str(exc))
 
     def open_chat_for_recording(self):
         if not self.current_record_id:
@@ -641,11 +975,25 @@ class RecordingWidget(QWidget):
         if self.player.mediaStatus() == QMediaPlayer.MediaStatus.EndOfMedia: self.stop_audio()
     def enable_playback_controls(self):
         self.play_btn.setEnabled(True); self.pause_btn.setEnabled(True); self.stop_btn.setEnabled(True)
-        self.ask_meeting_btn.setEnabled(True); self.retranscribe_btn.setEnabled(True); self.delete_btn.setEnabled(True)
+        if getattr(self, "ask_meeting_btn", None):
+            self.ask_meeting_btn.setEnabled(True)
+        if getattr(self, "retranscribe_btn", None):
+            self.retranscribe_btn.setEnabled(True)
+        if getattr(self, "delete_btn", None):
+            self.delete_btn.setEnabled(True)
+        if getattr(self, "edit_audio_btn", None):
+            self.edit_audio_btn.setEnabled(True)
         
     def disable_playback_controls(self):
         self.play_btn.setEnabled(False); self.pause_btn.setEnabled(False); self.stop_btn.setEnabled(False)
-        self.ask_meeting_btn.setEnabled(False); self.retranscribe_btn.setEnabled(False); self.delete_btn.setEnabled(False)
+        if getattr(self, "ask_meeting_btn", None):
+            self.ask_meeting_btn.setEnabled(False)
+        if getattr(self, "retranscribe_btn", None):
+            self.retranscribe_btn.setEnabled(False)
+        if getattr(self, "delete_btn", None):
+            self.delete_btn.setEnabled(False)
+        if getattr(self, "edit_audio_btn", None):
+            self.edit_audio_btn.setEnabled(False)
 
     def _clear_transcriber_thread_ref(self, *args):
         thread = self.transcriber_thread

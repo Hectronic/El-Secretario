@@ -74,19 +74,20 @@ class GeminiProvider(AIProvider):
     def __init__(self, api_key: str, model_name: str = "gemini-3-flash-preview"):
         if not api_key:
             raise ValueError("Gemini API Key is missing.")
-        
-        import google.generativeai as genai
-        self.genai = genai
+
+        from google import genai
+
         self.api_key = api_key
         self.model_name = model_name
-        
-        genai.configure(api_key=api_key)
-        self.model = genai.GenerativeModel(model_name)
+        self.client = genai.Client(api_key=api_key)
     
     def generate_content(self, prompt: str) -> str:
         try:
-            response = self.model.generate_content(prompt)
-            return response.text if response and hasattr(response, 'text') else ""
+            response = self.client.models.generate_content(
+                model=self.model_name,
+                contents=prompt,
+            )
+            return response.text if response and hasattr(response, "text") else ""
         except Exception as e:
             logging.error(f"Gemini error: {e}")
             raise RuntimeError(str(e))
@@ -112,9 +113,12 @@ class GeminiProvider(AIProvider):
         
         Assistant:
         """
-        
-        response = self.model.generate_content(full_prompt)
-        return response.text
+
+        response = self.client.models.generate_content(
+            model=self.model_name,
+            contents=full_prompt,
+        )
+        return response.text if response and hasattr(response, "text") else ""
 
 
 class OllamaProvider(AIProvider):

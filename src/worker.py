@@ -13,7 +13,6 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 from PyQt6.QtCore import QThread, pyqtSignal, QSettings
-from faster_whisper import WhisperModel
 import os
 import platform
 import torch
@@ -225,93 +224,162 @@ def _resolve_sherpa_onnx_model_config(model_dir: str, model_type: str) -> dict:
     }
 
 
-def _create_sherpa_onnx_recognizer(*, sherpa_onnx_module, model_config: dict, language: str):
-    common_kwargs = {
-        "tokens": model_config["tokens"],
-        "num_threads": 2,
-        "sample_rate": 16000,
-        "feature_dim": 80,
-        "decoding_method": "greedy_search",
-        "debug": False,
-    }
-    model_type = model_config["type"]
+def _run_backend_subprocess(*, backend: str, payload: dict, timeout_seconds: int = 1800):
+    import time
 
-    if model_type == "transducer":
-        return sherpa_onnx_module.OfflineRecognizer.from_transducer(
-            encoder=model_config["encoder"],
-            decoder=model_config["decoder"],
-            joiner=model_config["joiner"],
-            **common_kwargs,
-        )
-    if model_type == "paraformer":
-        return sherpa_onnx_module.OfflineRecognizer.from_paraformer(
-            paraformer=model_config["model"],
-            **common_kwargs,
-        )
-    if model_type == "nemo-ctc":
-        return sherpa_onnx_module.OfflineRecognizer.from_nemo_ctc(
-            model=model_config["model"],
-            **common_kwargs,
-        )
-    if model_type == "wenet-ctc":
-        return sherpa_onnx_module.OfflineRecognizer.from_wenet_ctc(
-            model=model_config["model"],
-            **common_kwargs,
-        )
-    if model_type == "tdnn-ctc":
-        return sherpa_onnx_module.OfflineRecognizer.from_tdnn_ctc(
-            model=model_config["model"],
-            **common_kwargs,
-        )
-    if model_type == "whisper":
-        return sherpa_onnx_module.OfflineRecognizer.from_whisper(
-            encoder=model_config["encoder"],
-            decoder=model_config["decoder"],
-            tokens=model_config["tokens"],
-            num_threads=1,
-            decoding_method="greedy_search",
-            debug=False,
-            language=language or "",
-            task="transcribe",
-            tail_paddings=-1,
-        )
+    ctx = mp.get_context("spawn")
+    result_queue = ctx.Queue()
+    payload = {**payload, "backend": backend}
+    proc = ctx.Process(target=subprocess_transcribe_entry, args=(payload, result_queue), daemon=False)
+    try:
+        proc.start()
+        start_time = time.monotonic()
 
-    raise RuntimeError(f"Unsupported Sherpa-ONNX model type: {model_type}")
+        while proc.is_alive():
+            current_thread = QThread.currentThread()
+            if current_thread is not None and hasattr(current_thread, "isInterruptionRequested"):
+                if current_thread.isInterruptionRequested():
+                    proc.terminate()
+                    proc.join(timeout=5)
+                    raise RuntimeError("Transcription cancelled.")
+
+            if start_time is not None and (time.monotonic() - start_time) >= timeout_seconds:
+                proc.terminate()
+                proc.join(timeout=5)
+                raise RuntimeError("Transcription subprocess timed out.")
+
+            proc.join(timeout=1)
+
+        if proc.exitcode != 0:
+            raise RuntimeError(
+                f"Transcription subprocess crashed with exit code {proc.exitcode} "
+                f"(possible native crash in transcription backend)."
+            )
+
+        if result_queue.empty():
+            raise RuntimeError("Transcription subprocess finished without returning a result.")
+
+        result = result_queue.get()
+        if not result.get("ok"):
+            raise RuntimeError(result.get("error") or "Unknown subprocess transcription error.")
+
+        return result["segments"]
+    finally:
+        try:
+            result_queue.close()
+        except Exception:
+            pass
+        try:
+            result_queue.join_thread()
+        except Exception:
+            pass
+        try:
+            proc.close()
+        except Exception:
+            pass
+
+
+def _run_transcription_in_subprocess(
+    *,
+    audio_path: str,
+    model_size: str,
+    device: str,
+    compute_type: str,
+    language: str,
+    timeout_seconds: int = 1800,
+):
+    return _run_backend_subprocess(
+        backend="faster-whisper",
+        payload={
+            "audio_path": audio_path,
+            "model_size": model_size,
+            "device": device,
+            "compute_type": compute_type,
+            "language": language,
+            "beam_size": 5,
+        },
+        timeout_seconds=timeout_seconds,
+    )
+
+
+def _run_openai_whisper_fallback(*, audio_path: str, model_size: str, language: str):
+    return _run_backend_subprocess(
+        backend="openai-whisper",
+        payload={
+            "audio_path": audio_path,
+            "model_size": model_size,
+            "language": language,
+        },
+    )
 
 
 def _run_sherpa_onnx_transcription(*, audio_path: str, language: str, settings, status_callback=None) -> list[dict]:
-    try:
-        import numpy as np
-        import sherpa_onnx
-        import soundfile as sf
-    except ImportError as e:
-        raise RuntimeError(
-            "sherpa-onnx support requires the 'sherpa-onnx' package to be installed."
-        ) from e
-
     model_dir, model_config = _ensure_sherpa_onnx_model_ready(settings, status_callback=status_callback)
-    recognizer = _create_sherpa_onnx_recognizer(
-        sherpa_onnx_module=sherpa_onnx,
-        model_config=model_config,
-        language=language,
+    return _run_backend_subprocess(
+        backend="sherpa-onnx",
+        payload={
+            "audio_path": audio_path,
+            "language": language,
+            "model_dir": model_dir,
+            "model_config": model_config,
+        },
     )
 
-    audio, sample_rate = sf.read(audio_path, always_2d=False)
-    audio = np.asarray(audio, dtype=np.float32)
-    if audio.ndim > 1:
-        audio = np.mean(audio, axis=1).astype(np.float32)
 
-    stream = recognizer.create_stream()
-    stream.accept_waveform(sample_rate, audio)
-    recognizer.decode_streams([stream])
-    result = getattr(stream, "result", None)
-    text = str(getattr(result, "text", "") or "").strip()
+def _is_subprocess_native_crash(error: RuntimeError) -> bool:
+    message = str(error).lower()
+    return "subprocess crashed with exit code" in message
 
-    if not text:
-        return []
 
-    duration = len(audio) / float(sample_rate) if sample_rate else 0.0
-    return [{"start": 0.0, "end": float(duration), "text": text}]
+def _is_subprocess_timeout(error: RuntimeError) -> bool:
+    return "subprocess timed out" in str(error).lower()
+
+
+def _subprocess_fallback_profiles(device: str, compute_type: str, *, is_windows: bool):
+    """
+    Return fallback profiles ordered from safer to most compatible.
+
+    On every platform we keep a CUDA -> CPU escape hatch so a bad GPU allocation
+    or native leak does not keep the parent process pinned to a growing backend.
+    Windows also gets extra CPU compute-type permutations because the ctranslate2
+    stack is more fragile there.
+    """
+    candidates = []
+    if device == "cuda":
+        candidates.extend(
+            [
+                ("cpu", "int8_float32"),
+                ("cpu", "float32"),
+                ("cpu", "int8"),
+            ]
+        )
+    elif is_windows:
+        candidates.extend(
+            [
+                ("cpu", "float32"),
+                ("cpu", "int8_float32"),
+                ("cpu", "int8"),
+            ]
+        )
+
+    unique = []
+    for cand in candidates:
+        if cand == (device, compute_type):
+            continue
+        if cand not in unique:
+            unique.append(cand)
+    return unique
+
+
+def _windows_model_fallback_order(model_size: str):
+    candidates = [model_size]
+    if model_size == "large-v3":
+        candidates.extend(["medium", "base"])
+    elif model_size == "large":
+        candidates.extend(["medium", "base"])
+    elif model_size == "medium":
+        candidates.append("base")
+    return candidates
 
 
 def get_transcription_preflight_error(model_size: str, settings) -> str | None:
@@ -495,174 +563,6 @@ def _log_transcription_runtime_context(
     _flush_log_handlers()
 
 
-def _run_transcription_in_subprocess(
-    *,
-    audio_path: str,
-    model_size: str,
-    device: str,
-    compute_type: str,
-    language: str,
-    timeout_seconds: int = 1800,
-):
-    ctx = mp.get_context("spawn")
-    result_queue = ctx.Queue()
-    payload = {
-        "audio_path": audio_path,
-        "model_size": model_size,
-        "device": device,
-        "compute_type": compute_type,
-        "language": language,
-        "beam_size": 5,
-    }
-    # Keep daemon disabled on Windows for better native library stability.
-    proc = ctx.Process(target=subprocess_transcribe_entry, args=(payload, result_queue), daemon=False)
-    proc.start()
-    proc.join(timeout=timeout_seconds)
-
-    if proc.is_alive():
-        proc.terminate()
-        proc.join(timeout=5)
-        raise RuntimeError("Transcription subprocess timed out.")
-
-    if proc.exitcode != 0:
-        raise RuntimeError(
-            f"Transcription subprocess crashed with exit code {proc.exitcode} "
-            f"(possible native crash in faster-whisper/ctranslate2)."
-        )
-
-    if result_queue.empty():
-        raise RuntimeError("Transcription subprocess finished without returning a result.")
-
-    result = result_queue.get()
-    if not result.get("ok"):
-        raise RuntimeError(result.get("error") or "Unknown subprocess transcription error.")
-
-    return result["segments"]
-
-
-def _is_subprocess_native_crash(error: RuntimeError) -> bool:
-    message = str(error).lower()
-    return "subprocess crashed with exit code" in message
-
-
-def _is_subprocess_timeout(error: RuntimeError) -> bool:
-    return "subprocess timed out" in str(error).lower()
-
-
-def _windows_subprocess_fallback_profiles(device: str, compute_type: str):
-    """
-    Return fallback profiles ordered from safer to most compatible for Windows.
-    """
-    candidates = []
-    if device == "cuda":
-        candidates.extend(
-            [
-                ("cpu", "int8_float32"),
-                ("cpu", "float32"),
-                ("cpu", "int8"),
-            ]
-        )
-    else:
-        candidates.extend(
-            [
-                ("cpu", "float32"),
-                ("cpu", "int8_float32"),
-                ("cpu", "int8"),
-            ]
-        )
-
-    unique = []
-    for cand in candidates:
-        if cand == (device, compute_type):
-            continue
-        if cand not in unique:
-            unique.append(cand)
-    return unique
-
-
-def _windows_model_fallback_order(model_size: str):
-    candidates = [model_size]
-    if model_size == "large-v3":
-        candidates.extend(["medium", "base"])
-    elif model_size == "large":
-        candidates.extend(["medium", "base"])
-    elif model_size == "medium":
-        candidates.append("base")
-    return candidates
-
-
-def _normalize_openai_whisper_model_name(model_size: str) -> str:
-    # Keep mapping conservative for compatibility with openai-whisper names.
-    if model_size in ("large-v3", "large-v2"):
-        return "large"
-    return model_size
-
-
-def _prepare_audio_for_openai_whisper(audio_path: str):
-    """
-    Load audio without ffmpeg when possible (especially for WAV files).
-    Returns a float32 mono waveform at 16 kHz.
-    """
-    import numpy as np
-    import soundfile as sf
-
-    audio, sample_rate = sf.read(audio_path, always_2d=False)
-    audio = np.asarray(audio, dtype=np.float32)
-
-    # Convert multi-channel audio to mono.
-    if audio.ndim > 1:
-        audio = np.mean(audio, axis=1).astype(np.float32)
-
-    # Resample to 16kHz expected by Whisper.
-    target_sr = 16000
-    if int(sample_rate) != target_sr:
-        if audio.size == 0:
-            return audio
-        duration_seconds = len(audio) / float(sample_rate)
-        target_len = max(1, int(round(duration_seconds * target_sr)))
-        src_x = np.linspace(0.0, duration_seconds, num=len(audio), endpoint=False)
-        dst_x = np.linspace(0.0, duration_seconds, num=target_len, endpoint=False)
-        audio = np.interp(dst_x, src_x, audio).astype(np.float32)
-
-    return audio
-
-
-def _run_openai_whisper_fallback(*, audio_path: str, model_size: str, language: str):
-    """
-    Compatibility fallback for Windows when faster-whisper crashes natively.
-    Uses openai-whisper backend (torch-based) which does not depend on ctranslate2.
-    """
-    import whisper
-
-    fallback_model = _normalize_openai_whisper_model_name(model_size)
-    model = whisper.load_model(fallback_model)
-    try:
-        audio_data = _prepare_audio_for_openai_whisper(audio_path)
-        result = model.transcribe(audio_data, language=language)
-    except Exception as audio_prepare_error:
-        logging.warning(
-            "openai-whisper local audio loading failed (%s). Falling back to ffmpeg path mode.",
-            audio_prepare_error,
-        )
-        try:
-            result = model.transcribe(audio_path, language=language)
-        except FileNotFoundError as ffmpeg_missing_error:
-            raise RuntimeError(
-                "FFmpeg is not installed or not available in PATH. "
-                "Install FFmpeg system-wide (for example C:\\ffmpeg\\bin in PATH) "
-                "and retry transcription."
-            ) from ffmpeg_missing_error
-    segments = result.get("segments") or []
-    return [
-        {
-            "start": float(s.get("start", 0.0)),
-            "end": float(s.get("end", 0.0)),
-            "text": str(s.get("text", "")),
-        }
-        for s in segments
-    ]
-
-
 class TranscriberThread(QThread):
     finished = pyqtSignal(dict) # Changed to emit dict with text and stats
     progress = pyqtSignal(int)
@@ -753,17 +653,12 @@ class TranscriberThread(QThread):
                 language=self.language,
             )
 
-            # On Windows, run faster-whisper in an isolated subprocess to avoid
-            # bringing down the whole app if native libraries crash.
-            use_subprocess_isolation = (
-                not self.is_sherpa_onnx
-                and
-                platform.system() == "Windows"
-                and self.backend_preference != "openai-whisper"
-            )
+            serialized_segments = None
             if self.is_sherpa_onnx:
                 self.status_update.emit("Loading sherpa-onnx model...")
+                self.progress.emit(-1)
                 self.effective_backend = "sherpa-onnx"
+                self.status_update.emit("Transcribing...")
                 serialized_segments = _run_sherpa_onnx_transcription(
                     audio_path=self.audio_path,
                     language=self.language,
@@ -771,23 +666,24 @@ class TranscriberThread(QThread):
                     status_callback=self.status_update.emit,
                 )
                 whisper_segments = [SimpleNamespace(**s) for s in serialized_segments]
-                self.status_update.emit("Transcribing...")
-                if self.total_duration > 0:
-                    self.progress.emit(80)
             elif self.backend_preference == "openai-whisper":
                 self.status_update.emit("Loading model...")
+                self.progress.emit(-1)
                 self.effective_backend = "openai-whisper"
+                self.status_update.emit("Transcribing...")
                 serialized_segments = _run_openai_whisper_fallback(
                     audio_path=self.audio_path,
                     model_size=self.model_size,
                     language=self.language,
                 )
                 whisper_segments = [SimpleNamespace(**s) for s in serialized_segments]
-            elif use_subprocess_isolation:
+            else:
                 self.status_update.emit("Loading model...")
+                self.progress.emit(-1)
                 self.effective_backend = "faster-whisper"
                 logging.info(
-                    "Whisper checkpoint W1: subprocess isolation enabled (model=%s device=%s compute_type=%s)",
+                    "Whisper checkpoint W1: subprocess isolation enabled (backend=%s model=%s device=%s compute_type=%s)",
+                    self.effective_backend,
                     self.model_size,
                     self.device,
                     self.compute_type,
@@ -808,9 +704,13 @@ class TranscriberThread(QThread):
                 for model_idx, attempt_model_size in enumerate(attempt_models):
                     self.model_size = attempt_model_size
                     attempt_profiles = [(base_device, base_compute_type)]
-                    if is_windows:
+                    if base_device == "cuda" or (is_windows and base_device == "cpu"):
                         attempt_profiles.extend(
-                            _windows_subprocess_fallback_profiles(base_device, base_compute_type)
+                            _subprocess_fallback_profiles(
+                                base_device,
+                                base_compute_type,
+                                is_windows=is_windows,
+                            )
                         )
                     total_profiles = len(attempt_profiles)
 
@@ -907,76 +807,17 @@ class TranscriberThread(QThread):
                 whisper_segments = [SimpleNamespace(**s) for s in serialized_segments]
                 logging.info("Whisper checkpoint W2: subprocess transcription completed.")
                 _flush_log_handlers()
-            else:
-                # Load Whisper model
-                self.status_update.emit("Loading model...")
-                logging.info(
-                    "Whisper checkpoint A: about to initialize model (model=%s device=%s compute_type=%s)",
-                    self.model_size,
-                    self.device,
-                    self.compute_type,
-                )
-                _flush_log_handlers()
-                try:
-                    # Explicitly set cpu_threads=1 on Windows CPU to prevent native crashes.
-                    cpu_threads = 1 if (platform.system() == "Windows" and self.device == "cpu") else 4
-                    model = WhisperModel(
-                        self.model_size, 
-                        device=self.device, 
-                        compute_type=self.compute_type,
-                        cpu_threads=cpu_threads
-                    )
-                    logging.info("Whisper checkpoint B: model initialized successfully.")
-                    _flush_log_handlers()
-                except RuntimeError as e:
-                    if "out of memory" in str(e) and self.device == "cuda":
-                        logging.warning("CUDA Out of Memory during model load. Fallback to CPU.")
-                        self.status_update.emit("CUDA OOM detected. Falling back to CPU...")
-                        self.device = "cpu"
-                        self.compute_type = "float32" if platform.system() == "Windows" else "int8"
-                        self.force_cpu = True
-                        logging.info(
-                            "Whisper checkpoint C: retrying model init after OOM (device=%s compute_type=%s)",
-                            self.device,
-                            self.compute_type,
-                        )
-                        _flush_log_handlers()
-                        model = WhisperModel(self.model_size, device=self.device, compute_type=self.compute_type)
-                        logging.info("Whisper checkpoint D: model initialized after OOM fallback.")
-                        _flush_log_handlers()
-                    else:
-                        raise e
-                
-                self.status_update.emit("Transcribing...")
-                logging.info("Whisper checkpoint E: starting model.transcribe(...)")
-                _flush_log_handlers()
-                segments, info = model.transcribe(self.audio_path, beam_size=5, language=self.language)
-                logging.info("Whisper checkpoint F: model.transcribe(...) returned successfully.")
-                _flush_log_handlers()
-                whisper_segments = []
-                for segment in segments:
-                    if self.isInterruptionRequested():
-                        self.status_update.emit("Cancelled.")
-                        return
-                    whisper_segments.append(segment)
-                    if self.total_duration > 0:
-                        prog = int((segment.end / self.total_duration) * 100)
-                        # If diarization is enabled, cap transcription progress at 80%
-                        if self.enable_diarization:
-                            prog = int(prog * 0.8)
-                        self.progress.emit(min(prog, 100))
-            
-            if use_subprocess_isolation:
-                self.status_update.emit("Transcribing...")
-                for segment in whisper_segments:
-                    if self.isInterruptionRequested():
-                        self.status_update.emit("Cancelled.")
-                        return
-                    if self.total_duration > 0:
-                        prog = int((segment.end / self.total_duration) * 100)
-                        if self.enable_diarization:
-                            prog = int(prog * 0.8)
-                        self.progress.emit(min(prog, 100))
+
+            self.status_update.emit("Transcribing...")
+            for segment in whisper_segments:
+                if self.isInterruptionRequested():
+                    self.status_update.emit("Cancelled.")
+                    return
+                if self.total_duration > 0:
+                    prog = int((segment.end / self.total_duration) * 100)
+                    if self.enable_diarization:
+                        prog = int(prog * 0.8)
+                    self.progress.emit(min(prog, 100))
 
             transcription = ""
 
