@@ -146,6 +146,10 @@ class QueueManagementWidget(QWidget):
         tags = task.get("tags_filter") or task.get("tags")
         if tags:
             label += f" ({tags})"
+
+        source = task.get("source")
+        if source:
+            label += f" · {str(source).replace('_', ' ')}"
             
         return label
 

@@ -9,6 +9,7 @@ El Secretario ye una ferramienta intelixente de trescripción y organización d'
 ## Carauterístiques
 
 - **Grabación ya Importación d'Audio**: Graba audio direutamente na aplicación o importa archivos esistentes.
+- **Edición de grabaciones**: Abre una grabación nuna segunda pestaña d'edición, recorta segmentos d'audio y torna a trescribir automáticamente'l clip editáu. El primer recorte caltién una copia `.orig` del archivu orixinal.
 - **Trescripción y Diarización**: Trescribe audio automáticamente ya identifica distintos falantes (diarización) usando backends llocales de Whisper, `sherpa-onnx` y pyannote.audio.
 - **Gueta Intelixente (RAG)**: Usa Xeneración Aumentada por Recuperación (RAG) pa charrar coles tos grabaciones y alcontrar información específica. Soporta Google Gemini y **Ollama** pa execución llocal.
 - **Ventanes de Chat Flexibles**: Los chats pueden quedar como pestañes normales, movese a la barra flotante y minimizase en fiches compactes pa restauralos rápido.
@@ -78,7 +79,10 @@ Pa utilizar dafechu les funciones d'El Secretario, deberás configurar los token
 2.  **Entamar Grabación**: Fai clic nel iconu del micrófonu pa entamar a grabar.
 3.  **Importar Audio**: Usa'l botón d'importar p'añader archivos d'audio esistentes.
 4.  **Chat**: Abre una grabación o una coleición pa entamar a charrar colos tos datos.
-5.  **Barra Llateral de Contéutu Activu**: Cuando una pestaña de chat ta activa, la barra llateral derecha de la app amuesa'l mesmu panel de contéutu que ves dientro del chat. Ábrese por defeutu y desapaez al camudar a otra pestaña o zarrar el chat.
+5.  **Editar Grabaciones**: Fai clic derechu sobre una grabación nel historial o nuna pestaña abierta y escueye la opción pa duplicar l'editor. Usa los controles d'**Audio Edit** pa marcar entamu y fin, recortar el clip y dexar que l'aplicación lo vuelva a trescribir.
+6.  **Barra Llateral de Contéutu Activu**: Cuando una pestaña de chat ta activa, la barra llateral derecha de la app amuesa'l mesmu panel de contéutu que ves dientro del chat. Ábrese por defeutu y desapaez al camudar a otra pestaña o zarrar el chat.
+
+**Nota:** l'editor actual usa marcadores de tiempu (`entamu`/`fin`) y botones pa fixar el puntu de reproducción. Entá nun ufierta una selección por waveform nin una llinia de tiempu arrastrable.
 
 **Nota:** esta barra llateral ye una copia de solo llectura del contéutu del chat activu. Nun queda visible pa chats inactivos nin pa ventanes flotantes/minimizaes.
 

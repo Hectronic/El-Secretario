@@ -316,6 +316,7 @@ class NotebookWidget(QWidget):
         self.transcriber_thread.finished.connect(lambda res: self.on_transcription_finished(entry_id, res))
         self.transcriber_thread.error.connect(lambda err: self.on_transcription_error(entry_id, err))
         self.transcriber_thread.finished.connect(self._clear_transcriber_thread_ref)
+        self.transcriber_thread.error.connect(self._clear_transcriber_thread_ref)
         self.transcriber_thread.start()
 
     def on_transcription_finished(self, entry_id, result):

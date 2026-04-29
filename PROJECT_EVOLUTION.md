@@ -101,9 +101,23 @@ This guide summarizes the development history and evolution of the **Secretario*
     - **Lifecycle Sync**: The section disappears automatically when the user switches away from the chat tab or closes the chat.
     - **Read-Only Scope**: The sidebar view reflects the active chat context only; it does not persist for inactive or minimized chat windows.
 
----
+### 16. Recording Editing and Duplicate Editor Tabs (April 16, 2026)
+**Goal**: Let users open the same recording in another tab and trim the audio in-place with a safe backup.
+- **Features**:
+    - **Duplicate Editor Tab**: Recording tabs and history items now offer an explicit action to open the same record in a second editor instance.
+    - **Audio Edit Controls**: Added start/end time fields and playhead markers to trim a segment from the current recording.
+    - **Safe Trim Workflow**: The first trim keeps a `.orig` backup of the original file before overwriting the active audio file.
+    - **Auto Retranscription**: After trimming, the widget automatically retriggers transcription so text and metadata stay aligned with the edited audio.
+    - **Unsaved-Change Guard**: Closing a recording tab with pending edits now prompts the user to save, discard, or cancel.
 
-## Related Side Projects
-During this period, some work was also done on separate utilities in the `bash-scripts` repository:
-- **GitLab User Activity Reporter**: A tool to generate HTML activity reports for GitLab users.
-- **GitLab User Registration**: A script to batch register users in GitLab.
+### 17. Audio Waveform Editor (April 28, 2026)
+**Goal**: Turn the audio editor into a proper waveform-based segment editor.
+- **Features**:
+    - **Dedicated Editor Tab**: The audio editor now opens in its own minimal tab, separate from the recording/transcription view.
+    - **Waveform Preview**: Added a waveform canvas that visualizes the current edit timeline.
+    - **Channel View**: Multi-channel audio is rendered in separate lanes so stereo/system-audio captures are easier to inspect.
+    - **Segment Workflow**: Users can split, cut, delete, and reorder chunks before applying changes.
+    - **Preview Playback**: The editor rebuilds a live preview from the current segment order so edits can be auditioned before saving.
+    - **Safe Apply**: Applying edits keeps the `.orig` backup behavior and retriggers transcription after the new audio is written.
+
+---

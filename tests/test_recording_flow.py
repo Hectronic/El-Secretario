@@ -26,6 +26,7 @@ from PyQt6.QtCore import Qt, QSettings
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 from src.ui.main_window import MainWindow
+from src.ui.audio_editor_widget import AudioEditorWidget
 from src.ui.recording_in_progress_widget import RecordingInProgressWidget
 from src.ui.recording_widget import RecordingWidget
 
@@ -91,6 +92,14 @@ class TestRecordingFlow(unittest.TestCase):
         }
         self.mock_db3.get_tasks_by_record.return_value = []
 
+        # Patch DBManager for the dedicated audio editor tab.
+        self.db_patcher4 = patch('src.ui.audio_editor_widget.DBManager')
+        self.mock_db4 = self.db_patcher4.start().return_value
+        self.mock_db4.get_all_tags.return_value = []
+        self.mock_db4.fetch_all.return_value = []
+        self.mock_db4.fetch_record.return_value = self.mock_db3.fetch_record.return_value
+        self.mock_db4.get_tasks_by_record.return_value = []
+
         # Avoid real multimedia backend usage in headless CI.
         self.media_player_patcher = patch('src.ui.recording_widget.QMediaPlayer')
         self.audio_output_patcher = patch('src.ui.recording_widget.QAudioOutput')
@@ -127,6 +136,7 @@ class TestRecordingFlow(unittest.TestCase):
         self.db_patcher.stop()
         self.db_patcher2.stop()
         self.db_patcher3.stop()
+        self.db_patcher4.stop()
         self.media_player_patcher.stop()
         self.audio_output_patcher.stop()
         self.start_transcription_patcher.stop()
@@ -203,6 +213,28 @@ class TestRecordingFlow(unittest.TestCase):
         
         if self.mock_msgbox.called:
             print("MessageBox was called:", self.mock_msgbox.call_args)
+
+    def test_open_recording_tab_can_create_duplicate_editor_instance(self):
+        self.window.central_tabs.clear()
+        first_widget = self.window.open_recording_tab(123)
+        second_widget = self.window.open_recording_tab(123, force_new=True)
+
+        self.assertIsNot(first_widget, second_widget)
+        self.assertEqual(first_widget.current_record_id, 123)
+        self.assertEqual(second_widget.current_record_id, 123)
+        self.assertEqual(self.window.central_tabs.count(), 2)
+        self.assertEqual(self.window.central_tabs.widget(0), first_widget)
+        self.assertEqual(self.window.central_tabs.widget(1), second_widget)
+
+    def test_open_recording_editor_tab_opens_audio_edit_mode(self):
+        self.window.central_tabs.clear()
+        editor_widget = self.window.open_recording_editor_tab(123)
+
+        self.assertIsInstance(editor_widget, AudioEditorWidget)
+        self.assertEqual(editor_widget.current_record_id, 123)
+        self.assertEqual(self.window.central_tabs.count(), 1)
+        self.assertEqual(self.window.central_tabs.widget(0), editor_widget)
+        self.assertIn("Editor", self.window.central_tabs.tabText(0))
 
 if __name__ == '__main__':
     unittest.main()

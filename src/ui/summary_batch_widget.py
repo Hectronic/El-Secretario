@@ -12,9 +12,9 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QPushButton, 
+from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QPushButton,
                              QLabel, QProgressBar, QTextEdit, QMessageBox, QCheckBox, QGroupBox)
-from PyQt6.QtCore import Qt, pyqtSignal, QTimer
+from PyQt6.QtCore import Qt
 from src.database import DBManager
 from src.summary_generator import SummaryGenerator
 
@@ -23,9 +23,10 @@ class SummaryBatchWidget(QWidget):
     Widget for batch generating summaries for pending days, weeks, and recordings.
     """
     
-    def __init__(self, parent=None):
+    def __init__(self, task_queue=None, parent=None):
         super().__init__(parent)
         self.db = DBManager()
+        self.task_queue = task_queue
         self.generator = None
         self.is_processing = False
         
@@ -198,6 +199,23 @@ class SummaryBatchWidget(QWidget):
         
         self.log("Starting batch processing...")
         self.progress_bar.setValue(0)
+
+        if self.task_queue:
+            enqueued = self._enqueue_summary_tasks_via_queue()
+            if enqueued == 0:
+                self.log("No summary tasks were queued.")
+                self.reset_ui()
+                self.refresh_stats()
+                return
+            self.log(f"Queued {enqueued} summary job(s) in the central queue.")
+            QMessageBox.information(
+                self,
+                "Queued",
+                f"{enqueued} summary job(s) have been added to the central queue.",
+            )
+            self.reset_ui()
+            self.refresh_stats()
+            return
         
         self.generator = SummaryGenerator(
             generate_daily=self.chk_daily.isChecked(),
@@ -213,8 +231,80 @@ class SummaryBatchWidget(QWidget):
         self.generator.error.connect(self.on_error)
         
         self.generator.start()
+
+    def _enqueue_summary_tasks_via_queue(self) -> int:
+        if not self.task_queue:
+            return 0
+
+        enqueued = 0
+        exclude_today = self.chk_exclude_today.isChecked()
+        exclude_curr_week = self.chk_exclude_curr_week.isChecked()
+        include_recordings = self.chk_recordings.isChecked()
+        include_daily = self.chk_daily.isChecked()
+        include_weekly = self.chk_weekly.isChecked()
+        tags_filter = ""
+
+        if include_recordings:
+            recs = self.db.get_records_without_summary()
+            for rec in recs:
+                text = self.db.compose_ai_text(rec.get("transcription", ""), rec.get("recording_notes", ""))
+                if not text.strip():
+                    continue
+                if self.task_queue.enqueue_recording_summary(
+                    int(rec["id"]),
+                    text,
+                    rec.get("title") or f"Recording {rec['id']}",
+                    source="batch_summary",
+                ):
+                    enqueued += 1
+
+        if include_daily:
+            dates = self.db.get_dates_without_summary(exclude_today=exclude_today)
+            for date in dates:
+                recordings = self.db.fetch_by_dates([date], None)
+                if not recordings:
+                    continue
+                if self.task_queue.enqueue_daily_summary(
+                    {
+                        "date": date,
+                        "tags_filter": "",
+                        "source": "batch_summary",
+                    }
+                ):
+                    enqueued += 1
+
+        if include_weekly:
+            weeks = self.db.get_weeks_without_summary(exclude_current_week=exclude_curr_week)
+            for week_date in weeks:
+                week_dates = self._get_week_dates(week_date)
+                recordings = self.db.fetch_by_dates(week_dates, None)
+                if not recordings:
+                    continue
+                full_text = self._prepare_recordings_text(recordings)
+                if not full_text.strip():
+                    continue
+                if self.task_queue.enqueue_weekly_summary(
+                    week_date,
+                    full_text,
+                    tags_filter,
+                    source="batch_summary",
+                ):
+                    enqueued += 1
+
+        return enqueued
+
+    def _get_week_dates(self, week_sunday: str):
+        from datetime import datetime, timedelta
+
+        sunday = datetime.strptime(week_sunday, "%Y-%m-%d").date()
+        monday = sunday - timedelta(days=6)
+        return [(monday + timedelta(days=i)).isoformat() for i in range(7)]
         
     def stop_processing(self):
+        if self.task_queue:
+            self.is_processing = False
+            self.log("Summary jobs were queued in the central queue. Use the queue manager to stop them.")
+            return
         if self.generator and self.is_processing:
             self.log("Stopping requested...")
             self.generator.cancel()

@@ -72,11 +72,11 @@ class ToolsWidget(QWidget):
         self.tabs.addTab(self.storage_widget, "🗄️ Storage")
 
         # Processing Tab (from BatchProcessWidget)
-        self.processing_widget = BatchProcessWidget()
+        self.processing_widget = BatchProcessWidget(task_queue=self.task_queue)
         self.tabs.addTab(self.processing_widget, "⏳ Processing")
 
         # Summary Tab
-        self.summary_widget = SummaryBatchWidget()
+        self.summary_widget = SummaryBatchWidget(task_queue=self.task_queue)
         self.tabs.addTab(self.summary_widget, "📝 Summaries")
 
         # Tasks Tab (New)
@@ -158,7 +158,7 @@ class ToolsWidget(QWidget):
             self.rag_status_lbl.setStyleSheet("color: #f44336; font-size: 14px;")
             return
         scope = self.rag_scope_combo.currentData() or "all"
-        queued = self.task_queue.enqueue_rag_reindex(scope=scope)
+        queued = self.task_queue.enqueue_rag_reindex(scope=scope, source="tools")
         if queued:
             scope_text = "all records" if scope == "all" else "missing records only"
             self.rag_status_lbl.setText(f"✓ RAG reindex task queued ({scope_text}).")

@@ -123,7 +123,8 @@ class TaskBatchWidget(QWidget):
                 rec['id'], 
                 ai_text, 
                 rec.get('tags', '') or '',
-                rec.get('title') or f"Recording {rec['id']}"
+                rec.get('title') or f"Recording {rec['id']}",
+                source="batch"
             )
             if success:
                 count += 1

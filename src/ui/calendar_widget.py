@@ -365,7 +365,8 @@ class CalendarWidget(QWidget):
         if self.summary_task_queue:
             self.summary_task_queue.enqueue_daily_summary({
                 "date": date_str,
-                "tags_filter": tags_filter
+                "tags_filter": tags_filter,
+                "source": "calendar",
             })
             return
 
@@ -426,7 +427,7 @@ class CalendarWidget(QWidget):
 
         if self.summary_task_queue:
             tags_filter = self.get_tags_filter_str() or ""
-            self.summary_task_queue.enqueue_weekly_summary(week_sunday, full_text, tags_filter)
+            self.summary_task_queue.enqueue_weekly_summary(week_sunday, full_text, tags_filter, source="calendar")
             return
 
         self.progress = QProgressDialog("Generating Weekly Summary...", "Cancel", 0, 0, self)

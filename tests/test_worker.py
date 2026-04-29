@@ -13,9 +13,6 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 import unittest
-import sys
-import types
-import builtins
 from unittest.mock import MagicMock, patch
 from src.worker import (
     TranscriberThread,
@@ -25,27 +22,23 @@ from src.worker import (
     get_transcription_preflight_error,
     _resolve_sherpa_onnx_model_config,
     _run_sherpa_onnx_transcription,
+    _run_openai_whisper_fallback,
 )
 import os
-import numpy as np
 import tempfile
 
 class TestTranscriberThread(unittest.TestCase):
-    @patch('src.worker.WhisperModel')
     @patch('os.path.getsize')
     @patch('src.worker.platform.system', return_value="Linux")
+    @patch('src.worker._run_transcription_in_subprocess')
     @patch('src.worker._get_pyannote_pipeline_class')
-    def test_transcription(self, mock_get_pyannote, _mock_system, mock_getsize, MockWhisper):
+    def test_transcription(self, mock_get_pyannote, mock_run_subprocess, _mock_system, mock_getsize):
         # Setup Mock
         mock_getsize.return_value = 1024
         mock_get_pyannote.return_value = None
-        mock_model = MockWhisper.return_value
-        Segment = MagicMock()
-        Segment.start = 0.0
-        Segment.end = 1.0
-        Segment.text = "Hello world"
-        
-        mock_model.transcribe.return_value = ([Segment], None)
+        mock_run_subprocess.return_value = [
+            {"start": 0.0, "end": 1.0, "text": "Hello world"}
+        ]
         
         thread = TranscriberThread("test.wav")
         
@@ -63,6 +56,7 @@ class TestTranscriberThread(unittest.TestCase):
         self.assertIsInstance(result, dict)
         self.assertEqual(result['text'], "Hello world")
         mock_get_pyannote.assert_not_called()
+        mock_run_subprocess.assert_called_once()
 
     @patch('src.worker.torch.cuda.is_available')
     @patch('src.worker.torch.cuda.get_device_properties')
@@ -285,65 +279,32 @@ class TestTranscriberThread(unittest.TestCase):
         thread.finished.emit.assert_called_once()
         thread.error.emit.assert_not_called()
 
-    def test_openai_whisper_fallback_prefers_local_audio_loading(self):
-        from src.worker import _run_openai_whisper_fallback
+    @patch("src.worker._run_backend_subprocess")
+    def test_openai_whisper_fallback_delegates_to_subprocess(self, mock_run_backend):
+        mock_run_backend.return_value = [{"start": 0.0, "end": 1.0, "text": "ok"}]
 
-        fake_model = MagicMock()
-        fake_model.transcribe.return_value = {
-            "segments": [{"start": 0.0, "end": 1.0, "text": "ok"}]
-        }
-        fake_whisper_module = types.SimpleNamespace(load_model=MagicMock(return_value=fake_model))
-        prepared_audio = np.array([0.1, -0.2, 0.3], dtype=np.float32)
+        segments = _run_openai_whisper_fallback(
+            audio_path="test.wav",
+            model_size="large-v3",
+            language=None,
+        )
 
-        with patch.dict(sys.modules, {"whisper": fake_whisper_module}), \
-             patch("src.worker._prepare_audio_for_openai_whisper", return_value=prepared_audio):
-            segments = _run_openai_whisper_fallback(
-                audio_path="test.wav",
-                model_size="large-v3",
-                language=None,
-            )
-
-        fake_whisper_module.load_model.assert_called_once_with("large")
-        transcribe_arg = fake_model.transcribe.call_args[0][0]
-        self.assertIsInstance(transcribe_arg, np.ndarray)
         self.assertEqual(segments[0]["text"], "ok")
+        mock_run_backend.assert_called_once()
+        call_kwargs = mock_run_backend.call_args.kwargs
+        self.assertEqual(call_kwargs["backend"], "openai-whisper")
+        self.assertEqual(call_kwargs["payload"]["model_size"], "large-v3")
 
-    def test_openai_whisper_fallback_uses_path_mode_when_local_load_fails(self):
-        from src.worker import _run_openai_whisper_fallback
+    @patch("src.worker._run_backend_subprocess")
+    def test_openai_whisper_fallback_propagates_runner_error(self, mock_run_backend):
+        mock_run_backend.side_effect = RuntimeError("FFmpeg is not installed")
 
-        fake_model = MagicMock()
-        fake_model.transcribe.return_value = {
-            "segments": [{"start": 0.0, "end": 1.0, "text": "ok"}]
-        }
-        fake_whisper_module = types.SimpleNamespace(load_model=MagicMock(return_value=fake_model))
-
-        with patch.dict(sys.modules, {"whisper": fake_whisper_module}), \
-             patch("src.worker._prepare_audio_for_openai_whisper", side_effect=RuntimeError("audio decode failed")):
-            segments = _run_openai_whisper_fallback(
+        with self.assertRaises(RuntimeError) as ctx:
+            _run_openai_whisper_fallback(
                 audio_path="test.wav",
                 model_size="base",
                 language="es",
             )
-
-        transcribe_arg = fake_model.transcribe.call_args[0][0]
-        self.assertEqual(transcribe_arg, "test.wav")
-        self.assertEqual(segments[0]["text"], "ok")
-
-    def test_openai_whisper_fallback_raises_clear_error_when_ffmpeg_missing(self):
-        from src.worker import _run_openai_whisper_fallback
-
-        fake_model = MagicMock()
-        fake_model.transcribe.side_effect = FileNotFoundError("[WinError 2] missing executable")
-        fake_whisper_module = types.SimpleNamespace(load_model=MagicMock(return_value=fake_model))
-
-        with patch.dict(sys.modules, {"whisper": fake_whisper_module}), \
-             patch("src.worker._prepare_audio_for_openai_whisper", side_effect=RuntimeError("audio decode failed")):
-            with self.assertRaises(RuntimeError) as ctx:
-                _run_openai_whisper_fallback(
-                    audio_path="test.wav",
-                    model_size="base",
-                    language=None,
-                )
 
         self.assertIn("FFmpeg is not installed", str(ctx.exception))
 
@@ -358,43 +319,9 @@ class TestTranscriberThread(unittest.TestCase):
         self.assertEqual(config["type"], "transducer")
         self.assertTrue(config["encoder"].endswith("encoder.onnx"))
 
-    def test_run_sherpa_onnx_transcription_requires_installed_package(self):
-        settings = MagicMock()
-        settings.value.side_effect = lambda key, default=None, type=None: {
-            "sherpa_onnx_model_dir": "/tmp/missing",
-            "sherpa_onnx_model_type": "auto",
-        }.get(key, default)
-
-        original_import = builtins.__import__
-
-        def failing_import(name, *args, **kwargs):
-            if name == "sherpa_onnx":
-                raise ImportError("missing sherpa_onnx")
-            return original_import(name, *args, **kwargs)
-
-        with patch("builtins.__import__", side_effect=failing_import):
-            with self.assertRaises(RuntimeError) as ctx:
-                _run_sherpa_onnx_transcription(
-                    audio_path="test.wav",
-                    language=None,
-                    settings=settings,
-                )
-
-        self.assertIn("sherpa-onnx", str(ctx.exception))
-
-    def test_run_sherpa_onnx_transcription_returns_single_segment(self):
-        fake_recognizer = MagicMock()
-        fake_stream = MagicMock()
-        fake_stream.result = types.SimpleNamespace(text="hello from sherpa")
-        fake_recognizer.create_stream.return_value = fake_stream
-        fake_module = types.SimpleNamespace(
-            OfflineRecognizer=types.SimpleNamespace(
-                from_paraformer=MagicMock(return_value=fake_recognizer)
-            )
-        )
-        fake_soundfile = types.SimpleNamespace(
-            read=MagicMock(return_value=(np.array([0.1, -0.2, 0.3], dtype=np.float32), 16000))
-        )
+    @patch("src.worker._run_backend_subprocess")
+    def test_run_sherpa_onnx_transcription_returns_single_segment(self, mock_run_backend):
+        mock_run_backend.return_value = [{"start": 0.0, "end": 1.0, "text": "hello from sherpa"}]
         settings = MagicMock()
 
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -405,21 +332,17 @@ class TestTranscriberThread(unittest.TestCase):
                 "sherpa_onnx_model_dir": tmpdir,
                 "sherpa_onnx_model_type": "paraformer",
             }.get(key, default)
-            with patch.dict(
-                sys.modules,
-                {
-                    "sherpa_onnx": fake_module,
-                    "soundfile": fake_soundfile,
-                },
-            ):
-                segments = _run_sherpa_onnx_transcription(
-                    audio_path="test.wav",
-                    language="es",
-                    settings=settings,
-                )
+            segments = _run_sherpa_onnx_transcription(
+                audio_path="test.wav",
+                language="es",
+                settings=settings,
+            )
 
-        fake_recognizer.decode_streams.assert_called_once()
-        self.assertEqual(segments, [{"start": 0.0, "end": 3 / 16000, "text": "hello from sherpa"}])
+        self.assertEqual(segments, [{"start": 0.0, "end": 1.0, "text": "hello from sherpa"}])
+        mock_run_backend.assert_called_once()
+        call_kwargs = mock_run_backend.call_args.kwargs
+        self.assertEqual(call_kwargs["backend"], "sherpa-onnx")
+        self.assertEqual(call_kwargs["payload"]["model_config"]["type"], "paraformer")
 
     def test_transcription_preflight_error_for_missing_sherpa_dir(self):
         settings = MagicMock()

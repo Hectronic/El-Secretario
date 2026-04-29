@@ -24,18 +24,27 @@ from src.transcription_options import get_saved_transcription_model
 class BatchProcessWidget(QWidget):
     finished = pyqtSignal()
     
-    def __init__(self, parent=None):
+    def __init__(self, task_queue=None, parent=None):
         super().__init__(parent)
         self.db = DBManager()
+        self.task_queue = task_queue
         self.queue = []
         self.current_thread = None
         self.thread = None
         self.is_processing = False
         self.total_files = 0
         self.processed_count = 0
+        self._queued_record_ids = set()
+        self._active_batch_tasks = 0
         
         self.init_ui()
         self.load_pending()
+        if self.task_queue:
+            self.task_queue.task_enqueued.connect(self._on_queue_task_enqueued)
+            self.task_queue.task_started.connect(self._on_queue_task_started)
+            self.task_queue.task_finished.connect(self._on_queue_task_finished)
+            self.task_queue.task_failed.connect(self._on_queue_task_failed)
+            self.task_queue.task_skipped.connect(self._on_queue_task_skipped)
         
     def init_ui(self):
         layout = QVBoxLayout(self)
@@ -151,14 +160,148 @@ class BatchProcessWidget(QWidget):
     def start_processing(self):
         if not self.queue:
             return
-            
+
+        if self.task_queue:
+            self._start_processing_via_queue()
+            return
+
         self.is_processing = True
         self.start_btn.setEnabled(False)
         self.stop_btn.setEnabled(True)
         self.processed_count = 0
         self.process_next()
+
+    def _start_processing_via_queue(self):
+        self.is_processing = True
+        self.start_btn.setEnabled(False)
+        self.stop_btn.setEnabled(True)
+        self.processed_count = 0
+        self._queued_record_ids.clear()
+        self._active_batch_tasks = 0
+
+        enqueued = 0
+        for rec in self.queue:
+            success = self.task_queue.enqueue_transcription(
+                rec["id"],
+                os.path.join(os.getcwd(), "recordings", rec["filename"]),
+                model_size=get_saved_transcription_model(QSettings("Hectronic", "Secretario")),
+                language=None,
+                diarization=True,
+                title=rec.get("filename") or f"Recording {rec['id']}",
+                source="batch_process",
+            )
+            if success:
+                enqueued += 1
+                self._queued_record_ids.add(rec["id"])
+                self._set_current_item_status(rec["id"], f"Queued: {rec['filename']}")
+
+        self.total_files = len(self._queued_record_ids)
+        self.file_progress_label.setText(f"Queued {self.total_files} files for the central queue")
+        self.progress_bar.setRange(0, 0)
+        self.progress_bar.setFormat("Queued in central queue")
+        self.status_label.setText(f"Queued {enqueued} recordings in the central queue.")
+        self.log(f"Queued {enqueued} recordings in the central queue.")
+        if enqueued == 0:
+            self.is_processing = False
+            self.start_btn.setEnabled(True)
+            self.stop_btn.setEnabled(False)
+            self.progress_bar.setRange(0, 100)
+            self.progress_bar.setValue(0)
+            self.progress_bar.setFormat("%p%")
+            self.file_progress_label.setText("0/0 files processed")
+
+    def _on_queue_task_enqueued(self, task, _queue_position):
+        if task.get("source") != "batch_process":
+            return
+        if task.get("type") not in {"transcription", "summary", "task_extraction"}:
+            return
+        self._active_batch_tasks += 1
+
+    def _set_current_item_status(self, record_id, text, background=None):
+        item = self._find_item_by_record_id(record_id)
+        if not item:
+            return
+        item.setText(text)
+        if background is not None:
+            item.setBackground(background)
+
+    def _find_item_by_record_id(self, record_id):
+        for i in range(self.pending_list.count()):
+            item = self.pending_list.item(i)
+            rec = item.data(Qt.ItemDataRole.UserRole)
+            if rec and rec.get("id") == record_id:
+                return item
+        return None
+
+    def _finish_queue_mode_if_done(self):
+        if self._active_batch_tasks > 0:
+            return
+        self.is_processing = False
+        self.start_btn.setEnabled(True)
+        self.stop_btn.setEnabled(False)
+        self.status_label.setText("Batch processing finished.")
+        self.progress_bar.setRange(0, 100)
+        self.progress_bar.setValue(100)
+        self.progress_bar.setFormat("%p%")
+        self.file_progress_label.setText(f"{self.processed_count}/{self.total_files} files processed")
+        self.log("All done.")
+        QMessageBox.information(self, "Done", "Batch processing completed.")
+
+    def _on_queue_task_started(self, task, _remaining_pending):
+        if not self.is_processing or task.get("source") != "batch_process" or task.get("type") != "transcription":
+            return
+        record_id = task.get("record_id")
+        if record_id is None:
+            return
+        self.current_record = {"id": record_id, "filename": task.get("title") or f"Recording {record_id}"}
+        self.current_item = self._find_item_by_record_id(record_id)
+        if self.current_item:
+            self.current_item.setBackground(Qt.GlobalColor.yellow)
+            self.current_item.setText(f"Processing: {self.current_record['filename']}...")
+        self.status_label.setText(f"Processing: {self.current_record['filename']}")
+
+    def _on_queue_task_finished(self, task):
+        if task.get("source") != "batch_process":
+            return
+        if task.get("type") in {"transcription", "summary", "task_extraction"} and self._active_batch_tasks > 0:
+            self._active_batch_tasks -= 1
+        record_id = task.get("record_id")
+        if task.get("type") == "transcription" and record_id in self._queued_record_ids:
+            self._queued_record_ids.discard(record_id)
+            self.processed_count += 1
+            if self.total_files > 0:
+                self.file_progress_label.setText(f"{self.processed_count}/{self.total_files} files processed")
+                self.progress_bar.setValue(int((self.processed_count / self.total_files) * 100))
+            self._set_current_item_status(record_id, f"Finished: {task.get('title') or f'Recording {record_id}'}")
+        self._finish_queue_mode_if_done()
+
+    def _on_queue_task_failed(self, task, error_msg):
+        if task.get("source") != "batch_process":
+            return
+        if task.get("type") in {"transcription", "summary", "task_extraction"} and self._active_batch_tasks > 0:
+            self._active_batch_tasks -= 1
+        record_id = task.get("record_id")
+        if task.get("type") == "transcription" and record_id in self._queued_record_ids:
+            self._queued_record_ids.discard(record_id)
+            self._set_current_item_status(record_id, f"FAILED: {task.get('title') or f'Recording {record_id}'}")
+        self._finish_queue_mode_if_done()
+
+    def _on_queue_task_skipped(self, task, _reason):
+        if task.get("source") != "batch_process":
+            return
+        if task.get("type") in {"transcription", "summary", "task_extraction"} and self._active_batch_tasks > 0:
+            self._active_batch_tasks -= 1
+        record_id = task.get("record_id")
+        if task.get("type") == "transcription" and record_id in self._queued_record_ids:
+            self._queued_record_ids.discard(record_id)
+        self._finish_queue_mode_if_done()
         
     def stop_processing(self):
+        if self.task_queue:
+            self.is_processing = False
+            self.log("Batch items were queued in the central queue. Use the queue manager to stop them.")
+            self.status_label.setText("Queued batch is managed by the central queue.")
+            return
         self.is_processing = False
         self.status_label.setText("Stopping after current file...")
         self.log("Stopping requested...")

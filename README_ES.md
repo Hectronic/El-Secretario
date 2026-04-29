@@ -9,6 +9,7 @@ El Secretario es una herramienta inteligente de transcripción y organización d
 ## Características
 
 - **Grabación e Importación de Audio**: Graba audio directamente en la aplicación o importa archivos existentes.
+- **Edición de grabaciones**: Abre una grabación en una segunda pestaña de edición, recorta segmentos de audio y vuelve a transcribir automáticamente el clip editado. El primer recorte conserva una copia `.orig` del archivo original.
 - **Transcripción y Diarización**: Transcribe audio automáticamente e identifica diferentes hablantes (diarización) utilizando backends locales de Whisper, `sherpa-onnx` y pyannote.audio.
 - **Búsqueda Inteligente (RAG)**: Utiliza Generación Aumentada por Recuperación (RAG) para chatear con tus grabaciones y encontrar información específica. Soporta Google Gemini y **Ollama** para ejecución local.
 - **Ventanas de Chat Flexibles**: Los chats pueden quedarse como pestañas normales, moverse a la barra flotante y minimizarse en fichas compactas para restaurarlos rápido.
@@ -78,7 +79,10 @@ Para utilizar plenamente las funciones de El Secretario, deberás configurar los
 2.  **Iniciar Grabación**: Haz clic en el icono del micrófono para comenzar a grabar.
 3.  **Importar Audio**: Usa el botón de importar para añadir archivos de audio existentes.
 4.  **Chat**: Abre una grabación o una colección para comenzar a chatear con tus datos.
-5.  **Barra Lateral de Contexto Activo**: Cuando una pestaña de chat está activa, la barra lateral derecha de la app muestra el mismo panel de contexto que ves dentro del chat. Se abre por defecto y desaparece al cambiar a otra pestaña o cerrar el chat.
+5.  **Editar Grabaciones**: Haz clic derecho sobre una grabación en el historial o en una pestaña abierta y elige la opción para duplicar el editor. Usa los controles de **Audio Edit** para marcar inicio y fin, recortar el clip y dejar que la app lo vuelva a transcribir.
+6.  **Barra Lateral de Contexto Activo**: Cuando una pestaña de chat está activa, la barra lateral derecha de la app muestra el mismo panel de contexto que ves dentro del chat. Se abre por defecto y desaparece al cambiar a otra pestaña o cerrar el chat.
+
+**Nota:** el editor actual usa marcadores de tiempo (`inicio`/`fin`) y botones para fijar el punto de reproducción. Todavía no incluye una forma de selección por waveform ni una línea de tiempo arrastrable.
 
 **Nota:** esta barra lateral es una copia de solo lectura del contexto del chat activo. No permanece visible para chats inactivos ni para ventanas flotantes/minimizadas.
 

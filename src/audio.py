@@ -12,10 +12,12 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
+import os
+import subprocess
+import tempfile
 import sounddevice as sd
 import soundfile as sf
 import numpy as np
-import os
 from datetime import datetime
 from PyQt6.QtCore import QObject, pyqtSignal
 
@@ -219,3 +221,83 @@ class Recorder(QObject):
         except Exception as e:
             logging.error(f"Error getting duration for {file_path}: {e}")
             return 0.0
+
+
+def trim_audio_segment(source_path: str, start_seconds: float, end_seconds: float, output_path: str) -> float:
+    """
+    Trim an audio file and write the selected segment to ``output_path``.
+
+    Returns the resulting duration in seconds.
+    """
+    import logging
+
+    if start_seconds < 0:
+        raise ValueError("start_seconds must be >= 0")
+    if end_seconds <= start_seconds:
+        raise ValueError("end_seconds must be greater than start_seconds")
+
+    try:
+        info = sf.info(source_path)
+        total_duration = float(info.frames / info.samplerate)
+        if start_seconds >= total_duration:
+            raise ValueError("start_seconds is beyond the end of the file")
+
+        clip_end = min(end_seconds, total_duration)
+        start_frame = int(start_seconds * info.samplerate)
+        end_frame = int(clip_end * info.samplerate)
+        audio, samplerate = sf.read(source_path, always_2d=True)
+        trimmed = audio[start_frame:end_frame]
+        if trimmed.size == 0:
+            raise ValueError("Selected segment is empty")
+
+        same_target = os.path.abspath(source_path) == os.path.abspath(output_path)
+        write_path = output_path
+        temp_path = None
+        if same_target:
+            fd, temp_path = tempfile.mkstemp(suffix=os.path.splitext(output_path)[1] or ".tmp")
+            os.close(fd)
+            write_path = temp_path
+
+        sf.write(
+            write_path,
+            trimmed,
+            samplerate,
+            format=info.format,
+            subtype=info.subtype,
+        )
+        if temp_path is not None:
+            os.replace(temp_path, output_path)
+        return float(trimmed.shape[0] / samplerate)
+    except Exception as primary_error:
+        logging.warning("soundfile trimming failed for %s: %s", source_path, primary_error)
+
+    same_target = os.path.abspath(source_path) == os.path.abspath(output_path)
+    write_path = output_path
+    temp_path = None
+    if same_target:
+        fd, temp_path = tempfile.mkstemp(suffix=os.path.splitext(output_path)[1] or ".tmp")
+        os.close(fd)
+        write_path = temp_path
+
+    ffmpeg_cmd = [
+        "ffmpeg",
+        "-y",
+        "-loglevel",
+        "error",
+        "-i",
+        source_path,
+        "-ss",
+        f"{start_seconds:.3f}",
+        "-to",
+        f"{end_seconds:.3f}",
+        write_path,
+    ]
+    try:
+        subprocess.run(ffmpeg_cmd, check=True, capture_output=True)
+        if temp_path is not None:
+            os.replace(temp_path, output_path)
+        return Recorder.get_duration(output_path)
+    except FileNotFoundError as exc:
+        raise RuntimeError("FFmpeg is required to trim this audio format.") from exc
+    except subprocess.CalledProcessError as exc:
+        raise RuntimeError(exc.stderr.decode("utf-8", errors="ignore") or "Audio trimming failed.") from exc

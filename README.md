@@ -11,6 +11,7 @@ Read this in [Español](README_ES.md) | [Asturianu](README_AST.md)
 ## Features
 
 - **Audio Recording & Import**: Record audio directly within the app or import existing files.
+- **Recording Editing**: Open a recording in a second editor tab, trim audio segments, and automatically retranscribe the edited clip. The first trim keeps a `.orig` backup of the original file.
 - **Transcription & Diarization**: Automatically transcribe audio and identify different speakers (diarization) using local Whisper backends, `sherpa-onnx`, and pyannote.audio.
 - **Intelligent Search (RAG)**: Use Retrieval-Augmented Generation (RAG) to chat with your recordings and find specific information. Supports Google Gemini and **Ollama** for local execution.
 - **Flexible Chat Windows**: Chats can stay as regular tabs, move to the floating bar, and be minimized into compact chips for quick restore.
@@ -80,7 +81,10 @@ To fully utilize the features of El Secretario, you will need to configure the A
 2.  **Start Recording**: Click the microphone icon to start recording.
 3.  **Import Audio**: Use the import button to add existing audio files.
 4.  **Chat**: Open a recording or a collection to start chatting with your data.
-5.  **Active Chat Context Sidebar**: When a chat tab is active, the right app sidebar shows the same context panel you see inside the chat. It is expanded by default and disappears when you switch to another tab or close the chat.
+5.  **Edit Recordings**: Right-click a recording in the history list or on an open recording tab and choose the duplicate editor option. Use the **Audio Edit** controls to mark a start and end time, trim the clip, and let the app retranscribe the result.
+6.  **Active Chat Context Sidebar**: When a chat tab is active, the right app sidebar shows the same context panel you see inside the chat. It is expanded by default and disappears when you switch to another tab or close the chat.
+
+**Note:** the current editor is time-marker based (`start`/`end` plus playhead buttons). It does not yet provide a waveform or drag-selection timeline.
 
 **Note:** this sidebar is read-only mirroring of the active chat context. It does not stay visible for inactive chats or floating/minimized chat windows.
 

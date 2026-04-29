@@ -172,7 +172,8 @@ class NoteWidget(QWidget):
                 self.summary_task_queue.enqueue_recording_summary(
                     self.current_record_id, 
                     text, 
-                    self.title_input.text() or f"Note {self.current_record_id}"
+                    self.title_input.text() or f"Note {self.current_record_id}",
+                    source="note"
                 )
                 return
             elif task_type == "task_extraction":
@@ -180,7 +181,8 @@ class NoteWidget(QWidget):
                     self.current_record_id, 
                     text, 
                     self.tags_input.text(),
-                    self.title_input.text() or f"Note {self.current_record_id}"
+                    self.title_input.text() or f"Note {self.current_record_id}",
+                    source="note"
                 )
                 return
         elif task_type in {"summary", "task_extraction"}:

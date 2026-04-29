@@ -3,9 +3,12 @@ import sys
 import os
 import unittest
 from unittest.mock import MagicMock, patch
+import tempfile
 from PyQt6.QtWidgets import QApplication
 from PyQt6.QtCore import QSettings
 from PyQt6 import sip
+import numpy as np
+import soundfile as sf
 
 # Add project root to path
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
@@ -67,14 +70,29 @@ class TestRecordingWidgetUI(unittest.TestCase):
         self.assertEqual(self.widget.tabs.tabText(2), "Summary")
         self.assertEqual(self.widget.tabs.tabText(3), "Tasks")
 
-    def test_clean_button_removed(self):
-        # Verify clean_btn attribute does not exist
-        self.assertFalse(hasattr(self.widget, 'clean_btn'))
-        
-        # Verify AI actions layout only has Summarize button
-        # We need to find the summarize button and check its parent layout
-        # Or just checking attribute absence is enough for now given the implementation
-        self.assertTrue(hasattr(self.widget, 'summarize_btn'))
+    def test_main_widget_does_not_expose_trim_controls(self):
+        self.assertIsNone(self.widget.trim_start_spin)
+        self.assertIsNone(self.widget.trim_end_spin)
+        self.assertIsNone(self.widget.mark_start_btn)
+        self.assertIsNone(self.widget.mark_end_btn)
+        self.assertIsNone(self.widget.trim_btn)
+        self.assertTrue(hasattr(self.widget, "edit_audio_btn"))
+        self.assertFalse(self.widget.edit_audio_btn.isEnabled())
+
+    def test_audio_editor_mode_is_minimal(self):
+        editor_widget = RecordingWidget(MagicMock(), audio_edit_mode=True)
+        try:
+            self.assertTrue(editor_widget.audio_edit_mode)
+            self.assertIsNone(getattr(editor_widget, "tabs", None))
+            self.assertIsNone(getattr(editor_widget, "model_combo", None))
+            self.assertIsNone(getattr(editor_widget, "title_input", None))
+            self.assertTrue(hasattr(editor_widget, "trim_start_spin"))
+            self.assertTrue(hasattr(editor_widget, "trim_end_spin"))
+            self.assertTrue(hasattr(editor_widget, "trim_btn"))
+            self.assertFalse(hasattr(editor_widget, "edit_audio_btn"))
+        finally:
+            editor_widget.close()
+            sip.delete(editor_widget)
 
     def test_transcription_model_combo_includes_sherpa_onnx(self):
         options = [self.widget.model_combo.itemText(i) for i in range(self.widget.model_combo.count())]
@@ -222,7 +240,14 @@ class TestRecordingWidgetUI(unittest.TestCase):
         self.widget.run_ai_task("task_extraction")
 
         self.mock_db.delete_ai_tasks_by_record.assert_called_once_with(7)
-        queue.enqueue_task_extraction.assert_called_once_with(7, "Transcript", "ops", "Weekly sync", force=True)
+        queue.enqueue_task_extraction.assert_called_once_with(
+            7,
+            "Transcript",
+            "ops",
+            "Weekly sync",
+            force=True,
+            source="recording",
+        )
 
     def test_refresh_from_background_queue_updates_summary_and_tasks(self):
         self.widget.current_record_id = 7
@@ -256,6 +281,62 @@ class TestRecordingWidgetUI(unittest.TestCase):
             emitted[0],
             [{"type": "recording", "value": 11, "label": "Weekly sync"}],
         )
+
+    def test_trim_audio_selection_updates_duration_and_retranscribes(self):
+        tempdir = tempfile.mkdtemp(prefix="secretario_widget_trim_")
+        recordings_dir = os.path.join(tempdir, "recordings")
+        os.makedirs(recordings_dir, exist_ok=True)
+        audio_path = os.path.join(recordings_dir, "trim.wav")
+        tone = np.sin(2 * np.pi * 220 * np.arange(16000) / 16000).astype(np.float32)
+        sf.write(audio_path, tone, 16000)
+
+        self.mock_db.fetch_record.return_value = {
+            "id": 42,
+            "filename": "trim.wav",
+            "transcription": "old text",
+            "recording_notes": "",
+            "summary": "",
+            "title": "Trim test",
+            "tags": "",
+            "is_diarized": 0,
+            "created_at": "2026-04-16 10:00:00",
+            "duration": 1.0,
+            "type": "recording",
+        }
+        self.mock_db.get_tasks_by_record.return_value = []
+
+        editor_widget = RecordingWidget(MagicMock(), audio_edit_mode=True)
+        try:
+            editor_widget.db = self.mock_db
+            editor_widget.rag = MagicMock()
+
+            with patch("src.ui.recording_widget.os.getcwd", return_value=tempdir), \
+                 patch.object(editor_widget, "start_transcription") as mock_start_transcription, \
+                 patch("src.ui.recording_widget.QMessageBox.warning") as warning_mock, \
+                 patch("src.ui.recording_widget.QMessageBox.critical") as critical_mock:
+                editor_widget.load_record(42)
+                editor_widget.trim_start_spin.setValue(0.25)
+                editor_widget.trim_end_spin.setValue(0.75)
+                editor_widget.trim_audio_selection()
+
+            info = sf.info(audio_path)
+            self.assertAlmostEqual(info.frames / info.samplerate, 0.5, places=2)
+            self.mock_db.update_duration.assert_called_with(42, unittest.mock.ANY)
+            mock_start_transcription.assert_called_once_with(audio_path)
+            warning_mock.assert_not_called()
+            critical_mock.assert_not_called()
+        finally:
+            editor_widget.close()
+            sip.delete(editor_widget)
+
+        backup_path = f"{audio_path}.orig"
+        self.assertTrue(os.path.exists(backup_path))
+        try:
+            os.remove(audio_path)
+            os.remove(backup_path)
+            os.rmdir(tempdir)
+        except OSError:
+            pass
 
 if __name__ == '__main__':
     unittest.main()
