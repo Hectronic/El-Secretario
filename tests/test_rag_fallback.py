@@ -1,6 +1,13 @@
 # Copyright (C) 2026 Héctor Álvarez López <hectoralvarez.me>
 import pytest
-from src.rag_engine import _InMemoryCollection, _InMemoryChromaClient, _get_or_create_collection_compatible, RAGEngine
+import warnings
+from src.rag_engine import (
+    _InMemoryCollection,
+    _InMemoryChromaClient,
+    _get_or_create_collection_compatible,
+    _suppress_sentencepiece_swig_deprecation_warnings,
+    RAGEngine,
+)
 import os
 import shutil
 
@@ -23,6 +30,20 @@ def test_in_memory_client():
     #    return self._collections[name]
     assert col1 is not col3
     assert len(client._collections) == 2
+
+
+def test_sentencepiece_swig_warning_filter_is_specific():
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always", DeprecationWarning)
+        _suppress_sentencepiece_swig_deprecation_warnings()
+
+        warnings.warn(
+            "builtin type SwigPyPacked has no __module__ attribute",
+            DeprecationWarning,
+        )
+        warnings.warn("application deprecation", DeprecationWarning)
+
+    assert [str(w.message) for w in caught] == ["application deprecation"]
 
 def test_get_or_create_compatible():
     client = _InMemoryChromaClient()

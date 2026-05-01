@@ -18,11 +18,32 @@ import platform
 import logging
 import tempfile
 import multiprocessing as mp
+import warnings
 from typing import List, Dict, Any, Optional
 
 # Reduce odds of PostHog/background telemetry crashes in desktop environments.
 os.environ.setdefault("ANONYMIZED_TELEMETRY", "False")
 os.environ.setdefault("POSTHOG_DISABLED", "1")
+
+
+_SENTENCEPIECE_SWIG_DEPRECATION_MESSAGES = (
+    r"builtin type SwigPyPacked has no __module__ attribute",
+    r"builtin type SwigPyObject has no __module__ attribute",
+    r"builtin type swigvarlink has no __module__ attribute",
+)
+
+
+def _suppress_sentencepiece_swig_deprecation_warnings() -> None:
+    """Hide known Python 3.12 SWIG warnings emitted by sentencepiece."""
+    for message in _SENTENCEPIECE_SWIG_DEPRECATION_MESSAGES:
+        warnings.filterwarnings(
+            "ignore",
+            message=message,
+            category=DeprecationWarning,
+        )
+
+
+_suppress_sentencepiece_swig_deprecation_warnings()
 
 import chromadb
 from chromadb.config import Settings

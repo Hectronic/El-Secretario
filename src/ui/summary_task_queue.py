@@ -1,5 +1,21 @@
+# Copyright (C) 2026 Héctor Álvarez López <hectoralvarez.me>
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <https://www.gnu.org/licenses/>.
+
 from collections import deque
+import json
 import logging
+import re
 from typing import Deque, Dict, Optional, Tuple, Any, List
 
 from PyQt6.QtCore import QObject, pyqtSignal, QSettings, QTimer, QThread
@@ -10,7 +26,38 @@ from src.database import DBManager
 from src.worker import TranscriberThread
 
 
+def _read_audio_duration_seconds(audio_path: str) -> float:
+    """Best-effort duration probe used to scale transcription progress."""
+    try:
+        import soundfile as sf
+
+        with sf.SoundFile(audio_path) as audio_file:
+            return len(audio_file) / audio_file.samplerate
+    except Exception as e:
+        logging.warning("Could not read audio duration for queued transcription %s: %s", audio_path, e)
+        return 0.0
+
+
+def _parse_task_extraction_result(raw_result: Any) -> list[str]:
+    """Parse the AI task-extraction response into clean task strings."""
+    clean_result = str(raw_result or "").strip()
+    match = re.search(r"(\[.*\])", clean_result, re.DOTALL)
+    if match:
+        clean_result = match.group(1)
+
+    try:
+        parsed = json.loads(clean_result)
+    except Exception:
+        return []
+
+    if not isinstance(parsed, list):
+        return []
+    return [item.strip() for item in parsed if isinstance(item, str) and item.strip()]
+
+
 class RAGReindexThread(QThread):
+    """Rebuild RAG entries without blocking the queue manager or UI thread."""
+
     task_completed = pyqtSignal(dict)
     progress = pyqtSignal(int)
     status_update = pyqtSignal(str)
@@ -99,8 +146,12 @@ class RAGReindexThread(QThread):
 
 
 class SummaryTaskQueueManager(QObject):
-    """
-    Centralized queue for background tasks: transcription, summaries, task extraction.
+    """Sequential coordinator for long-running background tasks.
+
+    This manager is the single integration point between UI actions and workers:
+    transcription, summaries, task extraction and RAG reindexing all enter here.
+    It normalizes deduplication, cancellation, progress/status proxy signals and
+    in-session history so the UI can render task state consistently.
     """
 
     queue_changed = pyqtSignal(int, bool)  # pending_count, is_running
@@ -408,15 +459,10 @@ class SummaryTaskQueueManager(QObject):
                 force_cpu = settings.value("force_cpu", False, type=bool)
                 compute_type = settings.value("compute_type", "auto")
                 transcription_backend = settings.value("transcription_backend", "auto")
-                if compute_type == "auto": compute_type = None
+                if compute_type == "auto":
+                    compute_type = None
                 
-                # Get duration
-                import soundfile as sf
-                duration = 0
-                try:
-                    f = sf.SoundFile(task["audio_path"])
-                    duration = len(f) / f.samplerate
-                except: pass
+                duration = _read_audio_duration_seconds(task["audio_path"])
 
                 worker = TranscriberThread(
                     task["audio_path"], 
@@ -509,23 +555,16 @@ class SummaryTaskQueueManager(QObject):
                 elif t_type == "weekly_summary":
                     self.db.save_weekly_summary(task["date"], str(result), task.get("tags_filter"))
                 elif t_type == "task_extraction":
-                    import json, re
-                    clean_result = str(result).strip()
-                    match = re.search(r'(\[.*\])', clean_result, re.DOTALL)
-                    if match: clean_result = match.group(1)
-                    try:
-                        tasks = json.loads(clean_result)
-                        if isinstance(tasks, list):
-                            self.db.delete_ai_tasks_by_record(task["record_id"])
-                            for t_content in tasks:
-                                if isinstance(t_content, str) and t_content.strip():
-                                    self.db.save_task(
-                                        task["record_id"],
-                                        t_content.strip(),
-                                        task.get("tags"),
-                                        is_ai_generated=True,
-                                    )
-                    except: pass
+                    tasks = _parse_task_extraction_result(result)
+                    if tasks:
+                        self.db.delete_ai_tasks_by_record(task["record_id"])
+                        for task_content in tasks:
+                            self.db.save_task(
+                                task["record_id"],
+                                task_content,
+                                task.get("tags"),
+                                is_ai_generated=True,
+                            )
                 elif t_type == "transcription":
                     # result is a dict from TranscriberThread
                     text = result["text"]
@@ -535,14 +574,16 @@ class SummaryTaskQueueManager(QObject):
                         is_diarized=result.get("is_diarized", False),
                         transcription_model=result.get("model_name"),
                     )
-                    # Auto chain summary
-                    ai_text = self.db.get_record_ai_text(task["record_id"])
-                    self.enqueue_recording_summary(
-                        task["record_id"],
-                        ai_text,
-                        task.get("title", ""),
-                        source=task.get("source") or "transcription",
-                    )
+                    # Keep pending/batch transcription strictly sequential and lightweight:
+                    # do not chain summary/task extraction automatically.
+                    if task.get("source") != "batch_process":
+                        ai_text = self.db.get_record_ai_text(task["record_id"])
+                        self.enqueue_recording_summary(
+                            task["record_id"],
+                            ai_text,
+                            task.get("title", ""),
+                            source=task.get("source") or "transcription",
+                        )
                 elif t_type == "rag_reindex" and isinstance(result, dict):
                     indexed = int(result.get("indexed", 0))
                     skipped = int(result.get("skipped", 0))
@@ -590,7 +631,20 @@ class SummaryTaskQueueManager(QObject):
         if worker:
             worker.deleteLater()
             self._zombie_workers.append(worker)
-            if len(self._zombie_workers) > 5: self._zombie_workers.pop(0)
+            if len(self._zombie_workers) > 5:
+                self._zombie_workers.pop(0)
+        # Opportunistic cleanup between queued jobs helps long pending runs.
+        try:
+            import gc
+            gc.collect()
+            try:
+                import torch
+                if torch.cuda.is_available():
+                    torch.cuda.empty_cache()
+            except Exception:
+                pass
+        except Exception:
+            pass
         self._emit_queue_state()
         self._start_next_if_idle()
 

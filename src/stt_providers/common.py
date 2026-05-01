@@ -12,6 +12,17 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-"""Backward-compatible shim for the separated STT provider modules."""
+from __future__ import annotations
 
-from src.stt_providers.dispatcher import subprocess_transcribe_entry
+
+def serialize_segments(segments):
+    return [
+        {"start": float(s.start), "end": float(s.end), "text": str(s.text)}
+        for s in segments
+    ]
+
+
+def normalize_openai_whisper_model_name(model_size: str) -> str:
+    if model_size in ("large-v3", "large-v2"):
+        return "large"
+    return model_size

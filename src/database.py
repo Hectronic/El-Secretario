@@ -21,7 +21,7 @@ from typing import List, Dict, Any, Optional, Union
 
 class DBManager:
     def __init__(self, db_name: str = "transcriptions.db"):
-        self.db_name = db_name
+        self.db_name = os.path.abspath(db_name)
         self.init_db()
 
     @contextmanager

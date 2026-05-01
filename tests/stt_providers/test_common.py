@@ -12,6 +12,18 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-"""Backward-compatible shim for the separated STT provider modules."""
+from types import SimpleNamespace
 
-from src.stt_providers.dispatcher import subprocess_transcribe_entry
+from src.stt_providers.common import normalize_openai_whisper_model_name, serialize_segments
+
+
+def test_serialize_segments_normalizes_objects():
+    segments = [SimpleNamespace(start=1, end=2.5, text=123)]
+
+    assert serialize_segments(segments) == [{"start": 1.0, "end": 2.5, "text": "123"}]
+
+
+def test_normalize_openai_whisper_model_name_keeps_compatibility():
+    assert normalize_openai_whisper_model_name("large-v3") == "large"
+    assert normalize_openai_whisper_model_name("large-v2") == "large"
+    assert normalize_openai_whisper_model_name("base") == "base"

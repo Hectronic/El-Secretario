@@ -12,6 +12,4 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-"""Backward-compatible shim for the separated STT provider modules."""
-
-from src.stt_providers.dispatcher import subprocess_transcribe_entry
+"""Internal worker components split out of src.worker."""

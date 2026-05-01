@@ -279,7 +279,7 @@ class TestTranscriberThread(unittest.TestCase):
         thread.finished.emit.assert_called_once()
         thread.error.emit.assert_not_called()
 
-    @patch("src.worker._run_backend_subprocess")
+    @patch("src.worker.subprocess_runner.run_openai_whisper_fallback")
     def test_openai_whisper_fallback_delegates_to_subprocess(self, mock_run_backend):
         mock_run_backend.return_value = [{"start": 0.0, "end": 1.0, "text": "ok"}]
 
@@ -290,12 +290,13 @@ class TestTranscriberThread(unittest.TestCase):
         )
 
         self.assertEqual(segments[0]["text"], "ok")
-        mock_run_backend.assert_called_once()
-        call_kwargs = mock_run_backend.call_args.kwargs
-        self.assertEqual(call_kwargs["backend"], "openai-whisper")
-        self.assertEqual(call_kwargs["payload"]["model_size"], "large-v3")
+        mock_run_backend.assert_called_once_with(
+            audio_path="test.wav",
+            model_size="large-v3",
+            language=None,
+        )
 
-    @patch("src.worker._run_backend_subprocess")
+    @patch("src.worker.subprocess_runner.run_openai_whisper_fallback")
     def test_openai_whisper_fallback_propagates_runner_error(self, mock_run_backend):
         mock_run_backend.side_effect = RuntimeError("FFmpeg is not installed")
 
@@ -319,7 +320,7 @@ class TestTranscriberThread(unittest.TestCase):
         self.assertEqual(config["type"], "transducer")
         self.assertTrue(config["encoder"].endswith("encoder.onnx"))
 
-    @patch("src.worker._run_backend_subprocess")
+    @patch("src.worker.subprocess_runner.run_sherpa_onnx_transcription")
     def test_run_sherpa_onnx_transcription_returns_single_segment(self, mock_run_backend):
         mock_run_backend.return_value = [{"start": 0.0, "end": 1.0, "text": "hello from sherpa"}]
         settings = MagicMock()
@@ -341,8 +342,7 @@ class TestTranscriberThread(unittest.TestCase):
         self.assertEqual(segments, [{"start": 0.0, "end": 1.0, "text": "hello from sherpa"}])
         mock_run_backend.assert_called_once()
         call_kwargs = mock_run_backend.call_args.kwargs
-        self.assertEqual(call_kwargs["backend"], "sherpa-onnx")
-        self.assertEqual(call_kwargs["payload"]["model_config"]["type"], "paraformer")
+        self.assertEqual(call_kwargs["model_config"]["type"], "paraformer")
 
     def test_transcription_preflight_error_for_missing_sherpa_dir(self):
         settings = MagicMock()
@@ -367,30 +367,17 @@ class TestTranscriberThread(unittest.TestCase):
 
         self.assertIsNone(error)
 
-    @patch("src.worker._download_sherpa_onnx_model")
-    @patch("src.worker._resolve_existing_sherpa_model_dir")
-    def test_ensure_sherpa_model_ready_auto_downloads_when_missing(
-        self, mock_resolve_existing, mock_download
-    ):
+    @patch("src.worker.worker_sherpa.ensure_sherpa_onnx_model_ready")
+    def test_ensure_sherpa_model_ready_auto_downloads_when_missing(self, mock_ensure):
         settings = MagicMock()
-        settings.value.side_effect = lambda key, default=None, type=None: {
-            "sherpa_onnx_model_dir": "/tmp/sherpa-model",
-            "sherpa_onnx_model_type": "auto",
-            "sherpa_onnx_auto_download": True,
-            "sherpa_onnx_model_url": "https://example.com/model.tar.bz2",
-        }.get(key, default)
         expected_config = {"type": "whisper", "tokens": "/tmp/sherpa-model/tokens.txt"}
-        mock_resolve_existing.side_effect = [
-            (None, None),
-            ("/tmp/sherpa-model/extracted", expected_config),
-        ]
+        mock_ensure.return_value = ("/tmp/sherpa-model/extracted", expected_config)
 
         model_dir, model_config = _ensure_sherpa_onnx_model_ready(settings)
 
-        mock_download.assert_called_once()
+        mock_ensure.assert_called_once_with(settings, status_callback=None)
         self.assertEqual(model_dir, "/tmp/sherpa-model/extracted")
         self.assertEqual(model_config, expected_config)
-        settings.setValue.assert_any_call("sherpa_onnx_model_dir", "/tmp/sherpa-model/extracted")
 
     @patch("src.worker.QSettings")
     @patch("src.worker.os.path.getsize", return_value=100)

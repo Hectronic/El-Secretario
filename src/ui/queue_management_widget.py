@@ -14,11 +14,14 @@
 
 from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QListWidget, 
                              QListWidgetItem, QPushButton, QLabel, QMessageBox, QProgressBar)
-from PyQt6.QtCore import Qt, pyqtSignal
 
 class QueueManagementWidget(QWidget):
-    """
-    Widget to view and manage the summary task queue.
+    """Operational view for the central background-task queue.
+
+    The widget treats ``SummaryTaskQueueManager`` as the source of truth and
+    only renders snapshots: current task, wait/retry state, live progress,
+    pending work and in-session history. Keeping formatting here avoids each
+    producer inventing its own status presentation.
     """
     
     def __init__(self, task_queue, parent=None):

@@ -12,6 +12,15 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-"""Backward-compatible shim for the separated STT provider modules."""
-
-from src.stt_providers.dispatcher import subprocess_transcribe_entry
+from src.stt_providers.sherpa_onnx.model_manager import (
+    default_sherpa_model_dir,
+    default_sherpa_model_url,
+    download_sherpa_onnx_model,
+    ensure_sherpa_onnx_model_ready,
+    find_existing_file,
+    get_transcription_preflight_error,
+    iter_sherpa_candidate_dirs,
+    resolve_existing_sherpa_model_dir,
+    resolve_sherpa_onnx_model_config,
+    safe_extract_tarball,
+)

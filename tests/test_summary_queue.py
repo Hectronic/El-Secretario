@@ -2,7 +2,11 @@ import unittest
 import os
 from unittest.mock import MagicMock, patch
 from PyQt6.QtCore import QTimer, QCoreApplication
-from src.ui.summary_task_queue import SummaryTaskQueueManager
+from src.ui.summary_task_queue import (
+    SummaryTaskQueueManager,
+    _parse_task_extraction_result,
+    _read_audio_duration_seconds,
+)
 from src.database import DBManager
 
 class TestSummaryQueue(unittest.TestCase):
@@ -102,6 +106,21 @@ class TestSummaryQueue(unittest.TestCase):
             self.assertEqual(tasks[0]['content'], "Task 1")
             self.assertEqual(tasks[0]['tags'], "tag1, tag2")
             self.assertEqual(tasks[1]['content'], "Task 2")
+
+    def test_task_extraction_result_parser_accepts_wrapped_json(self):
+        result = _parse_task_extraction_result("Here are the tasks:\n[\"Task 1\", \"\", \"Task 2\"]")
+
+        self.assertEqual(result, ["Task 1", "Task 2"])
+
+    def test_task_extraction_result_parser_returns_empty_for_invalid_payload(self):
+        self.assertEqual(_parse_task_extraction_result("not json"), [])
+
+    @patch("src.ui.summary_task_queue.logging.warning")
+    def test_read_audio_duration_seconds_returns_zero_when_probe_fails(self, mock_warning):
+        duration = _read_audio_duration_seconds("/tmp/does-not-exist.wav")
+
+        self.assertEqual(duration, 0.0)
+        mock_warning.assert_called_once()
 
     def test_task_extraction_queue_has_title(self):
         record_id = self.db.save("test.wav", "Transcription", 10.0, "My Recording")
@@ -228,6 +247,29 @@ class TestSummaryQueue(unittest.TestCase):
         self.assertEqual(record["transcription"], "recognized text")
         self.assertEqual(record["transcription_model"], "sherpa-onnx")
         enqueue_summary.assert_called_once()
+
+    def test_transcription_completion_batch_process_does_not_chain_summary(self):
+        record_id = self.db.save("test.wav", "", 10.0, "Title")
+        self.queue_manager._current_task = {
+            "type": "transcription",
+            "record_id": record_id,
+            "title": "Title",
+            "source": "batch_process",
+        }
+
+        with patch.object(self.queue_manager, "enqueue_recording_summary") as enqueue_summary:
+            self.queue_manager._on_worker_completed(
+                {
+                    "text": "recognized text",
+                    "model_name": "base",
+                    "is_diarized": True,
+                }
+            )
+
+        record = self.db.fetch_record(record_id)
+        self.assertEqual(record["transcription"], "recognized text")
+        self.assertEqual(record["transcription_model"], "base")
+        enqueue_summary.assert_not_called()
 
 if __name__ == '__main__':
     unittest.main()

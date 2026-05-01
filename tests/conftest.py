@@ -1,4 +1,7 @@
 import os
+import sys
+import types
+import warnings
 from pathlib import Path
 
 import pytest
@@ -7,6 +10,56 @@ import pytest
 # Force headless Qt unless explicitly overridden by the environment.
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 os.environ.setdefault("EL_SECRETARIO_SKIP_AUDIO_ENUM", "1")
+# Keep third-party telemetry and progress monitors quiet during tests.
+# These background threads have been a source of intermittent native aborts.
+os.environ.setdefault("POSTHOG_DISABLED", "1")
+os.environ.setdefault("ANONYMIZED_TELEMETRY", "False")
+os.environ.setdefault("TQDM_DISABLE", "1")
+
+# Some third-party packages still initialize background workers even when the
+# environment flags are set. Stub or hard-disable them before tests import code.
+if "posthog" not in sys.modules:
+    posthog_stub = types.ModuleType("posthog")
+    posthog_stub.disabled = True
+    posthog_stub.project_api_key = ""
+    posthog_stub.capture = lambda *args, **kwargs: None
+    sys.modules["posthog"] = posthog_stub
+
+try:
+    import tqdm
+
+    tqdm.tqdm.monitor_interval = 0
+except Exception:
+    pass
+
+
+_SWIG_DEPRECATION_MESSAGES = (
+    r"builtin type SwigPyPacked has no __module__ attribute",
+    r"builtin type SwigPyObject has no __module__ attribute",
+    r"builtin type swigvarlink has no __module__ attribute",
+)
+
+
+def _suppress_third_party_swig_warnings():
+    # sentencepiece emits these Python 3.12 deprecations while loading native
+    # SWIG types. Keep the filter narrow so application deprecations still fail.
+    for message in _SWIG_DEPRECATION_MESSAGES:
+        warnings.filterwarnings(
+            "ignore",
+            message=message,
+            category=DeprecationWarning,
+        )
+
+
+_suppress_third_party_swig_warnings()
+
+
+def pytest_configure(config):
+    _suppress_third_party_swig_warnings()
+
+
+def pytest_runtest_setup(item):
+    _suppress_third_party_swig_warnings()
 
 
 def pytest_addoption(parser):

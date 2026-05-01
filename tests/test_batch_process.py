@@ -89,6 +89,21 @@ class TestBatchProcess(unittest.TestCase):
                 item = self.widget.pending_list.item(0)
                 self.assertEqual(item.background(), Qt.GlobalColor.yellow)
                 self.assertEqual(mock_thread.call_args.kwargs["model_size"], "Sherpa-ONNX (Local)")
+                self.assertTrue(mock_thread.call_args.kwargs["enable_diarization"])
+
+    def test_start_processing_via_queue_enables_diarization(self):
+        mock_task_queue = MagicMock()
+        mock_task_queue.enqueue_transcription.return_value = True
+        widget = BatchProcessWidget(task_queue=mock_task_queue)
+        widget.queue = [
+            {"id": 10, "filename": "a.wav", "duration": 1.0},
+            {"id": 11, "filename": "b.wav", "duration": 2.0},
+        ]
+        widget.start_processing()
+
+        self.assertEqual(mock_task_queue.enqueue_transcription.call_count, 2)
+        for call in mock_task_queue.enqueue_transcription.call_args_list:
+            self.assertTrue(call.kwargs["diarization"])
                 
     def test_on_file_finished_removes_item(self):
         # Setup processing state
