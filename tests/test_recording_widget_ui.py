@@ -98,6 +98,19 @@ class TestRecordingWidgetUI(unittest.TestCase):
         options = [self.widget.model_combo.itemText(i) for i in range(self.widget.model_combo.count())]
         self.assertIn("Sherpa-ONNX (Local)", options)
 
+    def test_retranscribe_button_is_integrated_with_transcription_controls(self):
+        self.assertIsNotNone(self.widget.retranscribe_btn)
+        self.assertEqual(self.widget.retranscribe_btn.text(), "Retranscribe")
+        self.assertEqual(self.widget.retranscribe_btn.minimumHeight(), 34)
+        self.assertEqual(self.widget.retranscribe_btn.property("class"), "calendar-primary-btn")
+        self.assertFalse(self.widget.retranscribe_btn.isEnabled())
+
+    def test_bottom_actions_keep_ai_buttons_without_retranscribe_duplication(self):
+        self.assertEqual(self.widget.summarize_btn.text(), "Summarize (AI)")
+        self.assertEqual(self.widget.extract_tasks_btn.text(), "Extract Tasks (AI)")
+        self.assertNotEqual(self.widget.summarize_btn, self.widget.retranscribe_btn)
+        self.assertNotEqual(self.widget.extract_tasks_btn, self.widget.retranscribe_btn)
+
     def test_start_transcription_shows_error_without_starting_thread_when_sherpa_model_missing(self):
         self.widget.model_combo.setCurrentText("Sherpa-ONNX (Local)")
         fake_settings = MagicMock(spec=QSettings)

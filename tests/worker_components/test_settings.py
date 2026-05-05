@@ -17,7 +17,7 @@ from unittest.mock import MagicMock
 from src.worker_components import settings as worker_settings
 
 
-def test_persist_working_transcription_settings_uses_same_logic_for_all_backends():
+def test_persist_working_transcription_settings_keeps_user_preferences_untouched():
     qsettings = MagicMock()
 
     worker_settings.persist_working_transcription_settings(
@@ -29,14 +29,15 @@ def test_persist_working_transcription_settings_uses_same_logic_for_all_backends
         compute_type="float32",
     )
 
-    qsettings.setValue.assert_any_call("transcription_backend", "openai-whisper")
-    qsettings.setValue.assert_any_call("whisper_model", "base")
-    qsettings.setValue.assert_any_call("rec_config/model", "base")
-    qsettings.setValue.assert_any_call("force_cpu", True)
-    assert not any(call.args[0] == "compute_type" for call in qsettings.setValue.call_args_list)
+    written_keys = {call.args[0] for call in qsettings.setValue.call_args_list}
+    assert "transcription_backend" not in written_keys
+    assert "whisper_model" not in written_keys
+    assert "rec_config/model" not in written_keys
+    assert "force_cpu" not in written_keys
+    assert "compute_type" not in written_keys
 
 
-def test_persist_working_transcription_settings_keeps_compute_type_for_faster_whisper():
+def test_persist_working_transcription_settings_records_last_runtime_snapshot():
     qsettings = MagicMock()
 
     worker_settings.persist_working_transcription_settings(
@@ -48,7 +49,29 @@ def test_persist_working_transcription_settings_keeps_compute_type_for_faster_wh
         compute_type="int8",
     )
 
-    qsettings.setValue.assert_any_call("compute_type", "int8")
+    qsettings.setValue.assert_any_call("last_transcription_backend", "faster-whisper")
+    qsettings.setValue.assert_any_call("last_transcription_model", "base")
+    qsettings.setValue.assert_any_call("last_transcription_device", "cuda")
+    qsettings.setValue.assert_any_call("last_transcription_force_cpu", False)
+    qsettings.setValue.assert_any_call("last_transcription_compute_type", "int8")
+
+
+def test_persist_working_transcription_settings_does_not_turn_cpu_fallback_into_preference():
+    qsettings = MagicMock()
+
+    worker_settings.persist_working_transcription_settings(
+        qsettings,
+        effective_backend="faster-whisper",
+        model_size="base",
+        device="cpu",
+        force_cpu=False,
+        compute_type="int8_float32",
+    )
+
+    written_keys = {call.args[0] for call in qsettings.setValue.call_args_list}
+    assert "force_cpu" not in written_keys
+    qsettings.setValue.assert_any_call("last_transcription_device", "cpu")
+    qsettings.setValue.assert_any_call("last_transcription_force_cpu", False)
 
 
 def test_get_subprocess_attempt_timeout_seconds_defaults_and_falls_back():

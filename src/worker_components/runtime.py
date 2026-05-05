@@ -128,3 +128,49 @@ def log_transcription_runtime_context(
         os.environ.get("CUDA_VISIBLE_DEVICES", "<unset>"),
     )
     flush_log_handlers()
+
+
+def should_use_gpu_for_diarization(
+    *,
+    force_cpu: bool,
+    min_free_vram_gb: float = 3.0,
+    min_free_ratio: float = 0.35,
+) -> tuple[bool, str]:
+    """Decide if diarization should run on GPU or CPU.
+
+    This protects desktop responsiveness on low-VRAM cards by avoiding a second
+    heavy GPU pipeline (pyannote) when Whisper is already running on CUDA.
+    """
+    if force_cpu:
+        return (False, "force_cpu is enabled")
+
+    try:
+        if not torch.cuda.is_available():
+            return (False, "CUDA is not available")
+        if torch.cuda.device_count() <= 0:
+            return (False, "No CUDA device detected")
+
+        free_bytes, total_bytes = torch.cuda.mem_get_info()
+        free_gb = free_bytes / (1024 ** 3)
+        total_gb = total_bytes / (1024 ** 3)
+        free_ratio = free_bytes / total_bytes if total_bytes else 0.0
+
+        if free_gb < float(min_free_vram_gb):
+            return (
+                False,
+                f"GPU free VRAM too low for diarization on GPU ({free_gb:.2f} GB < {float(min_free_vram_gb):.2f} GB)",
+            )
+        if free_ratio < float(min_free_ratio):
+            return (
+                False,
+                f"GPU free VRAM ratio too low for diarization on GPU ({free_ratio:.2%} < {float(min_free_ratio):.0%})",
+            )
+        return (
+            True,
+            (
+                "GPU free VRAM is sufficient "
+                f"({free_gb:.2f}/{total_gb:.2f} GB, {free_ratio:.2%} free)"
+            ),
+        )
+    except Exception as e:
+        return (False, f"Could not evaluate CUDA memory for diarization: {e}")

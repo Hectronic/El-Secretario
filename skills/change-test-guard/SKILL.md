@@ -21,6 +21,7 @@ Follow this workflow for every code change.
 - Add a new test for new behavior.
 - Update existing tests only when behavior is intentionally changed.
 - Cover success path and at least one edge or failure path.
+- For transcription/STT/diarization changes, cover configured GPU/CPU behavior and ensure CPU is not forced unless settings or fallback require it.
 
 4. Run targeted tests first.
 - Execute tests directly related to changed files or features.

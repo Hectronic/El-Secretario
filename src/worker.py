@@ -27,6 +27,7 @@ import torch
 from src.worker_components import sherpa as worker_sherpa
 from src.worker_components import engine as worker_engine
 from src.worker_components import runtime as worker_runtime
+from src.worker_components import device_selection as worker_device_selection
 from src.worker_components.threads import SearchThread, ChatThread
 from src.worker_components import subprocess_runner
 
@@ -144,40 +145,10 @@ def get_transcription_preflight_error(model_size: str, settings) -> str | None:
 
 
 def get_optimal_device(force_cpu: bool = False, model_size: str = "base"):
-    """
-    Determine optimal device and compute type for transcription.
-    
-    Uses int8 quantization on GPU for better memory efficiency (especially
-    important for GPUs with limited VRAM like RTX 3060 with 6GB).
-    
-    Returns:
-        tuple: (device, compute_type) - e.g., ("cuda", "int8") or ("cpu", "int8")
-    """
-    is_windows = platform.system() == "Windows"
-
-    if not force_cpu and torch.cuda.is_available():
-        # On Windows keep float16 default for CUDA.
-        if is_windows:
-            return ("cuda", "float16")
-
-        # Get available GPU memory
-        try:
-            gpu_mem_gb = torch.cuda.get_device_properties(0).total_memory / (1024**3)
-            # For large models on GPUs with <= 8GB, use int8 for memory efficiency
-            # int8 is generally recommended for inference anyway (faster + less memory)
-            if model_size in ("large-v3", "large", "medium") and gpu_mem_gb <= 8:
-                return ("cuda", "int8")
-            # For smaller models or larger GPUs, float16 is fine
-            if gpu_mem_gb > 8:
-                return ("cuda", "float16")
-        except Exception:
-            pass
-        # Default: use int8 for safety on most consumer GPUs
-        return ("cuda", "int8")
-    # On Windows, prefer float32 on CPU to avoid rare int8 runtime crashes.
-    if is_windows:
-        return ("cpu", "float32")
-    return ("cpu", "int8")
+    return worker_device_selection.get_optimal_device(
+        force_cpu=force_cpu,
+        model_size=model_size,
+    )
 
 
 def _pkg_version(name: str) -> str:
@@ -210,6 +181,19 @@ def _log_transcription_runtime_context(
         force_cpu=force_cpu,
         enable_diarization=enable_diarization,
         language=language,
+    )
+
+
+def _should_use_gpu_for_diarization(
+    *,
+    force_cpu: bool,
+    min_free_vram_gb: float = 3.0,
+    min_free_ratio: float = 0.35,
+):
+    return worker_runtime.should_use_gpu_for_diarization(
+        force_cpu=force_cpu,
+        min_free_vram_gb=min_free_vram_gb,
+        min_free_ratio=min_free_ratio,
     )
 
 

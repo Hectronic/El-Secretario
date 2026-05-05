@@ -173,7 +173,7 @@ class TestTranscriberThreadRunBranches(unittest.TestCase):
         thread.error.emit.assert_not_called()
 
     @patch("src.worker.platform.system", return_value="Linux")
-    @patch("src.worker.torch.cuda.is_available", return_value=False)
+    @patch("src.worker._should_use_gpu_for_diarization", return_value=(False, "test guard"))
     @patch("src.worker.QSettings")
     @patch("src.worker.os.path.getsize", return_value=100)
     @patch("src.worker._get_pyannote_pipeline_class")
@@ -184,7 +184,7 @@ class TestTranscriberThreadRunBranches(unittest.TestCase):
         mock_get_pipeline_cls,
         _mock_getsize,
         MockQSettings,
-        _mock_cuda_available,
+        _mock_should_use_gpu,
         _mock_system,
     ):
         mock_run_subprocess.return_value = [
@@ -223,6 +223,7 @@ class TestTranscriberThreadRunBranches(unittest.TestCase):
         result = thread.finished.emit.call_args.args[0]
         self.assertIn("[SPEAKER_01]", result["text"])
         self.assertIn("[SPEAKER_02]", result["text"])
+        pipeline.to.assert_not_called()
 
     @patch("src.worker.platform.system", return_value="Linux")
     @patch("src.worker.QSettings")

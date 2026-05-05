@@ -183,15 +183,18 @@ class TestTranscriberThread(unittest.TestCase):
 
     @patch("src.worker.platform.system", return_value="Windows")
     @patch("src.worker.os.path.getsize", return_value=100)
+    @patch("src.worker.QSettings")
     @patch("src.worker._run_transcription_in_subprocess")
     @patch("src.worker.torch.cuda.is_available", return_value=False)
     def test_windows_subprocess_cuda_failure_falls_back_to_cpu(
-        self, _mock_cuda_available, _mock_run_subprocess, _mock_getsize, _mock_system
+        self, _mock_cuda_available, _mock_run_subprocess, MockQSettings, _mock_getsize, _mock_system
     ):
         _mock_run_subprocess.side_effect = [
             RuntimeError("out of memory"),
             [{"start": 0.0, "end": 1.0, "text": "Recovered from CUDA failure"}],
         ]
+        settings_instance = MagicMock()
+        MockQSettings.return_value = settings_instance
 
         thread = TranscriberThread("test.wav", device="cuda", compute_type="float16")
         thread.finished = MagicMock()
@@ -207,6 +210,10 @@ class TestTranscriberThread(unittest.TestCase):
         self.assertEqual(second_call["device"], "cpu")
         self.assertEqual(second_call["compute_type"], "int8_float32")
         self.assertTrue(thread.force_cpu)
+        written_keys = {call.args[0] for call in settings_instance.setValue.call_args_list}
+        self.assertNotIn("force_cpu", written_keys)
+        settings_instance.setValue.assert_any_call("last_transcription_device", "cpu")
+        settings_instance.setValue.assert_any_call("last_transcription_force_cpu", False)
         thread.finished.emit.assert_called_once()
         thread.error.emit.assert_not_called()
 
@@ -382,7 +389,7 @@ class TestTranscriberThread(unittest.TestCase):
     @patch("src.worker.QSettings")
     @patch("src.worker.os.path.getsize", return_value=100)
     @patch("src.worker._run_sherpa_onnx_transcription")
-    def test_sherpa_onnx_model_uses_sherpa_backend_and_persists_settings(
+    def test_sherpa_onnx_model_uses_sherpa_backend_and_records_runtime_snapshot(
         self, mock_sherpa_run, _mock_getsize, MockQSettings
     ):
         mock_sherpa_run.return_value = [{"start": 0.0, "end": 1.0, "text": "local sherpa ok"}]
@@ -404,8 +411,11 @@ class TestTranscriberThread(unittest.TestCase):
 
         mock_sherpa_run.assert_called_once()
         self.assertEqual(thread.effective_backend, "sherpa-onnx")
-        settings_instance.setValue.assert_any_call("transcription_backend", "sherpa-onnx")
-        settings_instance.setValue.assert_any_call("whisper_model", "sherpa-onnx")
+        settings_instance.setValue.assert_any_call("last_transcription_backend", "sherpa-onnx")
+        settings_instance.setValue.assert_any_call("last_transcription_model", "sherpa-onnx")
+        self.assertFalse(
+            any(call.args[0] == "force_cpu" for call in settings_instance.setValue.call_args_list)
+        )
         thread.finished.emit.assert_called_once()
         thread.error.emit.assert_not_called()
 
@@ -413,7 +423,7 @@ class TestTranscriberThread(unittest.TestCase):
     @patch("src.worker.os.path.getsize", return_value=100)
     @patch("src.worker._run_transcription_in_subprocess")
     @patch("src.worker._run_openai_whisper_fallback")
-    def test_backend_preference_openai_persists_working_settings(
+    def test_backend_preference_openai_records_runtime_without_rewriting_preferences(
         self, _mock_openai_fallback, _mock_run_subprocess, _mock_getsize, MockQSettings
     ):
         _mock_openai_fallback.return_value = [
@@ -438,9 +448,12 @@ class TestTranscriberThread(unittest.TestCase):
 
         _mock_run_subprocess.assert_not_called()
         self.assertEqual(thread.effective_backend, "openai-whisper")
-        settings_instance.setValue.assert_any_call("transcription_backend", "openai-whisper")
-        settings_instance.setValue.assert_any_call("whisper_model", thread.model_size)
-        settings_instance.setValue.assert_any_call("rec_config/model", thread.model_size)
+        settings_instance.setValue.assert_any_call("last_transcription_backend", "openai-whisper")
+        settings_instance.setValue.assert_any_call("last_transcription_model", thread.model_size)
+        written_keys = {call.args[0] for call in settings_instance.setValue.call_args_list}
+        self.assertNotIn("transcription_backend", written_keys)
+        self.assertNotIn("whisper_model", written_keys)
+        self.assertNotIn("rec_config/model", written_keys)
         thread.finished.emit.assert_called_once()
 
 

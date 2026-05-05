@@ -1,4 +1,4 @@
 interface:
   display_name: "PyQt Venv Dev Test"
   short_description: "Usar venv y testear PyQt sin fallos."
-  default_prompt: "Aplicar flujo de venv y pruebas PyQt estables al tocar código."
+  default_prompt: "Aplicar flujo de venv y pruebas PyQt estables al tocar código, preservando la configuración GPU/CPU en transcripción cuando aplique."

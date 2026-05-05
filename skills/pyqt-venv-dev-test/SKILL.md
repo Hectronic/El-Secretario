@@ -18,6 +18,13 @@ description: Standardize coding and testing workflow for Python/PyQt projects wi
 
 3. Never use global `python`, `pip`, or `pytest` if a local project venv exists.
 
+## Preserve Transcription Runtime Preferences
+
+1. When touching worker, STT, diarization, queue, or UI settings code, respect the configured backend/device/compute settings.
+2. Prefer GPU/CUDA over CPU whenever CUDA is available and `force_cpu` is false.
+3. Do not force CPU unless the user configured it, CUDA is unavailable, or an existing fallback path is recovering from a real runtime failure.
+4. Keep CUDA cleanup explicit after GPU transcription/diarization paths.
+
 ## Stabilize PyQt Tests
 
 1. For tests that instantiate Qt widgets, export before running pytest:

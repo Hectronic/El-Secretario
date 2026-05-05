@@ -1,5 +1,6 @@
 import os
 import sys
+import tempfile
 import types
 import warnings
 from pathlib import Path
@@ -52,10 +53,35 @@ def _suppress_third_party_swig_warnings():
 
 
 _suppress_third_party_swig_warnings()
+_QSETTINGS_TEMP_DIR = None
 
 
 def pytest_configure(config):
     _suppress_third_party_swig_warnings()
+    _isolate_qsettings_user_scope()
+
+
+def pytest_unconfigure(config):
+    global _QSETTINGS_TEMP_DIR
+    if _QSETTINGS_TEMP_DIR is not None:
+        _QSETTINGS_TEMP_DIR.cleanup()
+        _QSETTINGS_TEMP_DIR = None
+
+
+def _isolate_qsettings_user_scope():
+    """Keep tests from writing application settings into the real user config."""
+    global _QSETTINGS_TEMP_DIR
+    if _QSETTINGS_TEMP_DIR is not None:
+        return
+    from PyQt6.QtCore import QSettings
+
+    _QSETTINGS_TEMP_DIR = tempfile.TemporaryDirectory(prefix="secretario_qsettings_")
+    QSettings.setDefaultFormat(QSettings.Format.IniFormat)
+    QSettings.setPath(
+        QSettings.Format.IniFormat,
+        QSettings.Scope.UserScope,
+        _QSETTINGS_TEMP_DIR.name,
+    )
 
 
 def pytest_runtest_setup(item):

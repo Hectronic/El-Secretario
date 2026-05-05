@@ -16,13 +16,17 @@ import platform
 
 
 def persist_working_transcription_settings(settings, *, effective_backend: str, model_size: str, device: str, force_cpu: bool, compute_type: str | None) -> None:
-    # Keep backend persistence identical for all transcription paths.
-    settings.setValue("transcription_backend", effective_backend)
-    settings.setValue("whisper_model", model_size)
-    settings.setValue("rec_config/model", model_size)
-    settings.setValue("force_cpu", device == "cpu" or force_cpu)
-    if effective_backend == "faster-whisper":
-        settings.setValue("compute_type", compute_type or "auto")
+    """Persist the last effective runtime without rewriting user preferences.
+
+    The UI preference keys are saved only by settings/configuration widgets. A
+    runtime fallback to CPU, a concrete auto-selected compute type, or an
+    effective backend must not become the user's next configured preference.
+    """
+    settings.setValue("last_transcription_backend", effective_backend)
+    settings.setValue("last_transcription_model", model_size)
+    settings.setValue("last_transcription_device", device)
+    settings.setValue("last_transcription_force_cpu", bool(force_cpu))
+    settings.setValue("last_transcription_compute_type", compute_type or "auto")
     settings.sync()
 
 
@@ -37,4 +41,3 @@ def get_subprocess_attempt_timeout_seconds(settings) -> int:
         return max(30, int(configured))
     except Exception:
         return default_timeout
-

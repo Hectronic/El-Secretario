@@ -14,6 +14,11 @@ description: Enforce local repository development standards whenever code is cre
 3. Preserve compatibility-first refactors:
 - keep import surface stable unless explicitly requested
 - prefer wrappers/shims during incremental migrations
+4. Preserve runtime configuration:
+- respect configured STT backend, device, compute type, and `force_cpu`
+- prefer GPU/CUDA when available and `force_cpu` is false
+- do not introduce unconditional CPU forcing except for existing safe fallback paths after real runtime failures
+- keep transcription and diarization aligned with the same runtime policy where supported
 
 ## Test Layout Rule
 

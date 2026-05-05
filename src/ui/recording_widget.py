@@ -99,7 +99,15 @@ class RecordingWidget(QWidget):
             self._build_audio_editor_ui(layout)
             return
 
-        # Transcription Controls (for retranscription)
+        self._build_transcription_controls(layout)
+        self._build_playback_controls(layout)
+        self._build_separator(layout)
+        self._build_metadata_panel(layout)
+        self._build_content_tabs(layout)
+        self._build_bottom_actions(layout)
+
+    def _build_transcription_controls(self, layout):
+        # Transcription controls used for manual retranscription.
         transcription_layout = QHBoxLayout()
         transcription_layout.addWidget(QLabel("Retranscription Options:"))
         
@@ -117,10 +125,19 @@ class RecordingWidget(QWidget):
         self.diarization_check = QCheckBox("Diarization")
         self.diarization_check.setToolTip("Enable speaker diarization (Requires HF Token)")
         transcription_layout.addWidget(self.diarization_check)
+
+        self.retranscribe_btn = QPushButton("Retranscribe")
+        self.retranscribe_btn.setProperty("class", "calendar-primary-btn")
+        self.retranscribe_btn.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
+        self.retranscribe_btn.setMinimumHeight(34)
+        self.retranscribe_btn.clicked.connect(self.retranscribe_recording)
+        self.retranscribe_btn.setEnabled(False)
+        transcription_layout.addSpacing(10)
+        transcription_layout.addWidget(self.retranscribe_btn)
         transcription_layout.addStretch()
         layout.addLayout(transcription_layout)
 
-        # Playback Controls
+    def _build_playback_controls(self, layout):
         playback_layout = QHBoxLayout()
         self.play_btn = QPushButton()
         self.play_btn.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_MediaPlay))
@@ -218,12 +235,14 @@ class RecordingWidget(QWidget):
             self.mark_start_btn = None
             self.mark_end_btn = None
             self.trim_btn = None
-        
+
+    def _build_separator(self, layout):
         line = QFrame()
         line.setFrameShape(QFrame.Shape.HLine)
         line.setFrameShadow(QFrame.Shadow.Sunken)
         layout.addWidget(line)
-        
+
+    def _build_metadata_panel(self, layout):
         meta_group = QGroupBox("Recording Details")
         meta_layout = QFormLayout()
         
@@ -256,7 +275,8 @@ class RecordingWidget(QWidget):
         meta_layout.addRow("", self.is_diarized_check_meta)
         meta_group.setLayout(meta_layout)
         layout.addWidget(meta_group)
-        
+
+    def _build_content_tabs(self, layout):
         self.tabs = QTabWidget()
         original_widget = QWidget()
         original_layout = QVBoxLayout(original_widget)
@@ -286,7 +306,8 @@ class RecordingWidget(QWidget):
         self.tasks_widget = TasksListWidget(self.db, record_id=self.current_record_id, parent=self)
         self.tabs.addTab(self.tasks_widget, "Tasks")
         layout.addWidget(self.tabs)
-        
+
+    def _build_bottom_actions(self, layout):
         bottom_actions_layout = QHBoxLayout()
         bottom_actions_layout.setSpacing(12)
         bottom_actions_layout.setContentsMargins(0, 6, 0, 2)
@@ -308,14 +329,6 @@ class RecordingWidget(QWidget):
         self.extract_tasks_btn.clicked.connect(lambda: self.run_ai_task("task_extraction"))
         self.extract_tasks_btn.setEnabled(False)
         ai_layout.addWidget(self.extract_tasks_btn)
-
-        self.retranscribe_btn = QPushButton("Retranscribe")
-        self.retranscribe_btn.setProperty("class", "calendar-nav-btn")
-        self.retranscribe_btn.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
-        self.retranscribe_btn.setMinimumHeight(38)
-        self.retranscribe_btn.clicked.connect(self.retranscribe_recording)
-        self.retranscribe_btn.setEnabled(False)
-        ai_layout.addWidget(self.retranscribe_btn)
 
         bottom_actions_layout.addLayout(ai_layout)
         bottom_actions_layout.addStretch()

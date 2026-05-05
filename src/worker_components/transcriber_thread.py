@@ -56,6 +56,7 @@ class TranscriberThread(QThread):
         self.audio_path = audio_path
         self.ui_model_name = model_size
         self.model_size = get_whisper_model_name(model_size)
+        self.configured_force_cpu = bool(force_cpu)
         self.force_cpu = force_cpu
         self.backend_preference = backend_preference or "auto"
         self.effective_backend = "faster-whisper"
@@ -93,7 +94,7 @@ class TranscriberThread(QThread):
                 effective_backend=self.effective_backend,
                 model_size=self.model_size,
                 device=self.device,
-                force_cpu=self.force_cpu,
+                force_cpu=self.configured_force_cpu,
                 compute_type=self.compute_type,
             )
         except Exception as e:
@@ -215,9 +216,14 @@ class TranscriberThread(QThread):
                         return
                     pipeline = pipeline_cls.from_pretrained("pyannote/speaker-diarization-3.1", use_auth_token=self.hf_token)
                     if pipeline:
-                        if torch.cuda.is_available() and not self.force_cpu:
+                        should_move_to_gpu, gpu_reason = api._should_use_gpu_for_diarization(
+                            force_cpu=self.force_cpu,
+                        )
+                        if should_move_to_gpu:
                             pipeline = pipeline.to(torch.device("cuda"))
                             logging.info("Pyannote pipeline moved to GPU.")
+                        else:
+                            logging.info("Pyannote pipeline kept on CPU. Reason: %s", gpu_reason)
                         diarization = pipeline(self.audio_path)
                         logging.info("Diarization completed successfully.")
                 except Exception as e:

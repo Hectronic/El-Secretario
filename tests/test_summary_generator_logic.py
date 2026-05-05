@@ -76,7 +76,12 @@ def test_summary_generator_cancellation(qtbot, mock_db, mock_ai_provider, mock_s
     assert blocker.args == [0, 0, 0]
 
 def test_summary_generator_specific_dates(qtbot, mock_db, mock_ai_provider, mock_ai_retry, mock_settings):
-    gen = SummaryGenerator(specific_dates=["2026-05-01"], generate_weekly=False, generate_recordings=True)
+    gen = SummaryGenerator(
+        specific_dates=["2026-05-01"],
+        generate_weekly=False,
+        generate_recordings=True,
+        exclude_today=False,
+    )
     
     completed_dates = []
     gen.item_completed.connect(lambda t, d, s: completed_dates.append(d))
