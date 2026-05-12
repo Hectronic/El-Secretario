@@ -19,7 +19,8 @@ from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QPushButton,
                              QLabel, QTextEdit, QDialog, QDialogButtonBox, QProgressBar)
 from PyQt6.QtCore import Qt, pyqtSignal, QTimer, QSettings
 from src.ui.styles import LIST_WIDGET_STYLE
-from src.worker import TranscriberThread, get_transcription_preflight_error
+from src.worker_components.transcriber_thread import TranscriberThread
+from src.stt_providers.sherpa_onnx.model_manager import get_transcription_preflight_error
 from src.transcription_options import get_saved_transcription_model
 
 class NoteEntryWidget(QWidget):

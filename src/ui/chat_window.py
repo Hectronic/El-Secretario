@@ -18,7 +18,7 @@ from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QTextEdit,
                              QWidget)
 from PyQt6.QtCore import Qt, QSettings, pyqtSignal
 from PyQt6.QtGui import QCursor
-from src.worker import ChatThread
+from src.worker_components.threads import ChatThread
 from src.database import DBManager
 
 class ChatWindow(QDialog):

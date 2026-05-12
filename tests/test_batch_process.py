@@ -151,5 +151,84 @@ class TestBatchProcess(unittest.TestCase):
             # Verify queue popped (to move to next)
             self.assertEqual(len(self.widget.queue), 2)
 
+    def test_on_file_error_skips_fatal_transcription_failures_immediately(self):
+        self.widget.is_processing = True
+        self.widget.current_record = self.widget.queue[0]
+        self.widget.current_item = self.widget.pending_list.item(0)
+
+        with patch.object(self.widget, 'process_next') as mock_next, patch.object(
+            BatchProcessWidget, 'cleanup_thread'
+        ) as mock_cleanup_thread:
+            self.widget.on_file_error("Transcription subprocess timed out.")
+
+            mock_cleanup_thread.assert_called_once()
+            mock_next.assert_called_once()
+            self.assertEqual(len(self.widget.queue), 2)
+            self.assertIn("SKIPPED", self.widget.pending_list.item(0).text())
+            self.assertEqual(self.widget.pending_list.item(0).background(), Qt.GlobalColor.lightGray)
+
+    def test_load_pending_marks_fatal_last_error_as_skipped(self):
+        self.mock_db.fetch_pending_diarization.return_value = [
+            {
+                "id": 9,
+                "filename": "bad.wav",
+                "duration": 4.2,
+                "processing_attempts": 3,
+                "last_error": "Transcription subprocess timed out.",
+            }
+        ]
+
+        widget = BatchProcessWidget()
+
+        self.assertEqual(widget.pending_list.count(), 1)
+        item = widget.pending_list.item(0)
+        self.assertIn("SKIPPED", item.text())
+        self.assertEqual(item.background(), Qt.GlobalColor.lightGray)
+
+    def test_queue_task_skipped_updates_current_item_as_skipped(self):
+        self.widget.is_processing = True
+        self.widget._queued_record_ids = {1}
+        self.widget._active_batch_tasks = 1
+        self.widget.current_record = {"id": 1, "filename": "rec1.wav"}
+        self.widget.current_item = self.widget.pending_list.item(0)
+
+        with patch.object(self.widget, "_finish_queue_mode_if_done") as mock_done:
+            self.widget._on_queue_task_skipped(
+                {
+                    "source": "batch_process",
+                    "type": "transcription",
+                    "record_id": 1,
+                    "title": "rec1.wav",
+                },
+                "Transcription subprocess timed out.",
+            )
+
+        self.assertNotIn(1, self.widget._queued_record_ids)
+        self.assertIn("SKIPPED", self.widget.pending_list.item(0).text())
+        self.assertEqual(self.widget.pending_list.item(0).background(), Qt.GlobalColor.lightGray)
+        mock_done.assert_called_once()
+
+    def test_duplicate_terminal_signals_for_same_batch_task_are_counted_once(self):
+        self.widget.is_processing = True
+        self.widget._queued_record_ids = {1, 2}
+        self.widget._active_batch_tasks = 2
+        self.widget.total_files = 2
+        self.widget.processed_count = 0
+
+        skipped_task = {
+            "source": "batch_process",
+            "type": "transcription",
+            "record_id": 1,
+            "title": "rec1.wav",
+        }
+
+        with patch.object(self.widget, "_finish_queue_mode_if_done"):
+            self.widget._on_queue_task_skipped(skipped_task, "Transcription subprocess timed out.")
+            self.widget._on_queue_task_finished(skipped_task)
+
+        self.assertEqual(self.widget._active_batch_tasks, 1)
+        self.assertEqual(self.widget.processed_count, 0)
+        self.assertNotIn(1, self.widget._queued_record_ids)
+
 if __name__ == '__main__':
     unittest.main()

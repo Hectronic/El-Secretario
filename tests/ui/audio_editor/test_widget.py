@@ -9,9 +9,9 @@ import soundfile as sf
 from PyQt6 import sip
 from PyQt6.QtWidgets import QApplication
 
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "..")))
 
-from src.ui.audio_editor_widget import AudioChunk, AudioEditorWidget
+from src.ui.audio_editor.widget import AudioChunk, AudioEditorWidget
 
 
 class TestAudioEditorWidget(unittest.TestCase):
@@ -30,12 +30,12 @@ class TestAudioEditorWidget(unittest.TestCase):
             QApplication.instance().setQuitOnLastWindowClosed(True)
 
     def setUp(self):
-        self.db_patcher = patch("src.ui.audio_editor_widget.DBManager")
+        self.db_patcher = patch("src.ui.audio_editor.widget.DBManager")
         self.mock_db = self.db_patcher.start().return_value
         self.mock_db.get_all_tags.return_value = []
 
-        self.media_player_patcher = patch("src.ui.audio_editor_widget.QMediaPlayer")
-        self.audio_output_patcher = patch("src.ui.audio_editor_widget.QAudioOutput")
+        self.media_player_patcher = patch("src.ui.audio_editor.widget.QMediaPlayer")
+        self.audio_output_patcher = patch("src.ui.audio_editor.widget.QAudioOutput")
         self.media_player_patcher.start()
         self.audio_output_patcher.start()
 
@@ -78,7 +78,7 @@ class TestAudioEditorWidget(unittest.TestCase):
         tempdir = tempfile.mkdtemp(prefix="secretario_audio_editor_")
         widget, audio_path = self._make_widget(tempdir, stereo=True)
         try:
-            with patch("src.ui.audio_editor_widget.os.getcwd", return_value=tempdir):
+            with patch("src.ui.audio_editor.widget.os.getcwd", return_value=tempdir):
                 widget.load_record(42)
 
             self.assertEqual(widget.current_audio.shape[1], 2)
@@ -94,10 +94,10 @@ class TestAudioEditorWidget(unittest.TestCase):
         tempdir = tempfile.mkdtemp(prefix="secretario_audio_editor_")
         widget, audio_path = self._make_widget(tempdir, stereo=False)
         try:
-            with patch("src.ui.audio_editor_widget.os.getcwd", return_value=tempdir), \
+            with patch("src.ui.audio_editor.widget.os.getcwd", return_value=tempdir), \
                  patch.object(widget, "_retranscribe_current_audio") as mock_retranscribe, \
-                 patch("src.ui.audio_editor_widget.QMessageBox.warning") as warning_mock, \
-                 patch("src.ui.audio_editor_widget.QMessageBox.critical") as critical_mock:
+                 patch("src.ui.audio_editor.widget.QMessageBox.warning") as warning_mock, \
+                 patch("src.ui.audio_editor.widget.QMessageBox.critical") as critical_mock:
                 widget.load_record(42)
 
                 widget.selection_start_spin.setValue(1.0)
@@ -132,7 +132,7 @@ class TestAudioEditorWidget(unittest.TestCase):
         tempdir = tempfile.mkdtemp(prefix="secretario_audio_editor_")
         widget, audio_path = self._make_widget(tempdir, stereo=False)
         try:
-            with patch("src.ui.audio_editor_widget.os.getcwd", return_value=tempdir):
+            with patch("src.ui.audio_editor.widget.os.getcwd", return_value=tempdir):
                 widget.load_record(42)
                 widget.chunks = [
                     AudioChunk(0.0, 1.0),
@@ -157,7 +157,7 @@ class TestAudioEditorWidget(unittest.TestCase):
         tempdir = tempfile.mkdtemp(prefix="secretario_audio_editor_")
         widget, audio_path = self._make_widget(tempdir, stereo=False)
         try:
-            with patch("src.ui.audio_editor_widget.os.getcwd", return_value=tempdir):
+            with patch("src.ui.audio_editor.widget.os.getcwd", return_value=tempdir):
                 widget.load_record(42)
                 widget.chunks = [
                     AudioChunk(0.0, 2.0),
@@ -178,11 +178,35 @@ class TestAudioEditorWidget(unittest.TestCase):
             sip.delete(widget)
             self._cleanup_tempdir(tempdir)
 
+    def test_waveform_chunk_click_selects_chunk_in_editor(self):
+        tempdir = tempfile.mkdtemp(prefix="secretario_audio_editor_")
+        widget, _audio_path = self._make_widget(tempdir, stereo=False)
+        try:
+            with patch("src.ui.audio_editor.widget.os.getcwd", return_value=tempdir):
+                widget.load_record(42)
+                widget.chunks = [
+                    AudioChunk(0.0, 2.0),
+                    AudioChunk(2.0, 4.0),
+                ]
+                widget.active_chunk_index = 0
+                widget._rebuild_preview()
+
+                widget.waveform.chunk_clicked.emit(1)
+
+            self.assertEqual(widget.active_chunk_index, 1)
+            self.assertEqual(widget.chunk_list.currentRow(), 1)
+            self.assertAlmostEqual(widget.selection_start_spin.value(), 2.0, places=2)
+            self.assertAlmostEqual(widget.selection_end_spin.value(), 4.0, places=2)
+        finally:
+            widget.close()
+            sip.delete(widget)
+            self._cleanup_tempdir(tempdir)
+
     def test_undo_redo_restores_and_reapplies_split(self):
         tempdir = tempfile.mkdtemp(prefix="secretario_audio_editor_")
         widget, _audio_path = self._make_widget(tempdir, stereo=False)
         try:
-            with patch("src.ui.audio_editor_widget.os.getcwd", return_value=tempdir):
+            with patch("src.ui.audio_editor.widget.os.getcwd", return_value=tempdir):
                 widget.load_record(42)
                 widget.selection_start_spin.setValue(1.0)
                 widget.selection_end_spin.setValue(3.0)
@@ -205,7 +229,7 @@ class TestAudioEditorWidget(unittest.TestCase):
         tempdir = tempfile.mkdtemp(prefix="secretario_audio_editor_")
         widget, _audio_path = self._make_widget(tempdir, stereo=False)
         try:
-            with patch("src.ui.audio_editor_widget.os.getcwd", return_value=tempdir):
+            with patch("src.ui.audio_editor.widget.os.getcwd", return_value=tempdir):
                 widget.load_record(42)
                 widget.selection_start_spin.setValue(1.0)
                 widget.selection_end_spin.setValue(3.0)

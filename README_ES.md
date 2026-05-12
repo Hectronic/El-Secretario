@@ -19,6 +19,11 @@ El Secretario es una herramienta inteligente de transcripción y organización d
 - **Herramientas Unificadas**: Limpieza de almacenamiento, procesamiento por lotes y exportación/importación de datos en una sola pestaña.
 - **Tema Personalizable**: Soporte para temas Claro, Oscuro y del Sistema.
 
+## Arquitectura y Specs
+
+- Notas de arquitectura: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
+- Registro de funcionalidades orientado a spec-driven development: [docs/specs/README.md](docs/specs/README.md)
+
 ## Instalación
 
 1.  **Clonar el repositorio:**

@@ -12,6 +12,7 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-"""Backward-compatible shim for the separated STT provider modules."""
+from src.ui.audio_editor.waveform import AudioWaveformWidget
+from src.ui.audio_editor.widget import AudioChunk, AudioEditorWidget
 
-from src.stt_providers.dispatcher import subprocess_transcribe_entry
+__all__ = ["AudioChunk", "AudioEditorWidget", "AudioWaveformWidget"]

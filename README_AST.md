@@ -19,6 +19,11 @@ El Secretario ye una ferramienta intelixente de trescripción y organización d'
 - **Ferramientes Unificaes**: Llimpieza d'almacenamientu, procesamientu per llotes y esportación/importación de datos nuna sola pestaña.
 - **Tema Personalizable**: Sofitu pa temes Claru, Escuru y del Sistema.
 
+## Arquitectura y Specs
+
+- Notes d'arquitectura: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
+- Rexistru de funcionalidaes orientáu a spec-driven development: [docs/specs/README.md](docs/specs/README.md)
+
 ## Instalación
 
 1.  **Clonar el repositoriu:**

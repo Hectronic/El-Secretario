@@ -19,6 +19,11 @@ description: Enforce local repository development standards whenever code is cre
 - prefer GPU/CUDA when available and `force_cpu` is false
 - do not introduce unconditional CPU forcing except for existing safe fallback paths after real runtime failures
 - keep transcription and diarization aligned with the same runtime policy where supported
+5. Follow the current feature-package UI layout:
+- `src/ui/main_window/` owns `MainWindow` coordinators and subflows.
+- `src/ui/chat/` owns chat dialogs and helpers.
+- `src/ui/context_manager_panel.py` is shared chat UI, not a `ChatWidget` inline class.
+- Mirror these package boundaries in `tests/ui/`.
 
 ## Test Layout Rule
 

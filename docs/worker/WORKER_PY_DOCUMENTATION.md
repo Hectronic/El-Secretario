@@ -88,10 +88,10 @@ Referencias directas de producción:
   - [notebook_widget.py](/home/developer/repos/hector/El-Secretario/src/ui/notebook_widget.py)
   - [summary_task_queue.py](/home/developer/repos/hector/El-Secretario/src/ui/summary_task_queue.py)
   - [batch_process_widget.py](/home/developer/repos/hector/El-Secretario/src/ui/batch_process_widget.py)
-  - [audio_editor_widget.py](/home/developer/repos/hector/El-Secretario/src/ui/audio_editor_widget.py)
+  - [audio_editor/widget.py](/home/developer/repos/hector/El-Secretario/src/ui/audio_editor/widget.py)
 
 - `SearchThread`:
-  - [main_window.py](/home/developer/repos/hector/El-Secretario/src/ui/main_window.py)
+  - [search_actions.py](/home/developer/repos/hector/El-Secretario/src/ui/main_window/search_actions.py)
 
 - `ChatThread`:
   - [chat_window.py](/home/developer/repos/hector/El-Secretario/src/ui/chat_window.py)
@@ -100,11 +100,11 @@ Referencias directas de producción:
 - Preflight sherpa:
   - [recording_widget.py](/home/developer/repos/hector/El-Secretario/src/ui/recording_widget.py)
   - [notebook_widget.py](/home/developer/repos/hector/El-Secretario/src/ui/notebook_widget.py)
-  - [audio_editor_widget.py](/home/developer/repos/hector/El-Secretario/src/ui/audio_editor_widget.py)
+  - [audio_editor/widget.py](/home/developer/repos/hector/El-Secretario/src/ui/audio_editor/widget.py)
 
 ## Por qué es crítico para refactor
 
-`worker.py` mezcla varias responsabilidades:
+El antiguo `worker.py` mezclaba varias responsabilidades:
 
 - Orquestación de hilos Qt.
 - Políticas de fallback por plataforma.
@@ -112,7 +112,7 @@ Referencias directas de producción:
 - Infra de subprocess y manejo de errores.
 - Lógica de diarización.
 
-Por eso es buen candidato para separar en módulos (por ejemplo `worker_transcription.py`, `worker_sherpa.py`, `worker_subprocess.py`, `worker_threads.py`), pero solo después de tener una suite sólida.
+Por eso se separo en `src/worker_components/` y adaptadores de proveedor en `src/stt_providers/`, manteniendo tests de contrato en `tests/worker/` y `tests/worker_components/`.
 
 ## Estado actual de pruebas (antes de refactorizar)
 

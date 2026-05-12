@@ -90,3 +90,22 @@ def test_queue_widget_renders_session_history(qtbot):
     assert widget.history_list.count() == 1
     assert "Finished" in widget.history_list.item(0).text()
     assert "Demo" in widget.history_list.item(0).text()
+
+
+def test_queue_widget_renders_skipped_history_entry(qtbot):
+    fake_queue = _FakeQueue()
+    fake_queue._history = [
+        {
+            "time": "12:05:00",
+            "event": "skipped",
+            "task": {"type": "transcription", "title": "Broken recording"},
+            "message": "Transcription subprocess timed out.",
+        }
+    ]
+    widget = QueueManagementWidget(fake_queue)
+    qtbot.addWidget(widget)
+
+    assert widget.history_list.count() == 1
+    assert "Skipped" in widget.history_list.item(0).text()
+    assert "Broken recording" in widget.history_list.item(0).text()
+    assert "timed out" in widget.history_list.item(0).text()

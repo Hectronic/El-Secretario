@@ -19,7 +19,7 @@ from pathlib import Path
 
 import pytest
 
-from src.worker import TranscriberThread
+from src.worker_components.transcriber_thread import TranscriberThread
 from src.worker_components import subprocess_runner
 
 
@@ -33,10 +33,10 @@ def test_transcriber_thread_async_happy_path_with_real_qthread(qtbot, monkeypatc
     _write_dummy_audio(audio_path)
 
     monkeypatch.setattr(
-        "src.worker._run_transcription_in_subprocess",
+        "src.worker_components.transcriber_thread._run_transcription_in_subprocess",
         lambda **_kwargs: [{"start": 0.0, "end": 1.0, "text": "hola"}],
     )
-    monkeypatch.setattr("src.worker._get_pyannote_pipeline_class", lambda: None)
+    monkeypatch.setattr("src.worker_components.transcriber_thread._get_pyannote_pipeline_class", lambda: None)
 
     thread = TranscriberThread(
         str(audio_path),
@@ -61,8 +61,8 @@ def test_transcriber_thread_interrupts_cleanly_without_finished(qtbot, monkeypat
         time.sleep(0.08)
         return [{"start": 0.0, "end": 30.0, "text": "long segment"}]
 
-    monkeypatch.setattr("src.worker._run_transcription_in_subprocess", _slow_transcribe)
-    monkeypatch.setattr("src.worker._get_pyannote_pipeline_class", lambda: None)
+    monkeypatch.setattr("src.worker_components.transcriber_thread._run_transcription_in_subprocess", _slow_transcribe)
+    monkeypatch.setattr("src.worker_components.transcriber_thread._get_pyannote_pipeline_class", lambda: None)
 
     thread = TranscriberThread(
         str(audio_path),
@@ -101,10 +101,10 @@ def test_transcriber_thread_repeated_runs_do_not_hang(qtbot, monkeypatch, tmp_pa
     _write_dummy_audio(audio_path)
 
     monkeypatch.setattr(
-        "src.worker._run_transcription_in_subprocess",
+        "src.worker_components.transcriber_thread._run_transcription_in_subprocess",
         lambda **_kwargs: [{"start": 0.0, "end": 0.2, "text": "ok"}],
     )
-    monkeypatch.setattr("src.worker._get_pyannote_pipeline_class", lambda: None)
+    monkeypatch.setattr("src.worker_components.transcriber_thread._get_pyannote_pipeline_class", lambda: None)
 
     for _ in range(12):
         thread = TranscriberThread(

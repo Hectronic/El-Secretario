@@ -12,4 +12,4 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-"""Internal worker components split out of src.worker."""
+"""Internal worker components for transcription, runtime, and threading."""

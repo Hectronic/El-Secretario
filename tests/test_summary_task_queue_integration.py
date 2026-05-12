@@ -69,6 +69,37 @@ class _FakeTranscriberThread(QThread):
         )
 
 
+class _FailThenSucceedTranscriberThread(QThread):
+    finished = pyqtSignal(object)
+    progress = pyqtSignal(int)
+    status_update = pyqtSignal(str)
+    error = pyqtSignal(str)
+
+    _instances_started = 0
+
+    def __init__(self, audio_path, **kwargs):
+        super().__init__()
+        self.audio_path = audio_path
+        self.kwargs = kwargs
+        self.instance_index = type(self)._instances_started
+        type(self)._instances_started += 1
+
+    def run(self):
+        self.status_update.emit(f"Transcriber {self.instance_index}: started")
+        if self.instance_index == 0:
+            self.error.emit("Transcription subprocess timed out.")
+            self.finished.emit(None)
+            return
+        self.progress.emit(100)
+        self.finished.emit(
+            {
+                "text": "Recovered transcription",
+                "model_name": self.kwargs.get("model_size", "base"),
+                "is_diarized": bool(self.kwargs.get("enable_diarization")),
+            }
+        )
+
+
 class _FakeSettings:
     def value(self, key, default=None, type=None):
         values = {
@@ -167,6 +198,59 @@ def test_queue_component_transcription_updates_widget_and_database(qtbot, monkey
         assert record["is_diarized"] == 1
         assert widget.queue_list.count() == 0
         assert "None" in widget.current_task_label.text()
+    finally:
+        queue.cancel_all()
+
+
+def test_queue_component_skips_fatal_transcription_and_continues(qtbot, monkeypatch, tmp_path):
+    monkeypatch.setattr("src.ui.summary_task_queue.TranscriberThread", _FailThenSucceedTranscriberThread)
+    monkeypatch.setattr("src.ui.summary_task_queue.QSettings", lambda *_args: _FakeSettings())
+    monkeypatch.setattr("src.app.summary_queue.workers.read_audio_duration_seconds", lambda _path: 12.5)
+    _FailThenSucceedTranscriberThread._instances_started = 0
+    queue, db = _queue_with_temp_db(monkeypatch, tmp_path)
+    widget = QueueManagementWidget(queue)
+    qtbot.addWidget(widget)
+
+    audio_path_1 = tmp_path / "audio1.wav"
+    audio_path_1.write_bytes(b"fake audio 1")
+    record_id_1 = db.save(str(audio_path_1), "", 0.0, "Broken audio")
+
+    audio_path_2 = tmp_path / "audio2.wav"
+    audio_path_2.write_bytes(b"fake audio 2")
+    record_id_2 = db.save(str(audio_path_2), "", 0.0, "Recovered audio")
+
+    skipped_events = []
+    failed_events = []
+    queue.task_skipped.connect(lambda task, reason: skipped_events.append((task, reason)))
+    queue.task_failed.connect(lambda task, reason: failed_events.append((task, reason)))
+
+    try:
+        assert queue.enqueue_transcription(
+            record_id_1,
+            str(audio_path_1),
+            model_size="base",
+            language="es",
+            diarization=True,
+            title="Broken audio",
+            source="batch_process",
+        )
+        assert queue.enqueue_transcription(
+            record_id_2,
+            str(audio_path_2),
+            model_size="base",
+            language="es",
+            diarization=True,
+            title="Recovered audio",
+            source="batch_process",
+        )
+
+        qtbot.waitUntil(lambda: not queue.is_running and queue.pending_count == 0, timeout=3000)
+
+        assert any(entry[1].startswith("Transcription subprocess timed out") for entry in skipped_events)
+        assert not failed_events
+        assert db.fetch_record(record_id_1)["transcription"] == ""
+        assert db.fetch_record(record_id_2)["transcription"] == "Recovered transcription"
+        assert any("Skipped" in widget.history_list.item(i).text() for i in range(widget.history_list.count()))
     finally:
         queue.cancel_all()
 

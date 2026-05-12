@@ -22,7 +22,95 @@ import torch
 from PyQt6.QtCore import QSettings, QThread, pyqtSignal
 
 from src.transcription_options import get_whisper_model_name, is_sherpa_onnx_model
-from src.worker_components import transcription_flow, settings as worker_settings
+from src.worker_components import device_selection as worker_device_selection
+from src.worker_components import engine as worker_engine
+from src.worker_components import sherpa as worker_sherpa
+from src.worker_components import runtime as worker_runtime
+from src.worker_components import settings as worker_settings
+from src.worker_components import subprocess_runner
+from src.worker_components import transcription_flow
+
+
+def _run_transcription_in_subprocess(
+    *,
+    audio_path: str,
+    model_size: str,
+    device: str,
+    compute_type: str,
+    language: str,
+    timeout_seconds: int = 1800,
+):
+    return subprocess_runner.run_transcription_in_subprocess(
+        audio_path=audio_path,
+        model_size=model_size,
+        device=device,
+        compute_type=compute_type,
+        language=language,
+        timeout_seconds=timeout_seconds,
+    )
+
+
+def _run_openai_whisper_fallback(*, audio_path: str, model_size: str, language: str):
+    return subprocess_runner.run_openai_whisper_fallback(
+        audio_path=audio_path,
+        model_size=model_size,
+        language=language,
+    )
+
+
+def _run_sherpa_onnx_transcription(*, audio_path: str, language: str, settings, status_callback=None) -> list[dict]:
+    model_dir, model_config = worker_sherpa.ensure_sherpa_onnx_model_ready(
+        settings,
+        status_callback=status_callback,
+    )
+    return subprocess_runner.run_sherpa_onnx_transcription(
+        audio_path=audio_path,
+        language=language,
+        model_dir=model_dir,
+        model_config=model_config,
+    )
+
+
+def _get_pyannote_pipeline_class():
+    return worker_runtime.get_pyannote_pipeline_class()
+
+
+def _flush_log_handlers():
+    return worker_runtime.flush_log_handlers()
+
+
+def _log_transcription_runtime_context(
+    *,
+    audio_path: str,
+    model_size: str,
+    device: str,
+    compute_type: str,
+    force_cpu: bool,
+    enable_diarization: bool,
+    language: str,
+):
+    return worker_runtime.log_transcription_runtime_context(
+        audio_path=audio_path,
+        model_size=model_size,
+        device=device,
+        compute_type=compute_type,
+        force_cpu=force_cpu,
+        enable_diarization=enable_diarization,
+        language=language,
+    )
+
+
+def _should_use_gpu_for_diarization(
+    *,
+    force_cpu: bool,
+    min_free_vram_gb: float = 3.0,
+    min_free_ratio: float = 0.35,
+):
+    return worker_runtime.should_use_gpu_for_diarization(
+        force_cpu=force_cpu,
+        min_free_vram_gb=min_free_vram_gb,
+        min_free_ratio=min_free_ratio,
+    )
 
 
 class TranscriberThread(QThread):
@@ -30,7 +118,7 @@ class TranscriberThread(QThread):
 
     The class owns orchestration only: backend selection, progress/status
     signals, optional diarization, result shaping and cleanup. Heavy STT work is
-    delegated to subprocess helpers through ``src.worker`` so native libraries
+    delegated to subprocess helpers in ``src.worker_components`` so native libraries
     can crash or release memory without taking the UI process with them.
     """
 
@@ -38,12 +126,6 @@ class TranscriberThread(QThread):
     progress = pyqtSignal(int)
     status_update = pyqtSignal(str)
     error = pyqtSignal(str)
-
-    @staticmethod
-    def _worker_api():
-        import src.worker as worker_api
-
-        return worker_api
 
     def __init__(self, audio_path, model_size="base", device=None, compute_type=None, language=None, hf_token=None, enable_diarization=False, total_duration=0, force_cpu=False, backend_preference="auto"):
         """Create a transcription job.
@@ -62,12 +144,11 @@ class TranscriberThread(QThread):
         self.effective_backend = "faster-whisper"
         self.is_sherpa_onnx = is_sherpa_onnx_model(model_size)
 
-        api = self._worker_api()
         if self.is_sherpa_onnx:
             self.device = "cpu"
             self.compute_type = "onnxruntime"
         elif device is None or compute_type is None:
-            auto_device, auto_compute = api.get_optimal_device(force_cpu, model_size)
+            auto_device, auto_compute = worker_device_selection.get_optimal_device(force_cpu, model_size)
             self.device = device if device else auto_device
             self.compute_type = compute_type if compute_type else auto_compute
         else:
@@ -87,8 +168,7 @@ class TranscriberThread(QThread):
 
     def _persist_working_transcription_settings(self):
         try:
-            api = self._worker_api()
-            settings = api.QSettings("Hectronic", "Secretario")
+            settings = QSettings("Hectronic", "Secretario")
             worker_settings.persist_working_transcription_settings(
                 settings,
                 effective_backend=self.effective_backend,
@@ -102,22 +182,20 @@ class TranscriberThread(QThread):
 
     def _get_subprocess_attempt_timeout_seconds(self) -> int:
         try:
-            api = self._worker_api()
-            settings = api.QSettings("Hectronic", "Secretario")
+            settings = QSettings("Hectronic", "Secretario")
             return worker_settings.get_subprocess_attempt_timeout_seconds(settings)
         except Exception:
-            return 120 if platform.system() == "Windows" else 1800
+            return 120 if platform.system() == "Windows" else 600
 
     def run(self):
         try:
             import time
 
-            api = self._worker_api()
             start_time = time.time()
-            settings = api.QSettings("Hectronic", "Secretario")
+            settings = QSettings("Hectronic", "Secretario")
 
             logging.info(f"Starting transcription for {self.audio_path} (Model: {self.model_size}, Diarization: {self.enable_diarization})")
-            api._log_transcription_runtime_context(
+            _log_transcription_runtime_context(
                 audio_path=self.audio_path,
                 model_size=self.model_size,
                 device=self.device,
@@ -133,7 +211,7 @@ class TranscriberThread(QThread):
                 self.progress.emit(-1)
                 self.effective_backend = "sherpa-onnx"
                 self.status_update.emit("Transcribing...")
-                serialized_segments = api._run_sherpa_onnx_transcription(
+                serialized_segments = _run_sherpa_onnx_transcription(
                     audio_path=self.audio_path,
                     language=self.language,
                     settings=settings,
@@ -145,7 +223,7 @@ class TranscriberThread(QThread):
                 self.progress.emit(-1)
                 self.effective_backend = "openai-whisper"
                 self.status_update.emit("Transcribing...")
-                serialized_segments = api._run_openai_whisper_fallback(
+                serialized_segments = _run_openai_whisper_fallback(
                     audio_path=self.audio_path,
                     model_size=self.model_size,
                     language=self.language,
@@ -162,9 +240,9 @@ class TranscriberThread(QThread):
                     self.device,
                     self.compute_type,
                 )
-                api._flush_log_handlers()
+                _flush_log_handlers()
                 per_attempt_timeout = self._get_subprocess_attempt_timeout_seconds()
-                fallback_result = api.worker_engine.run_faster_whisper_with_fallback(
+                fallback_result = worker_engine.run_faster_whisper_with_fallback(
                     audio_path=self.audio_path,
                     model_size=self.model_size,
                     device=self.device,
@@ -172,9 +250,9 @@ class TranscriberThread(QThread):
                     language=self.language,
                     per_attempt_timeout=per_attempt_timeout,
                     status_emit=self.status_update.emit,
-                    flush_logs=api._flush_log_handlers,
-                    run_transcription=api._run_transcription_in_subprocess,
-                    run_openai_fallback=api._run_openai_whisper_fallback,
+                    flush_logs=_flush_log_handlers,
+                    run_transcription=_run_transcription_in_subprocess,
+                    run_openai_fallback=_run_openai_whisper_fallback,
                 )
                 serialized_segments = fallback_result["segments"]
                 self.model_size = fallback_result["model_size"]
@@ -185,7 +263,7 @@ class TranscriberThread(QThread):
 
                 whisper_segments = [SimpleNamespace(**s) for s in serialized_segments]
                 logging.info("Whisper checkpoint W2: subprocess transcription completed.")
-                api._flush_log_handlers()
+                _flush_log_handlers()
 
             self.status_update.emit("Transcribing...")
             for segment in whisper_segments:
@@ -202,7 +280,7 @@ class TranscriberThread(QThread):
 
             diarization = None
             pipeline_cls = (
-                api._get_pyannote_pipeline_class()
+                _get_pyannote_pipeline_class()
                 if (self.enable_diarization and self.hf_token)
                 else None
             )
@@ -216,7 +294,7 @@ class TranscriberThread(QThread):
                         return
                     pipeline = pipeline_cls.from_pretrained("pyannote/speaker-diarization-3.1", use_auth_token=self.hf_token)
                     if pipeline:
-                        should_move_to_gpu, gpu_reason = api._should_use_gpu_for_diarization(
+                        should_move_to_gpu, gpu_reason = _should_use_gpu_for_diarization(
                             force_cpu=self.force_cpu,
                         )
                         if should_move_to_gpu:
@@ -274,8 +352,4 @@ class TranscriberThread(QThread):
 
             gc.collect()
             if torch.cuda.is_available():
-                try:
-                    torch.cuda.synchronize()
-                except Exception:
-                    pass
                 torch.cuda.empty_cache()

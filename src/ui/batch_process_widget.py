@@ -17,7 +17,8 @@ from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QPushButton,
                              QLabel, QProgressBar, QTextEdit, QMessageBox, QListWidget, QListWidgetItem)
 from PyQt6.QtCore import Qt, pyqtSignal, QTimer
 from src.database import DBManager
-from src.worker import TranscriberThread
+from src.worker_components.engine import is_transcription_fatal_failure
+from src.worker_components.transcriber_thread import TranscriberThread
 from PyQt6.QtCore import QSettings
 from src.transcription_options import get_saved_transcription_model
 
@@ -36,6 +37,7 @@ class BatchProcessWidget(QWidget):
         self.processed_count = 0
         self._queued_record_ids = set()
         self._active_batch_tasks = 0
+        self._handled_batch_terminal_tasks = set()
         
         self.init_ui()
         self.load_pending()
@@ -124,9 +126,11 @@ class BatchProcessWidget(QWidget):
             
             # Highlight errors
             if rec.get('last_error'):
-                item.setText(f"FAILED: {rec['filename']} (Attempts: {rec.get('processing_attempts')})")
-                item.setBackground(Qt.GlobalColor.red)
-                item.setForeground(Qt.GlobalColor.white)
+                is_fatal = is_transcription_fatal_failure(rec.get('last_error'))
+                label = "SKIPPED" if is_fatal else "FAILED"
+                item.setText(f"{label}: {rec['filename']} (Attempts: {rec.get('processing_attempts')})")
+                item.setBackground(Qt.GlobalColor.lightGray if is_fatal else Qt.GlobalColor.red)
+                item.setForeground(Qt.GlobalColor.black if is_fatal else Qt.GlobalColor.white)
                 item.setToolTip(rec['last_error'])
                 
             self.pending_list.addItem(item)
@@ -178,6 +182,7 @@ class BatchProcessWidget(QWidget):
         self.processed_count = 0
         self._queued_record_ids.clear()
         self._active_batch_tasks = 0
+        self._handled_batch_terminal_tasks.clear()
 
         enqueued = 0
         for rec in self.queue:
@@ -216,6 +221,26 @@ class BatchProcessWidget(QWidget):
         if task.get("type") not in {"transcription", "summary", "task_extraction"}:
             return
         self._active_batch_tasks += 1
+
+    def _batch_task_token(self, task):
+        return (
+            task.get("type"),
+            task.get("record_id"),
+            task.get("date"),
+            task.get("title"),
+            task.get("source"),
+        )
+
+    def _register_batch_terminal_task_once(self, task) -> bool:
+        if task.get("source") != "batch_process":
+            return False
+        if task.get("type") not in {"transcription", "summary", "task_extraction"}:
+            return False
+        token = self._batch_task_token(task)
+        if token in self._handled_batch_terminal_tasks:
+            return False
+        self._handled_batch_terminal_tasks.add(token)
+        return True
 
     def _set_current_item_status(self, record_id, text, background=None):
         item = self._find_item_by_record_id(record_id)
@@ -263,10 +288,11 @@ class BatchProcessWidget(QWidget):
     def _on_queue_task_finished(self, task):
         if task.get("source") != "batch_process":
             return
-        if task.get("type") in {"transcription", "summary", "task_extraction"} and self._active_batch_tasks > 0:
+        first_terminal_event = self._register_batch_terminal_task_once(task)
+        if first_terminal_event and self._active_batch_tasks > 0:
             self._active_batch_tasks -= 1
         record_id = task.get("record_id")
-        if task.get("type") == "transcription" and record_id in self._queued_record_ids:
+        if first_terminal_event and task.get("type") == "transcription" and record_id in self._queued_record_ids:
             self._queued_record_ids.discard(record_id)
             self.processed_count += 1
             if self.total_files > 0:
@@ -278,22 +304,30 @@ class BatchProcessWidget(QWidget):
     def _on_queue_task_failed(self, task, error_msg):
         if task.get("source") != "batch_process":
             return
-        if task.get("type") in {"transcription", "summary", "task_extraction"} and self._active_batch_tasks > 0:
+        first_terminal_event = self._register_batch_terminal_task_once(task)
+        if first_terminal_event and self._active_batch_tasks > 0:
             self._active_batch_tasks -= 1
         record_id = task.get("record_id")
-        if task.get("type") == "transcription" and record_id in self._queued_record_ids:
+        if first_terminal_event and task.get("type") == "transcription" and record_id in self._queued_record_ids:
             self._queued_record_ids.discard(record_id)
-            self._set_current_item_status(record_id, f"FAILED: {task.get('title') or f'Recording {record_id}'}")
+            label = "SKIPPED" if is_transcription_fatal_failure(error_msg) else "FAILED"
+            self._set_current_item_status(record_id, f"{label}: {task.get('title') or f'Recording {record_id}'}")
         self._finish_queue_mode_if_done()
 
     def _on_queue_task_skipped(self, task, _reason):
         if task.get("source") != "batch_process":
             return
-        if task.get("type") in {"transcription", "summary", "task_extraction"} and self._active_batch_tasks > 0:
+        first_terminal_event = self._register_batch_terminal_task_once(task)
+        if first_terminal_event and self._active_batch_tasks > 0:
             self._active_batch_tasks -= 1
         record_id = task.get("record_id")
-        if task.get("type") == "transcription" and record_id in self._queued_record_ids:
+        if first_terminal_event and task.get("type") == "transcription" and record_id in self._queued_record_ids:
             self._queued_record_ids.discard(record_id)
+            self._set_current_item_status(
+                record_id,
+                f"SKIPPED: {task.get('title') or f'Recording {record_id}'}",
+                background=Qt.GlobalColor.lightGray,
+            )
         self._finish_queue_mode_if_done()
         
     def stop_processing(self):
@@ -436,11 +470,21 @@ class BatchProcessWidget(QWidget):
         
         # Update item in list to show error
         if self.current_item:
-            self.current_item.setText(f"FAILED: {self.current_record['filename']} (Attempts: {attempts})")
-            self.current_item.setBackground(Qt.GlobalColor.red)
-            self.current_item.setForeground(Qt.GlobalColor.white)
+            is_fatal = is_transcription_fatal_failure(error_msg)
+            label = "SKIPPED" if is_fatal else "FAILED"
+            self.current_item.setText(f"{label}: {self.current_record['filename']} (Attempts: {attempts})")
+            self.current_item.setBackground(Qt.GlobalColor.red if not is_fatal else Qt.GlobalColor.lightGray)
+            self.current_item.setForeground(Qt.GlobalColor.white if not is_fatal else Qt.GlobalColor.black)
             self.current_item.setToolTip(error_msg)
-            
+
+        if is_transcription_fatal_failure(error_msg):
+            self.log("Fatal transcription failure detected. Skipping to next file.")
+            self.status_label.setText(f"Skipping {self.current_record['filename']}...")
+            if self.queue:
+                self.queue.pop(0)
+            self.process_next()
+            return
+
         # Retry logic
         if attempts < 3:
             self.log(f"Retrying... (Attempt {attempts + 1}/3)")

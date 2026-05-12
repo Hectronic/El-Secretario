@@ -21,6 +21,11 @@ Read this in [Español](README_ES.md) | [Asturianu](README_AST.md)
 - **Unified Tools**: Storage cleanup, batch processing, and data export/import in one convenient tab.
 - **Customizable Theme**: Support for Light, Dark, and System themes.
 
+## Architecture And Specs
+
+- Architecture notes: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
+- Spec-driven feature registry: [docs/specs/README.md](docs/specs/README.md)
+
 ## Installation
 
 1.  **Clone the repository:**

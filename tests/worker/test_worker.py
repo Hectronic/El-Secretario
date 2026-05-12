@@ -14,24 +14,18 @@
 
 import unittest
 from unittest.mock import MagicMock, patch
-from src.worker import (
-    TranscriberThread,
-    SearchThread,
-    ChatThread,
-    _ensure_sherpa_onnx_model_ready,
-    get_transcription_preflight_error,
-    _resolve_sherpa_onnx_model_config,
-    _run_sherpa_onnx_transcription,
-    _run_openai_whisper_fallback,
-)
+from src.worker_components import device_selection, subprocess_runner, runtime as worker_runtime
+from src.worker_components.threads import SearchThread, ChatThread
+from src.worker_components.transcriber_thread import TranscriberThread
+from src.stt_providers.sherpa_onnx import model_manager as sherpa_model_manager
 import os
 import tempfile
 
 class TestTranscriberThread(unittest.TestCase):
     @patch('os.path.getsize')
-    @patch('src.worker.platform.system', return_value="Linux")
-    @patch('src.worker._run_transcription_in_subprocess')
-    @patch('src.worker._get_pyannote_pipeline_class')
+    @patch('src.worker_components.transcriber_thread.platform.system', return_value="Linux")
+    @patch('src.worker_components.transcriber_thread._run_transcription_in_subprocess')
+    @patch('src.worker_components.transcriber_thread._get_pyannote_pipeline_class')
     def test_transcription(self, mock_get_pyannote, mock_run_subprocess, _mock_system, mock_getsize):
         # Setup Mock
         mock_getsize.return_value = 1024
@@ -58,82 +52,99 @@ class TestTranscriberThread(unittest.TestCase):
         mock_get_pyannote.assert_not_called()
         mock_run_subprocess.assert_called_once()
 
-    @patch('src.worker.torch.cuda.is_available')
-    @patch('src.worker.torch.cuda.get_device_properties')
-    @patch('src.worker.platform.system', return_value="Linux")
+    @patch("src.worker_components.transcriber_thread.torch.cuda.empty_cache")
+    @patch("src.worker_components.transcriber_thread.torch.cuda.synchronize")
+    @patch("src.worker_components.transcriber_thread.torch.cuda.is_available", return_value=True)
+    @patch("src.worker_components.transcriber_thread.platform.system", return_value="Linux")
+    @patch("src.worker_components.transcriber_thread.os.path.getsize")
+    @patch("src.worker_components.transcriber_thread._run_transcription_in_subprocess", side_effect=RuntimeError("boom"))
+    def test_transcription_failure_cleans_cuda_without_synchronizing(
+        self,
+        _mock_run_subprocess,
+        mock_getsize,
+        _mock_system,
+        _mock_cuda_available,
+        mock_cuda_synchronize,
+        mock_cuda_empty_cache,
+    ):
+        mock_getsize.return_value = 1024
+
+        thread = TranscriberThread("test.wav")
+        thread.finished = MagicMock()
+        thread.progress = MagicMock()
+        thread.status_update = MagicMock()
+        thread.error = MagicMock()
+
+        thread.run()
+
+        thread.error.emit.assert_called_once()
+        mock_cuda_synchronize.assert_not_called()
+        mock_cuda_empty_cache.assert_called_once()
+
+    @patch('src.worker_components.device_selection.torch.cuda.is_available')
+    @patch('src.worker_components.device_selection.torch.cuda.get_device_properties')
+    @patch('src.worker_components.device_selection.platform.system', return_value="Linux")
     def test_get_optimal_device_with_cuda(self, _mock_system, mock_props, mock_cuda):
-        from src.worker import get_optimal_device
-        
         # Mock GPU with 6GB VRAM
         mock_cuda.return_value = True
         mock_props.return_value.total_memory = 6 * (1024**3)  # 6GB
         
         # Test with small model - should use int8 for safety on 6GB GPU
-        device, compute_type = get_optimal_device(force_cpu=False, model_size="base")
+        device, compute_type = device_selection.get_optimal_device(force_cpu=False, model_size="base")
         self.assertEqual(device, "cuda")
         self.assertEqual(compute_type, "int8")
         
         # Test with large model on 6GB GPU - should use int8
-        device, compute_type = get_optimal_device(force_cpu=False, model_size="large-v3")
+        device, compute_type = device_selection.get_optimal_device(force_cpu=False, model_size="large-v3")
         self.assertEqual(device, "cuda")
         self.assertEqual(compute_type, "int8")
         
         # Test with force_cpu=True
-        device, compute_type = get_optimal_device(force_cpu=True, model_size="base")
+        device, compute_type = device_selection.get_optimal_device(force_cpu=True, model_size="base")
         self.assertEqual(device, "cpu")
         self.assertEqual(compute_type, "int8")
     
-    @patch('src.worker.torch.cuda.is_available')
-    @patch('src.worker.platform.system', return_value="Linux")
+    @patch('src.worker_components.device_selection.torch.cuda.is_available')
+    @patch('src.worker_components.device_selection.platform.system', return_value="Linux")
     def test_get_optimal_device_without_cuda(self, _mock_system, mock_cuda):
-        from src.worker import get_optimal_device
-        
         mock_cuda.return_value = False
-        device, compute_type = get_optimal_device(force_cpu=False, model_size="base")
+        device, compute_type = device_selection.get_optimal_device(force_cpu=False, model_size="base")
         self.assertEqual(device, "cpu")
         self.assertEqual(compute_type, "int8")
 
-    @patch('src.worker.torch.cuda.is_available')
-    @patch('src.worker.torch.cuda.get_device_properties')
+    @patch('src.worker_components.device_selection.torch.cuda.is_available')
+    @patch('src.worker_components.device_selection.torch.cuda.get_device_properties')
     def test_get_optimal_device_with_large_gpu_prefers_float16(self, mock_props, mock_cuda):
-        from src.worker import get_optimal_device
-
         mock_cuda.return_value = True
         mock_props.return_value.total_memory = 12 * (1024**3)
-        device, compute_type = get_optimal_device(force_cpu=False, model_size="base")
+        device, compute_type = device_selection.get_optimal_device(force_cpu=False, model_size="base")
         self.assertEqual(device, "cuda")
         self.assertEqual(compute_type, "float16")
 
-    @patch('src.worker.torch.cuda.is_available')
-    @patch('src.worker.torch.cuda.get_device_properties', side_effect=RuntimeError("gpu err"))
-    @patch('src.worker.platform.system', return_value="Linux")
+    @patch('src.worker_components.device_selection.torch.cuda.is_available')
+    @patch('src.worker_components.device_selection.torch.cuda.get_device_properties', side_effect=RuntimeError("gpu err"))
+    @patch('src.worker_components.device_selection.platform.system', return_value="Linux")
     def test_get_optimal_device_cuda_properties_error_defaults_int8(self, _mock_system, _mock_props, mock_cuda):
-        from src.worker import get_optimal_device
-
         mock_cuda.return_value = True
-        device, compute_type = get_optimal_device(force_cpu=False, model_size="base")
+        device, compute_type = device_selection.get_optimal_device(force_cpu=False, model_size="base")
         self.assertEqual(device, "cuda")
         self.assertEqual(compute_type, "int8")
 
-    @patch('src.worker.platform.system', return_value="Windows")
-    @patch('src.worker.torch.cuda.is_available', return_value=True)
+    @patch('src.worker_components.device_selection.platform.system', return_value="Windows")
+    @patch('src.worker_components.device_selection.torch.cuda.is_available', return_value=True)
     def test_get_optimal_device_windows_cuda_prefers_float16(self, _mock_cuda, _mock_system):
-        from src.worker import get_optimal_device
-
-        device, compute_type = get_optimal_device(force_cpu=False, model_size="large-v3")
+        device, compute_type = device_selection.get_optimal_device(force_cpu=False, model_size="large-v3")
         self.assertEqual(device, "cuda")
         self.assertEqual(compute_type, "float16")
 
-    @patch('src.worker.platform.system', return_value="Windows")
-    @patch('src.worker.torch.cuda.is_available', return_value=False)
+    @patch('src.worker_components.device_selection.platform.system', return_value="Windows")
+    @patch('src.worker_components.device_selection.torch.cuda.is_available', return_value=False)
     def test_get_optimal_device_windows_cpu_prefers_float32(self, _mock_cuda, _mock_system):
-        from src.worker import get_optimal_device
-
-        device, compute_type = get_optimal_device(force_cpu=False, model_size="base")
+        device, compute_type = device_selection.get_optimal_device(force_cpu=False, model_size="base")
         self.assertEqual(device, "cpu")
         self.assertEqual(compute_type, "float32")
 
-    @patch('src.worker.platform.system', return_value="Windows")
+    @patch('src.worker_components.transcriber_thread.platform.system', return_value="Windows")
     def test_windows_remaps_int8_compute_type_in_thread_init(self, _mock_system):
         # On Windows, we remap int8 to float16 on CUDA for stability.
         thread_cuda = TranscriberThread("test.wav", device="cuda", compute_type="int8")
@@ -146,10 +157,10 @@ class TestTranscriberThread(unittest.TestCase):
         thread_cpu_explicit = TranscriberThread("test.wav", device="cpu", compute_type="float32")
         self.assertEqual(thread_cpu_explicit.compute_type, "int8_float32")
 
-    @patch("src.worker.platform.system", return_value="Windows")
-    @patch("src.worker.os.path.getsize", return_value=100)
-    @patch("src.worker._run_transcription_in_subprocess")
-    @patch("src.worker.torch.cuda.is_available", return_value=False)
+    @patch("src.worker_components.transcriber_thread.platform.system", return_value="Windows")
+    @patch("src.worker_components.transcriber_thread.os.path.getsize", return_value=100)
+    @patch("src.worker_components.transcriber_thread._run_transcription_in_subprocess")
+    @patch("src.worker_components.transcriber_thread.torch.cuda.is_available", return_value=False)
     def test_windows_subprocess_native_crash_retries_cpu_profiles(
         self, _mock_cuda_available, _mock_run_subprocess, _mock_getsize, _mock_system
     ):
@@ -181,11 +192,11 @@ class TestTranscriberThread(unittest.TestCase):
         thread.finished.emit.assert_called_once()
         thread.error.emit.assert_not_called()
 
-    @patch("src.worker.platform.system", return_value="Windows")
-    @patch("src.worker.os.path.getsize", return_value=100)
-    @patch("src.worker.QSettings")
-    @patch("src.worker._run_transcription_in_subprocess")
-    @patch("src.worker.torch.cuda.is_available", return_value=False)
+    @patch("src.worker_components.transcriber_thread.platform.system", return_value="Windows")
+    @patch("src.worker_components.transcriber_thread.os.path.getsize", return_value=100)
+    @patch("src.worker_components.transcriber_thread.QSettings")
+    @patch("src.worker_components.transcriber_thread._run_transcription_in_subprocess")
+    @patch("src.worker_components.transcriber_thread.torch.cuda.is_available", return_value=False)
     def test_windows_subprocess_cuda_failure_falls_back_to_cpu(
         self, _mock_cuda_available, _mock_run_subprocess, MockQSettings, _mock_getsize, _mock_system
     ):
@@ -217,10 +228,10 @@ class TestTranscriberThread(unittest.TestCase):
         thread.finished.emit.assert_called_once()
         thread.error.emit.assert_not_called()
 
-    @patch("src.worker.platform.system", return_value="Windows")
-    @patch("src.worker.os.path.getsize", return_value=100)
-    @patch("src.worker._run_transcription_in_subprocess")
-    @patch("src.worker.torch.cuda.is_available", return_value=False)
+    @patch("src.worker_components.transcriber_thread.platform.system", return_value="Windows")
+    @patch("src.worker_components.transcriber_thread.os.path.getsize", return_value=100)
+    @patch("src.worker_components.transcriber_thread._run_transcription_in_subprocess")
+    @patch("src.worker_components.transcriber_thread.torch.cuda.is_available", return_value=False)
     def test_windows_native_crash_falls_back_to_smaller_model(
         self, _mock_cuda_available, _mock_run_subprocess, _mock_getsize, _mock_system
     ):
@@ -252,11 +263,11 @@ class TestTranscriberThread(unittest.TestCase):
         thread.finished.emit.assert_called_once()
         thread.error.emit.assert_not_called()
 
-    @patch("src.worker.platform.system", return_value="Windows")
-    @patch("src.worker.os.path.getsize", return_value=100)
-    @patch("src.worker._run_openai_whisper_fallback")
-    @patch("src.worker._run_transcription_in_subprocess")
-    @patch("src.worker.torch.cuda.is_available", return_value=False)
+    @patch("src.worker_components.transcriber_thread.platform.system", return_value="Windows")
+    @patch("src.worker_components.transcriber_thread.os.path.getsize", return_value=100)
+    @patch("src.worker_components.transcriber_thread._run_openai_whisper_fallback")
+    @patch("src.worker_components.transcriber_thread._run_transcription_in_subprocess")
+    @patch("src.worker_components.transcriber_thread.torch.cuda.is_available", return_value=False)
     def test_windows_native_crash_uses_openai_whisper_compat_fallback(
         self,
         _mock_cuda_available,
@@ -286,11 +297,11 @@ class TestTranscriberThread(unittest.TestCase):
         thread.finished.emit.assert_called_once()
         thread.error.emit.assert_not_called()
 
-    @patch("src.worker.subprocess_runner.run_openai_whisper_fallback")
+    @patch("src.worker_components.subprocess_runner.run_openai_whisper_fallback")
     def test_openai_whisper_fallback_delegates_to_subprocess(self, mock_run_backend):
         mock_run_backend.return_value = [{"start": 0.0, "end": 1.0, "text": "ok"}]
 
-        segments = _run_openai_whisper_fallback(
+        segments = subprocess_runner.run_openai_whisper_fallback(
             audio_path="test.wav",
             model_size="large-v3",
             language=None,
@@ -303,12 +314,12 @@ class TestTranscriberThread(unittest.TestCase):
             language=None,
         )
 
-    @patch("src.worker.subprocess_runner.run_openai_whisper_fallback")
+    @patch("src.worker_components.subprocess_runner.run_openai_whisper_fallback")
     def test_openai_whisper_fallback_propagates_runner_error(self, mock_run_backend):
         mock_run_backend.side_effect = RuntimeError("FFmpeg is not installed")
 
         with self.assertRaises(RuntimeError) as ctx:
-            _run_openai_whisper_fallback(
+            subprocess_runner.run_openai_whisper_fallback(
                 audio_path="test.wav",
                 model_size="base",
                 language="es",
@@ -322,12 +333,12 @@ class TestTranscriberThread(unittest.TestCase):
                 with open(os.path.join(tmpdir, filename), "w", encoding="utf-8") as f:
                     f.write("x")
 
-            config = _resolve_sherpa_onnx_model_config(tmpdir, "auto")
+            config = sherpa_model_manager.resolve_sherpa_onnx_model_config(tmpdir, "auto")
 
         self.assertEqual(config["type"], "transducer")
         self.assertTrue(config["encoder"].endswith("encoder.onnx"))
 
-    @patch("src.worker.subprocess_runner.run_sherpa_onnx_transcription")
+    @patch("src.worker_components.subprocess_runner.run_sherpa_onnx_transcription")
     def test_run_sherpa_onnx_transcription_returns_single_segment(self, mock_run_backend):
         mock_run_backend.return_value = [{"start": 0.0, "end": 1.0, "text": "hello from sherpa"}]
         settings = MagicMock()
@@ -340,10 +351,12 @@ class TestTranscriberThread(unittest.TestCase):
                 "sherpa_onnx_model_dir": tmpdir,
                 "sherpa_onnx_model_type": "paraformer",
             }.get(key, default)
-            segments = _run_sherpa_onnx_transcription(
+            model_dir, model_config = sherpa_model_manager.ensure_sherpa_onnx_model_ready(settings)
+            segments = subprocess_runner.run_sherpa_onnx_transcription(
                 audio_path="test.wav",
                 language="es",
-                settings=settings,
+                model_dir=model_dir,
+                model_config=model_config,
             )
 
         self.assertEqual(segments, [{"start": 0.0, "end": 1.0, "text": "hello from sherpa"}])
@@ -358,7 +371,7 @@ class TestTranscriberThread(unittest.TestCase):
             "sherpa_onnx_auto_download": False,
         }.get(key, default)
 
-        error = get_transcription_preflight_error("sherpa-onnx", settings)
+        error = sherpa_model_manager.get_transcription_preflight_error("sherpa-onnx", settings)
 
         self.assertIn("does not exist", error)
         self.assertIn("Settings -> Audio", error)
@@ -370,25 +383,25 @@ class TestTranscriberThread(unittest.TestCase):
             "sherpa_onnx_auto_download": True,
         }.get(key, default)
 
-        error = get_transcription_preflight_error("sherpa-onnx", settings)
+        error = sherpa_model_manager.get_transcription_preflight_error("sherpa-onnx", settings)
 
         self.assertIsNone(error)
 
-    @patch("src.worker.worker_sherpa.ensure_sherpa_onnx_model_ready")
+    @patch("src.stt_providers.sherpa_onnx.model_manager.ensure_sherpa_onnx_model_ready")
     def test_ensure_sherpa_model_ready_auto_downloads_when_missing(self, mock_ensure):
         settings = MagicMock()
         expected_config = {"type": "whisper", "tokens": "/tmp/sherpa-model/tokens.txt"}
         mock_ensure.return_value = ("/tmp/sherpa-model/extracted", expected_config)
 
-        model_dir, model_config = _ensure_sherpa_onnx_model_ready(settings)
+        model_dir, model_config = sherpa_model_manager.ensure_sherpa_onnx_model_ready(settings)
 
-        mock_ensure.assert_called_once_with(settings, status_callback=None)
+        mock_ensure.assert_called_once_with(settings)
         self.assertEqual(model_dir, "/tmp/sherpa-model/extracted")
         self.assertEqual(model_config, expected_config)
 
-    @patch("src.worker.QSettings")
-    @patch("src.worker.os.path.getsize", return_value=100)
-    @patch("src.worker._run_sherpa_onnx_transcription")
+    @patch("src.worker_components.transcriber_thread.QSettings")
+    @patch("src.worker_components.transcriber_thread.os.path.getsize", return_value=100)
+    @patch("src.worker_components.transcriber_thread._run_sherpa_onnx_transcription")
     def test_sherpa_onnx_model_uses_sherpa_backend_and_records_runtime_snapshot(
         self, mock_sherpa_run, _mock_getsize, MockQSettings
     ):
@@ -419,10 +432,10 @@ class TestTranscriberThread(unittest.TestCase):
         thread.finished.emit.assert_called_once()
         thread.error.emit.assert_not_called()
 
-    @patch("src.worker.QSettings")
-    @patch("src.worker.os.path.getsize", return_value=100)
-    @patch("src.worker._run_transcription_in_subprocess")
-    @patch("src.worker._run_openai_whisper_fallback")
+    @patch("src.worker_components.transcriber_thread.QSettings")
+    @patch("src.worker_components.transcriber_thread.os.path.getsize", return_value=100)
+    @patch("src.worker_components.transcriber_thread._run_transcription_in_subprocess")
+    @patch("src.worker_components.transcriber_thread._run_openai_whisper_fallback")
     def test_backend_preference_openai_records_runtime_without_rewriting_preferences(
         self, _mock_openai_fallback, _mock_run_subprocess, _mock_getsize, MockQSettings
     ):

@@ -23,6 +23,7 @@ class _FakeProc:
         self._alive_sequence = list(alive_sequence or [])
         self.exitcode = exitcode
         self.terminated = False
+        self.killed = False
         self.join_calls = []
         self.closed = False
         self.started = False
@@ -40,6 +41,9 @@ class _FakeProc:
 
     def terminate(self):
         self.terminated = True
+
+    def kill(self):
+        self.killed = True
 
     def close(self):
         self.closed = True
@@ -97,6 +101,30 @@ def test_run_backend_subprocess_success():
     assert queue.closed
     assert queue.joined
     assert proc.closed
+
+
+def test_run_backend_subprocess_timeout_kills_stubborn_process():
+    proc = _FakeProc(alive_sequence=[True, True, False], exitcode=0)
+    queue = _FakeQueue()
+    fake_ctx = _FakeCtx(proc, queue)
+
+    with patch("src.worker_components.subprocess_runner.mp.get_context", return_value=fake_ctx), \
+         patch("src.worker_components.subprocess_runner.time.monotonic", side_effect=[0.0, 10.0]), \
+         patch("src.worker_components.subprocess_runner.QThread.currentThread", return_value=None):
+        try:
+            subprocess_runner.run_backend_subprocess(
+                backend="faster-whisper",
+                payload={"audio_path": "x.wav"},
+                timeout_seconds=5,
+            )
+        except RuntimeError as exc:
+            assert "timed out" in str(exc)
+        else:
+            raise AssertionError("expected timeout")
+
+    assert proc.terminated is True
+    assert proc.killed is True
+    assert proc.closed is True
 
 
 def test_run_openai_whisper_fallback_uses_backend_dispatch():

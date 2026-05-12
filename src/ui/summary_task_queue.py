@@ -13,46 +13,34 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 from collections import deque
-import json
 import logging
-import re
 from typing import Deque, Dict, Optional, Tuple, Any, List
 
 from PyQt6.QtCore import QObject, pyqtSignal, QSettings, QTimer, QThread
 
+from src.app.summary_queue.completion import handle_worker_completion
+from src.app.summary_queue.history import QueueHistory
+from src.app.summary_queue.helpers import (
+    parse_task_extraction_result as _parse_task_extraction_result,
+    read_audio_duration_seconds as _read_audio_duration_seconds,
+)
+from src.app.summary_queue.rag_reindex import run_rag_reindex
+from src.app.summary_queue.tasks import (
+    build_daily_summary_task,
+    build_rag_reindex_task,
+    build_recording_summary_task,
+    build_task_extraction_task,
+    build_transcription_task,
+    build_weekly_summary_task,
+    normalize_source,
+    task_key,
+)
+from src.app.summary_queue.workers import build_transcription_worker_kwargs
 from src.summary_generator import SummaryGenerator
 from src.ai_assistant import AIAssistant
 from src.database import DBManager
-from src.worker import TranscriberThread
-
-
-def _read_audio_duration_seconds(audio_path: str) -> float:
-    """Best-effort duration probe used to scale transcription progress."""
-    try:
-        import soundfile as sf
-
-        with sf.SoundFile(audio_path) as audio_file:
-            return len(audio_file) / audio_file.samplerate
-    except Exception as e:
-        logging.warning("Could not read audio duration for queued transcription %s: %s", audio_path, e)
-        return 0.0
-
-
-def _parse_task_extraction_result(raw_result: Any) -> list[str]:
-    """Parse the AI task-extraction response into clean task strings."""
-    clean_result = str(raw_result or "").strip()
-    match = re.search(r"(\[.*\])", clean_result, re.DOTALL)
-    if match:
-        clean_result = match.group(1)
-
-    try:
-        parsed = json.loads(clean_result)
-    except Exception:
-        return []
-
-    if not isinstance(parsed, list):
-        return []
-    return [item.strip() for item in parsed if isinstance(item, str) and item.strip()]
+from src.worker_components.engine import is_transcription_fatal_failure
+from src.worker_components.transcriber_thread import TranscriberThread
 
 
 class RAGReindexThread(QThread):
@@ -70,79 +58,18 @@ class RAGReindexThread(QThread):
         self.scope = (scope or "all").strip().lower()
 
     def run(self):
-        if self.rag is None:
-            self.error.emit("RAG engine is not initialized.")
-            return
-
         try:
-            records = self.db.fetch_all()
-            candidates = []
-            for rec in records:
-                rec_id = rec.get("id")
-                if not isinstance(rec_id, int):
-                    continue
-                rec_type = str(rec.get("type") or "recording")
-                if rec_type not in {"recording", "note"}:
-                    continue
-                ai_text = self.db.get_record_ai_text(rec_id)
-                if not str(ai_text or "").strip():
-                    continue
-                if self.scope == "missing" and self._is_indexed_in_rag(rec_id):
-                    continue
-                candidates.append((rec, ai_text))
-
-            total = len(candidates)
-            if total == 0:
-                self.status_update.emit("RAG reindex: no eligible records found.")
-                self.progress.emit(100)
-                self.task_completed.emit({"indexed": 0, "skipped": 0, "total": 0})
-                return
-
-            indexed = 0
-            skipped = 0
-            for idx, (rec, ai_text) in enumerate(candidates, start=1):
-                if self.isInterruptionRequested():
-                    self.status_update.emit("RAG reindex interrupted.")
-                    break
-
-                rec_id = rec.get("id")
-                title = (rec.get("title") or f"Record {rec_id}").strip()
-                metadata = {
-                    "title": title,
-                    "date": rec.get("created_at") or "",
-                    "tags": rec.get("tags") or "",
-                    "type": rec.get("type") or "recording",
-                }
-                try:
-                    self.rag.add_document(rec_id, ai_text, metadata=metadata)
-                    indexed += 1
-                except Exception:
-                    skipped += 1
-
-                if idx == 1 or idx % 25 == 0 or idx == total:
-                    self.status_update.emit(f"RAG reindex: {idx}/{total}")
-                self.progress.emit(int((idx / total) * 100))
-
-            self.task_completed.emit({"indexed": indexed, "skipped": skipped, "total": total})
+            result = run_rag_reindex(
+                self.db,
+                self.rag,
+                self.scope,
+                is_interrupted=self.isInterruptionRequested,
+                on_status=self.status_update.emit,
+                on_progress=self.progress.emit,
+            )
+            self.task_completed.emit(result)
         except Exception as e:
             self.error.emit(str(e))
-
-    def _is_indexed_in_rag(self, record_id: int) -> bool:
-        sid = str(record_id)
-        try:
-            collection = getattr(self.rag, "collection", None)
-            if collection is not None and hasattr(collection, "get"):
-                raw = collection.get(ids=[sid], where={"deleted": {"$ne": "1"}})
-                return bool(raw and raw.get("ids"))
-        except Exception:
-            pass
-
-        # Fallback path for collection backends that don't expose `get`.
-        try:
-            hits = self.rag.search("", n_results=1, ids=[sid])
-            return bool(hits)
-        except Exception:
-            return False
 
 
 class SummaryTaskQueueManager(QObject):
@@ -178,9 +105,8 @@ class SummaryTaskQueueManager(QObject):
         self._wait_timer = QTimer(self)
         self._wait_timer.setInterval(1000)
         self._wait_timer.timeout.connect(self._tick_wait_timer)
-        self._session_history: Deque[Dict[str, Any]] = deque(maxlen=300)
+        self._history = QueueHistory(max_entries=300)
         self._current_task_had_error = False
-        self._last_status_message = ""
 
     @property
     def current_worker(self):
@@ -210,7 +136,7 @@ class SummaryTaskQueueManager(QObject):
 
     def get_session_history(self) -> List[Dict]:
         """Return session execution history (newest first)."""
-        return list(reversed(self._session_history))
+        return self._history.newest_first()
 
     def remove_task_at(self, index: int) -> bool:
         """Remove a task from the pending queue at the given index."""
@@ -231,48 +157,26 @@ class SummaryTaskQueueManager(QObject):
         return False
 
     def enqueue_daily_summary(self, summary_data: Dict) -> bool:
-        date = summary_data.get("date")
-        if not date:
+        task = build_daily_summary_task(summary_data)
+        if task is None:
             self.task_skipped.emit(summary_data, "Daily summary task missing date.")
             self._append_history("skipped", summary_data, "Daily summary task missing date.")
             return False
-
-        task = {
-            "type": "daily_summary",
-            "date": date,
-            "tags_filter": summary_data.get("tags_filter") or "",
-            "source": self._normalize_source(summary_data.get("source"), "manual"),
-        }
         return self._enqueue_unique_task(task)
 
     def enqueue_recording_summary(self, record_id: int, text: str, title: str, source: str = "manual") -> bool:
-        task = {
-            "type": "summary", 
-            "record_id": record_id,
-            "text": text,
-            "title": title,
-            "source": self._normalize_source(source, "manual"),
-        }
-        return self._enqueue_unique_task(task)
+        return self._enqueue_unique_task(
+            build_recording_summary_task(record_id, text, title, source)
+        )
 
     def enqueue_weekly_summary(self, week_sunday: str, text: str, tags_filter: str = "", source: str = "manual") -> bool:
-        task = {
-            "type": "weekly_summary",
-            "date": week_sunday,
-            "text": text,
-            "tags_filter": tags_filter,
-            "source": self._normalize_source(source, "manual"),
-        }
-        return self._enqueue_unique_task(task)
+        return self._enqueue_unique_task(
+            build_weekly_summary_task(week_sunday, text, tags_filter, source)
+        )
 
     def enqueue_task_extraction(self, record_id: int, text: str, tags: str, title: str = "", force: bool = False, source: str = "manual") -> bool:
         if self.db.has_ai_tasks_for_record(record_id) and not force:
-            task = {
-                "type": "task_extraction",
-                "record_id": record_id,
-                "title": (title or f"Recording {record_id}").strip(),
-                "source": self._normalize_source(source, "manual"),
-            }
+            task = build_task_extraction_task(record_id, title=title, source=source)
             self.task_skipped.emit(task, "Tasks already generated for this record.")
             self._append_history("skipped", task, "Tasks already generated for this record.")
             return False
@@ -285,41 +189,17 @@ class SummaryTaskQueueManager(QObject):
             else:
                 resolved_title = f"Recording {record_id}"
 
-        task = {
-            "type": "task_extraction",
-            "record_id": record_id,
-            "text": text,
-            "tags": tags,
-            "title": resolved_title,
-            "force": bool(force),
-            "source": self._normalize_source(source, "manual"),
-        }
-        return self._enqueue_unique_task(task)
+        return self._enqueue_unique_task(
+            build_task_extraction_task(record_id, text, tags, resolved_title, force, source)
+        )
 
     def enqueue_transcription(self, record_id: int, audio_path: str, model_size: str = "base", language: str = None, diarization: bool = False, title: str = "", source: str = "manual") -> bool:
-        task = {
-            "type": "transcription",
-            "record_id": record_id,
-            "audio_path": audio_path,
-            "model_size": model_size,
-            "language": language,
-            "diarization": diarization,
-            "title": title,
-            "source": self._normalize_source(source, "manual"),
-        }
-        return self._enqueue_unique_task(task)
+        return self._enqueue_unique_task(
+            build_transcription_task(record_id, audio_path, model_size, language, diarization, title, source)
+        )
 
     def enqueue_rag_reindex(self, scope: str = "all", source: str = "manual") -> bool:
-        normalized_scope = (scope or "all").strip().lower()
-        if normalized_scope not in {"all", "missing"}:
-            normalized_scope = "all"
-        task = {
-            "type": "rag_reindex",
-            "title": "RAG Reindex",
-            "reindex_scope": normalized_scope,
-            "source": self._normalize_source(source, "manual"),
-        }
-        return self._enqueue_unique_task(task)
+        return self._enqueue_unique_task(build_rag_reindex_task(scope, source))
 
     def set_rag_engine(self, rag_engine) -> None:
         self.rag_engine = rag_engine
@@ -408,18 +288,10 @@ class SummaryTaskQueueManager(QObject):
         return True
 
     def _task_key(self, task: Dict) -> Tuple[Any, ...]:
-        return (
-            task.get("type", ""),
-            task.get("date", ""),
-            task.get("record_id", ""),
-            task.get("tags_filter", ""),
-            task.get("audio_path", ""),
-            task.get("reindex_scope", ""),
-        )
+        return task_key(task)
 
     def _normalize_source(self, source: Optional[str], default: str = "manual") -> str:
-        value = str(source or "").strip().lower().replace(" ", "_")
-        return value or default
+        return normalize_source(source, default)
 
     def _emit_queue_state(self):
         self.queue_changed.emit(self.pending_count, self._current_worker is not None)
@@ -455,25 +327,8 @@ class SummaryTaskQueueManager(QObject):
                 worker.progress.connect(self._on_generator_progress)
             elif task_type == "transcription":
                 settings = QSettings("Hectronic", "Secretario")
-                hf_token = settings.value("hf_token", "")
-                force_cpu = settings.value("force_cpu", False, type=bool)
-                compute_type = settings.value("compute_type", "auto")
-                transcription_backend = settings.value("transcription_backend", "auto")
-                if compute_type == "auto":
-                    compute_type = None
-                
-                duration = _read_audio_duration_seconds(task["audio_path"])
-
                 worker = TranscriberThread(
-                    task["audio_path"], 
-                    model_size=task["model_size"], 
-                    compute_type=compute_type, 
-                    language=task["language"], 
-                    hf_token=hf_token, 
-                    enable_diarization=task["diarization"], 
-                    total_duration=duration, 
-                    force_cpu=force_cpu,
-                    backend_preference=transcription_backend,
+                    **build_transcription_worker_kwargs(settings, task)
                 )
                 worker.finished.connect(self._on_worker_completed)
                 worker.progress.connect(self.task_progress.emit)
@@ -535,72 +390,47 @@ class SummaryTaskQueueManager(QObject):
 
     def _on_worker_completed(self, result: Any = None):
         task = self._current_task or {}
-        import logging
-        
-        if result is not None:
-            t_type = task.get("type")
-            try:
-                if t_type == "summary":
-                    self.db.update_ai_content(task["record_id"], summary=str(result))
-                    rec = self.db.fetch_record(task["record_id"])
-                    if rec:
-                        ai_text = self.db.get_record_ai_text(task["record_id"])
-                        self.enqueue_task_extraction(
-                            task["record_id"],
-                            ai_text,
-                            rec.get("tags") or "",
-                            rec.get("title") or f"Recording {task['record_id']}",
-                            source=task.get("source") or "summary",
-                        )
-                elif t_type == "weekly_summary":
-                    self.db.save_weekly_summary(task["date"], str(result), task.get("tags_filter"))
-                elif t_type == "task_extraction":
-                    tasks = _parse_task_extraction_result(result)
-                    if tasks:
-                        self.db.delete_ai_tasks_by_record(task["record_id"])
-                        for task_content in tasks:
-                            self.db.save_task(
-                                task["record_id"],
-                                task_content,
-                                task.get("tags"),
-                                is_ai_generated=True,
-                            )
-                elif t_type == "transcription":
-                    # result is a dict from TranscriberThread
-                    text = result["text"]
-                    self.db.update_transcription(
-                        task["record_id"],
-                        text,
-                        is_diarized=result.get("is_diarized", False),
-                        transcription_model=result.get("model_name"),
-                    )
-                    # Keep pending/batch transcription strictly sequential and lightweight:
-                    # do not chain summary/task extraction automatically.
-                    if task.get("source") != "batch_process":
-                        ai_text = self.db.get_record_ai_text(task["record_id"])
-                        self.enqueue_recording_summary(
-                            task["record_id"],
-                            ai_text,
-                            task.get("title", ""),
-                            source=task.get("source") or "transcription",
-                        )
-                elif t_type == "rag_reindex" and isinstance(result, dict):
-                    indexed = int(result.get("indexed", 0))
-                    skipped = int(result.get("skipped", 0))
-                    total = int(result.get("total", 0))
-                    scope_label = "missing only" if task.get("reindex_scope") == "missing" else "all records"
-                    self.task_status_update.emit(
-                        f"RAG reindex ({scope_label}) completed: {indexed}/{total} indexed, {skipped} skipped."
-                    )
-            except Exception as e:
-                logging.error(f"Queue persistence error: {e}", exc_info=True)
+        if result is None:
+            return
+
+        try:
+            for action in handle_worker_completion(self.db, task, result):
+                self._apply_completion_action(action)
+        except Exception as e:
+            logging.error(f"Queue persistence error: {e}", exc_info=True)
+
+    def _apply_completion_action(self, action: Dict):
+        action_type = action.get("type")
+        if action_type == "enqueue_task_extraction":
+            self.enqueue_task_extraction(
+                action["record_id"],
+                action.get("text", ""),
+                action.get("tags", ""),
+                action.get("title", ""),
+                source=action.get("source") or "summary",
+            )
+        elif action_type == "enqueue_recording_summary":
+            self.enqueue_recording_summary(
+                action["record_id"],
+                action.get("text", ""),
+                action.get("title", ""),
+                source=action.get("source") or "transcription",
+            )
+        elif action_type == "status":
+            self.task_status_update.emit(action.get("message", ""))
 
     def _on_worker_error(self, error_msg: str):
         task = self._current_task or {}
         self._clear_wait_state()
         self._current_task_had_error = True
-        self._append_history("failed", task, str(error_msg or "Unknown error"))
-        self.task_failed.emit(task, str(error_msg or "Unknown error"))
+        message = str(error_msg or "Unknown error")
+        if task.get("type") == "transcription" and is_transcription_fatal_failure(message):
+            self._append_history("skipped", task, message)
+            self.task_skipped.emit(task, message)
+            self.task_status_update.emit(f"Skipping failed transcription: {message}")
+        else:
+            self._append_history("failed", task, message)
+            self.task_failed.emit(task, message)
 
     def _on_worker_status_update(self, message: str):
         msg = str(message or "").strip()
@@ -610,18 +440,15 @@ class SummaryTaskQueueManager(QObject):
         current_task = self._current_task or {}
         if not current_task:
             return
-        # Avoid adding the same status line repeatedly.
-        if msg == self._last_status_message:
-            return
-        self._last_status_message = msg
-        self._append_history("trace", current_task, msg)
+        if self._history.append_status_trace_once(current_task, msg):
+            self.history_changed.emit(len(self._history))
 
     def _on_worker_completely_finished(self):
         task = self._current_task
         worker = self._current_worker
         self._current_worker = None
         self._current_task = None
-        self._last_status_message = ""
+        self._history.clear_status_dedup()
         self._clear_wait_state()
         if task:
             if not self._current_task_had_error:
@@ -680,13 +507,5 @@ class SummaryTaskQueueManager(QObject):
         self.wait_state_changed.emit(False, 0, "")
 
     def _append_history(self, event: str, task: Dict, message: str = ""):
-        from datetime import datetime
-
-        snapshot = dict(task or {})
-        self._session_history.append({
-            "time": datetime.now().strftime("%H:%M:%S"),
-            "event": str(event or "").strip().lower() or "info",
-            "task": snapshot,
-            "message": str(message or "").strip(),
-        })
-        self.history_changed.emit(len(self._session_history))
+        self._history.append(event, task, message)
+        self.history_changed.emit(len(self._history))

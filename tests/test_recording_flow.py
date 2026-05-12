@@ -26,7 +26,7 @@ from PyQt6.QtCore import Qt, QSettings
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 from src.ui.main_window import MainWindow
-from src.ui.audio_editor_widget import AudioEditorWidget
+from src.ui.audio_editor.widget import AudioEditorWidget
 from src.ui.recording_in_progress_widget import RecordingInProgressWidget
 from src.ui.recording_widget import RecordingWidget
 
@@ -93,7 +93,7 @@ class TestRecordingFlow(unittest.TestCase):
         self.mock_db3.get_tasks_by_record.return_value = []
 
         # Patch DBManager for the dedicated audio editor tab.
-        self.db_patcher4 = patch('src.ui.audio_editor_widget.DBManager')
+        self.db_patcher4 = patch('src.ui.audio_editor.widget.DBManager')
         self.mock_db4 = self.db_patcher4.start().return_value
         self.mock_db4.get_all_tags.return_value = []
         self.mock_db4.fetch_all.return_value = []

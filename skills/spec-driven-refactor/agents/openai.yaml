@@ -1,0 +1,4 @@
+interface:
+  display_name: "Spec-Driven Refactor"
+  short_description: "Keep specs aligned during refactors"
+  default_prompt: "Use this skill when refactoring El Secretario so specs are updated or created alongside code changes."

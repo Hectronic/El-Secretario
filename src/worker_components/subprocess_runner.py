@@ -37,11 +37,17 @@ def run_backend_subprocess(*, backend: str, payload: dict, timeout_seconds: int 
                 if current_thread.isInterruptionRequested():
                     proc.terminate()
                     proc.join(timeout=5)
+                    if proc.is_alive():
+                        proc.kill()
+                        proc.join(timeout=5)
                     raise RuntimeError("Transcription cancelled.")
 
             if start_time is not None and (time.monotonic() - start_time) >= timeout_seconds:
                 proc.terminate()
                 proc.join(timeout=5)
+                if proc.is_alive():
+                    proc.kill()
+                    proc.join(timeout=5)
                 raise RuntimeError("Transcription subprocess timed out.")
 
             proc.join(timeout=1)

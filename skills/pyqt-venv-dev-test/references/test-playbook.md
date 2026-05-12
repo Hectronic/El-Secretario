@@ -17,7 +17,7 @@ fi
 
 ```bash
 $VENV_PY -m pip install -r requirements.txt
-$VENV_PY -m py_compile src/ui/audio_editor_widget.py
+$VENV_PY -m py_compile src/ui/audio_editor/widget.py
 ```
 
 ## 3) Ejecutar tests PyQt en headless
@@ -29,7 +29,7 @@ QT_QPA_PLATFORM=offscreen PYTHONUNBUFFERED=1 $VENV_PY -m pytest -q
 ## 4) Ejecutar solo tests afectados (rápido)
 
 ```bash
-QT_QPA_PLATFORM=offscreen PYTHONUNBUFFERED=1 $VENV_PY -m pytest -q tests/test_audio_editor_widget.py
+QT_QPA_PLATFORM=offscreen PYTHONUNBUFFERED=1 $VENV_PY -m pytest -q tests/ui/audio_editor/test_widget.py
 ```
 
 ## 5) Fallback si hay conflicto de plugins de pytest

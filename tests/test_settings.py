@@ -3,7 +3,8 @@ import pytest
 import shutil
 import tempfile
 from PyQt6.QtCore import QSettings
-from src.ui.dialogs import SettingsWidget
+from src.ui.secret_field_widget import SecretFieldWidget
+from src.ui.settings.widget import SettingsWidget
 
 @pytest.fixture
 def clean_settings(monkeypatch):
@@ -11,7 +12,7 @@ def clean_settings(monkeypatch):
     temp_dir = tempfile.mkdtemp(prefix="secretario_settings_")
     settings_file = f"{temp_dir}/settings.ini"
     settings = QSettings(settings_file, QSettings.Format.IniFormat)
-    monkeypatch.setattr("src.ui.dialogs.QSettings", lambda *args, **kwargs: settings)
+    monkeypatch.setattr("src.ui.settings.widget.QSettings", lambda *args, **kwargs: settings)
     old_hf = settings.value("hf_token")
     old_gemini = settings.value("gemini_key")
     old_theme = settings.value("app_theme")
@@ -153,6 +154,19 @@ def test_settings_show_copy_buttons(qtbot, clean_settings):
     
     qtbot.mouseClick(copy_btn, Qt.MouseButton.LeftButton)
     assert clipboard.text() == "secret_token"
+
+
+def test_settings_uses_secret_field_widget(qtbot, clean_settings):
+    clean_settings.setValue("hf_token", "secret_token")
+    clean_settings.setValue("gemini_key", "secret_gemini")
+
+    widget = SettingsWidget()
+    qtbot.addWidget(widget)
+
+    assert isinstance(widget.general_panel.hf_container, SecretFieldWidget)
+    assert isinstance(widget.general_panel.gemini_container, SecretFieldWidget)
+    assert widget.general_panel.token_input is widget.general_panel.hf_container.line_edit
+    assert widget.general_panel.gemini_key_input is widget.general_panel.gemini_container.line_edit
 
 
 def test_prompts_panel_defaults(qtbot, clean_settings):

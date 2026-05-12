@@ -28,7 +28,7 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from src.ui.main_window import MainWindow
 from src.ui.welcome_widget import WelcomeWidget
-from src.ui.dialogs import SettingsWidget
+from src.ui.settings.widget import SettingsWidget
 from src.ui.chat_widget import ChatWidget
 from src.ui.chat_history_widget import ChatHistoryWidget
 from src.ui.components import SidebarChatSessionWidget, SidebarTaskCompactWidget, create_tag_chip
@@ -348,7 +348,7 @@ class TestMainWindowDailySummaryIntegration(unittest.TestCase):
         self.assertEqual(item_widget.expand_btn.toolTip(), "Open the full Chat History tab")
         self.assertEqual(item_widget.expand_btn.text(), "⤢")
 
-    @patch("src.ui.main_window.QMenu")
+    @patch("src.ui.main_window.chat_sessions_actions.QMenu")
     def test_chat_sidebar_context_menu_open_uses_selected_session(self, mock_menu_cls):
         session = {"id": 7, "name": "Sprint review", "created_at": "2026-03-10 09:30:00"}
         self.mock_db.fetch_chat_sessions.return_value = [session]
@@ -371,7 +371,7 @@ class TestMainWindowDailySummaryIntegration(unittest.TestCase):
         self.window.open_chat_tab.assert_called_once_with(7)
         self.window.open_floating_chat.assert_not_called()
 
-    @patch("src.ui.main_window.QMenu")
+    @patch("src.ui.main_window.chat_sessions_actions.QMenu")
     def test_chat_sidebar_context_menu_open_floating_uses_selected_session(self, mock_menu_cls):
         session = {"id": 7, "name": "Sprint review", "created_at": "2026-03-10 09:30:00"}
         self.mock_db.fetch_chat_sessions.return_value = [session]
@@ -394,8 +394,8 @@ class TestMainWindowDailySummaryIntegration(unittest.TestCase):
         self.window.open_floating_chat.assert_called_once_with(7)
         self.window.open_chat_tab.assert_not_called()
 
-    @patch("src.ui.main_window.QMessageBox.question")
-    @patch("src.ui.main_window.QMenu")
+    @patch("src.ui.main_window.chat_sessions_actions.QMessageBox.question")
+    @patch("src.ui.main_window.chat_sessions_actions.QMenu")
     def test_chat_sidebar_context_menu_delete_removes_session(self, mock_menu_cls, mock_question):
         session = {"id": 7, "name": "Sprint review", "created_at": "2026-03-10 09:30:00"}
         self.mock_db.fetch_chat_sessions.return_value = [session]
@@ -415,7 +415,7 @@ class TestMainWindowDailySummaryIntegration(unittest.TestCase):
 
         self.mock_db.delete_chat_session.assert_called_once_with(7)
 
-    @patch("src.ui.main_window.QInputDialog.getText")
+    @patch("src.ui.main_window.sidebar_content.QInputDialog.getText")
     def test_notebooks_header_create_button_creates_notebook(self, mock_get_text):
         mock_get_text.return_value = ("Ideas", True)
 
@@ -429,7 +429,7 @@ class TestMainWindowDailySummaryIntegration(unittest.TestCase):
         current = self.window.central_tabs.currentWidget()
         self.assertEqual(current.__class__.__name__, "NotebooksListWidget")
 
-    @patch("src.ui.main_window.QMenu")
+    @patch("src.ui.main_window.sidebar_content.QMenu")
     def test_notebooks_sidebar_context_menu_chat_opens_notebook_chat(self, mock_menu_cls):
         self.mock_notebook_db.get_notebooks.return_value = [{"id": 3, "name": "Ideas"}]
         self.window.load_notebooks()
@@ -454,8 +454,8 @@ class TestMainWindowDailySummaryIntegration(unittest.TestCase):
 
         self.window.open_notebook_chat.assert_called_once_with(3, "Ideas")
 
-    @patch("src.ui.main_window.QInputDialog.getText")
-    @patch("src.ui.main_window.QMenu")
+    @patch("src.ui.main_window.sidebar_content.QInputDialog.getText")
+    @patch("src.ui.main_window.sidebar_content.QMenu")
     def test_notebooks_sidebar_context_menu_rename_updates_notebook(self, mock_menu_cls, mock_get_text):
         self.mock_notebook_db.get_notebooks.return_value = [{"id": 3, "name": "Ideas"}]
         self.window.load_notebooks()
@@ -495,7 +495,7 @@ class TestMainWindowDailySummaryIntegration(unittest.TestCase):
 
         self.assertEqual(self.window.central_tabs.tabText(self.window.central_tabs.currentIndex()), "Colecciones")
 
-    @patch("src.ui.main_window.QMenu")
+    @patch("src.ui.main_window.history_tags_actions.QMenu")
     def test_tags_sidebar_context_menu_chat_opens_collection_chat(self, mock_menu_cls):
         self.mock_db.get_all_tags.return_value = ["alpha"]
         self.window.load_collections()

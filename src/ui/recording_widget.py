@@ -27,9 +27,10 @@ from PyQt6.QtGui import QCursor
 
 from src.database import DBManager
 from src.audio import trim_audio_segment
-from src.worker import TranscriberThread, get_transcription_preflight_error
+from src.worker_components.transcriber_thread import TranscriberThread
+from src.stt_providers.sherpa_onnx.model_manager import get_transcription_preflight_error
 from src.ai_assistant import AIAssistant
-from src.ui.dialogs import SpeakerDialog
+from src.ui.speaker_dialog import SpeakerDialog
 from src.ui.components import TagsLineEdit
 from src.ui.tasks_list_widget import TasksListWidget
 from src.transcription_options import DEFAULT_TRANSCRIPTION_MODEL, get_transcription_model_options

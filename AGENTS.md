@@ -20,6 +20,12 @@ This document contains useful information and strict rules for AI agents working
 - This project uses a logging system in `log/app.log`; use it for debugging.
 - Source code lives in `src/` and tests live in `tests/`.
 - New unit tests should mirror the source folder structure.
+- Large UI areas are now split by feature packages instead of flat modules:
+  - `src/ui/main_window/` contains `MainWindow` plus focused coordinators such as `chat_floating.py`, `recording_tabs.py`, `sidebar_actions.py`, `sidebar_content.py`, `sidebar_sync.py`, and `setup_actions.py`.
+  - `src/ui/chat/` contains chat-specific helpers such as `add_context_dialog.py`, `context_builder.py`, and `session_state.py`.
+  - `src/ui/context_manager_panel.py` is a reusable context sidebar component shared by chat widgets.
+- Prefer adding new behavior to the smallest feature package that owns it.
+- Keep compatibility shims only when needed during incremental migrations, and move tests to mirror the new package layout under `tests/ui/<feature>/`.
 
 4. **Platforms**:
 - This project is used on Ubuntu and Windows. Preserve existing platform guards and do not break either platform.

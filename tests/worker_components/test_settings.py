@@ -81,4 +81,4 @@ def test_get_subprocess_attempt_timeout_seconds_defaults_and_falls_back():
     assert worker_settings.get_subprocess_attempt_timeout_seconds(qsettings) == 90
 
     qsettings.value.side_effect = RuntimeError("boom")
-    assert worker_settings.get_subprocess_attempt_timeout_seconds(qsettings) in (120, 1800)
+    assert worker_settings.get_subprocess_attempt_timeout_seconds(qsettings) in (120, 600)

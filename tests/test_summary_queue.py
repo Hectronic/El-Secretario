@@ -1,7 +1,7 @@
 import unittest
 import os
+import tempfile
 from unittest.mock import MagicMock, patch
-from PyQt6.QtCore import QTimer, QCoreApplication
 from src.ui.summary_task_queue import (
     SummaryTaskQueueManager,
     _parse_task_extraction_result,
@@ -11,9 +11,8 @@ from src.database import DBManager
 
 class TestSummaryQueue(unittest.TestCase):
     def setUp(self):
-        self.db_name = "test_queue_db.sqlite"
-        if os.path.exists(self.db_name):
-            os.remove(self.db_name)
+        self.tmp_dir = tempfile.TemporaryDirectory(prefix="summary_queue_test_")
+        self.db_name = os.path.join(self.tmp_dir.name, "queue.sqlite")
         
         self.db = DBManager(self.db_name)
         # Avoid the real DB init by patching before init
@@ -23,8 +22,7 @@ class TestSummaryQueue(unittest.TestCase):
 
     def tearDown(self):
         self.queue_manager.cancel_all()
-        if os.path.exists(self.db_name):
-            os.remove(self.db_name)
+        self.tmp_dir.cleanup()
 
     def test_enqueue_recording_summary(self):
         # Mock AIAssistant to avoid actual AI calls
@@ -124,13 +122,14 @@ class TestSummaryQueue(unittest.TestCase):
 
     def test_task_extraction_queue_has_title(self):
         record_id = self.db.save("test.wav", "Transcription", 10.0, "My Recording")
-        self.queue_manager.enqueue_task_extraction(record_id, "Transcription", "tag1")
+        with patch('src.ui.summary_task_queue.AIAssistant'):
+            self.queue_manager.enqueue_task_extraction(record_id, "Transcription", "tag1")
         queued = self.queue_manager.get_current_task() or {}
         self.assertEqual(queued.get("type"), "task_extraction")
         self.assertEqual(queued.get("title"), "My Recording")
 
     def test_daily_summary_only_enqueues_daily_summary_task(self):
-        with patch('src.ui.summary_task_queue.AIAssistant'):
+        with patch.object(self.queue_manager, "_start_next_if_idle"):
             self.queue_manager.enqueue_daily_summary({"date": "2026-02-27", "tags_filter": ""})
             queued = self.queue_manager.get_queue_list()
             current = self.queue_manager.get_current_task() or {}
@@ -214,6 +213,45 @@ class TestSummaryQueue(unittest.TestCase):
         messages = [h.get("message") for h in traces]
         self.assertEqual(messages.count("Retrying 1"), 1)
         self.assertEqual(messages.count("Retrying 2"), 1)
+
+    def test_transcription_fatal_error_is_marked_skipped(self):
+        self.queue_manager._current_task = {
+            "type": "transcription",
+            "record_id": 77,
+            "title": "Recording 77",
+        }
+        skipped = []
+        failed = []
+        self.queue_manager.task_skipped.connect(lambda task, reason: skipped.append((task, reason)))
+        self.queue_manager.task_failed.connect(lambda task, reason: failed.append((task, reason)))
+
+        self.queue_manager._on_worker_error("Transcription subprocess timed out.")
+
+        self.assertEqual(len(skipped), 1)
+        self.assertEqual(len(failed), 0)
+        self.assertEqual(skipped[0][0]["type"], "transcription")
+        self.assertIn("timed out", skipped[0][1].lower())
+        history = self.queue_manager.get_session_history()
+        self.assertEqual(history[0]["event"], "skipped")
+
+    def test_non_fatal_error_still_emits_failed(self):
+        self.queue_manager._current_task = {
+            "type": "transcription",
+            "record_id": 77,
+            "title": "Recording 77",
+        }
+        skipped = []
+        failed = []
+        self.queue_manager.task_skipped.connect(lambda task, reason: skipped.append((task, reason)))
+        self.queue_manager.task_failed.connect(lambda task, reason: failed.append((task, reason)))
+
+        self.queue_manager._on_worker_error("Some other error")
+
+        self.assertEqual(len(skipped), 0)
+        self.assertEqual(len(failed), 1)
+        self.assertEqual(failed[0][0]["type"], "transcription")
+        history = self.queue_manager.get_session_history()
+        self.assertEqual(history[0]["event"], "failed")
 
     def test_enqueue_rag_reindex_deduplicates_by_scope(self):
         with patch.object(self.queue_manager, "_start_next_if_idle"):

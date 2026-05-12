@@ -2,21 +2,24 @@ import unittest
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
-from src import worker
+from src.worker_components import device_selection, engine as worker_engine, runtime as worker_runtime, subprocess_runner
+from src.worker_components.threads import ChatThread, SearchThread
+from src.worker_components.transcriber_thread import TranscriberThread
+from src.stt_providers.sherpa_onnx import model_manager as sherpa_model_manager
 
 
 class TestWorkerUnit(unittest.TestCase):
-    @patch("src.worker.subprocess_runner.run_backend_subprocess")
+    @patch("src.worker_components.subprocess_runner.run_backend_subprocess")
     def test_run_backend_subprocess_delegates(self, mock_run):
         mock_run.return_value = [{"text": "ok"}]
-        result = worker._run_backend_subprocess(backend="faster-whisper", payload={"audio_path": "x.wav"}, timeout_seconds=11)
+        result = subprocess_runner.run_backend_subprocess(backend="faster-whisper", payload={"audio_path": "x.wav"}, timeout_seconds=11)
         self.assertEqual(result[0]["text"], "ok")
         mock_run.assert_called_once_with(backend="faster-whisper", payload={"audio_path": "x.wav"}, timeout_seconds=11)
 
-    @patch("src.worker.subprocess_runner.run_transcription_in_subprocess")
+    @patch("src.worker_components.subprocess_runner.run_transcription_in_subprocess")
     def test_run_transcription_in_subprocess_delegates(self, mock_run):
         mock_run.return_value = [{"text": "ok"}]
-        result = worker._run_transcription_in_subprocess(
+        result = subprocess_runner.run_transcription_in_subprocess(
             audio_path="x.wav",
             model_size="base",
             device="cpu",
@@ -27,22 +30,23 @@ class TestWorkerUnit(unittest.TestCase):
         self.assertEqual(result[0]["text"], "ok")
         mock_run.assert_called_once()
 
-    @patch("src.worker.subprocess_runner.run_openai_whisper_fallback")
+    @patch("src.worker_components.subprocess_runner.run_openai_whisper_fallback")
     def test_run_openai_fallback_delegates(self, mock_run):
         mock_run.return_value = [{"text": "ok"}]
-        result = worker._run_openai_whisper_fallback(audio_path="x.wav", model_size="base", language="es")
+        result = subprocess_runner.run_openai_whisper_fallback(audio_path="x.wav", model_size="base", language="es")
         self.assertEqual(result[0]["text"], "ok")
         mock_run.assert_called_once_with(audio_path="x.wav", model_size="base", language="es")
 
-    @patch("src.worker.subprocess_runner.run_sherpa_onnx_transcription")
-    @patch("src.worker._ensure_sherpa_onnx_model_ready")
+    @patch("src.worker_components.subprocess_runner.run_sherpa_onnx_transcription")
+    @patch("src.stt_providers.sherpa_onnx.model_manager.ensure_sherpa_onnx_model_ready")
     def test_run_sherpa_onnx_transcription_delegates(self, mock_ensure, mock_run):
         mock_ensure.return_value = ("/m", {"type": "transducer"})
         mock_run.return_value = [{"text": "ok"}]
         settings = MagicMock()
-        result = worker._run_sherpa_onnx_transcription(audio_path="x.wav", language="es", settings=settings)
+        model_dir, model_config = sherpa_model_manager.ensure_sherpa_onnx_model_ready(settings)
+        result = subprocess_runner.run_sherpa_onnx_transcription(audio_path="x.wav", language="es", model_dir=model_dir, model_config=model_config)
         self.assertEqual(result[0]["text"], "ok")
-        mock_ensure.assert_called_once_with(settings, status_callback=None)
+        mock_ensure.assert_called_once_with(settings)
         mock_run.assert_called_once_with(
             audio_path="x.wav",
             language="es",
@@ -50,70 +54,79 @@ class TestWorkerUnit(unittest.TestCase):
             model_config={"type": "transducer"},
         )
 
-    @patch("src.worker.worker_sherpa.safe_extract_tarball")
+    @patch("src.stt_providers.sherpa_onnx.model_manager.safe_extract_tarball")
     def test_safe_extract_tarball_delegates(self, mock_safe_extract):
-        worker._safe_extract_tarball("archive.tar.bz2", "/tmp/dest")
+        sherpa_model_manager.safe_extract_tarball("archive.tar.bz2", "/tmp/dest")
         mock_safe_extract.assert_called_once_with("archive.tar.bz2", "/tmp/dest")
 
-    @patch("src.worker.worker_sherpa.download_sherpa_onnx_model")
+    @patch("src.stt_providers.sherpa_onnx.model_manager.download_sherpa_onnx_model")
     def test_download_sherpa_model_delegates(self, mock_download):
         cb = MagicMock()
-        worker._download_sherpa_onnx_model("https://example.com/model.tar.bz2", "/tmp", status_callback=cb)
+        sherpa_model_manager.download_sherpa_onnx_model("https://example.com/model.tar.bz2", "/tmp", status_callback=cb)
         mock_download.assert_called_once_with("https://example.com/model.tar.bz2", "/tmp", status_callback=cb)
 
-    @patch("src.worker.worker_sherpa.ensure_sherpa_onnx_model_ready")
+    @patch("src.stt_providers.sherpa_onnx.model_manager.ensure_sherpa_onnx_model_ready")
     def test_ensure_sherpa_model_ready_delegates(self, mock_ensure):
         settings = MagicMock()
         mock_ensure.return_value = ("/m", {"type": "transducer"})
-        model_dir, config = worker._ensure_sherpa_onnx_model_ready(settings)
+        model_dir, config = sherpa_model_manager.ensure_sherpa_onnx_model_ready(settings)
         self.assertEqual(model_dir, "/m")
         self.assertEqual(config["type"], "transducer")
-        mock_ensure.assert_called_once_with(settings, status_callback=None)
+        mock_ensure.assert_called_once_with(settings)
 
-    @patch("src.worker.worker_sherpa.get_transcription_preflight_error")
+    @patch("src.stt_providers.sherpa_onnx.model_manager.get_transcription_preflight_error")
     def test_preflight_delegates(self, mock_preflight):
         settings = MagicMock()
         mock_preflight.return_value = "bad"
-        self.assertEqual(worker.get_transcription_preflight_error("sherpa-onnx", settings), "bad")
+        self.assertEqual(sherpa_model_manager.get_transcription_preflight_error("sherpa-onnx", settings), "bad")
         mock_preflight.assert_called_once_with("sherpa-onnx", settings)
 
-    @patch("src.worker.worker_runtime.pkg_version", return_value="<not-installed>")
+    @patch("src.worker_components.runtime.pkg_version", return_value="<not-installed>")
     def test_pkg_version_not_installed(self, _mock_pkg_version):
-        self.assertEqual(worker._pkg_version("not-installed-pkg"), "<not-installed>")
+        self.assertEqual(worker_runtime.pkg_version("not-installed-pkg"), "<not-installed>")
 
-    @patch("src.worker.worker_runtime.pkg_version", return_value="<unknown>")
+    @patch("src.worker_components.runtime.pkg_version", return_value="<unknown>")
     def test_pkg_version_unknown_error(self, _mock_pkg_version):
-        self.assertEqual(worker._pkg_version("broken-pkg"), "<unknown>")
+        self.assertEqual(worker_runtime.pkg_version("broken-pkg"), "<unknown>")
 
     def test_get_pyannote_pipeline_class_caches_none_after_import_error(self):
-        worker.worker_runtime._PYANNOTE_IMPORT_ATTEMPTED = False
-        worker.worker_runtime._PYANNOTE_PIPELINE_CLS = None
+        worker_runtime._PYANNOTE_IMPORT_ATTEMPTED = False
+        worker_runtime._PYANNOTE_PIPELINE_CLS = None
         with patch("builtins.__import__", side_effect=ImportError("missing")):
-            result = worker._get_pyannote_pipeline_class()
+            result = worker_runtime.get_pyannote_pipeline_class()
         self.assertIsNone(result)
-        self.assertTrue(worker.worker_runtime._PYANNOTE_IMPORT_ATTEMPTED)
+        self.assertTrue(worker_runtime._PYANNOTE_IMPORT_ATTEMPTED)
 
-    @patch("src.worker.platform.system", return_value="Linux")
-    @patch("src.worker.QSettings")
+    @patch("src.worker_components.transcriber_thread.platform.system", return_value="Linux")
+    @patch("src.worker_components.transcriber_thread.QSettings")
     def test_get_subprocess_attempt_timeout_defaults_on_settings_error(self, MockQSettings, _mock_system):
         MockQSettings.side_effect = RuntimeError("settings-fail")
-        thread = worker.TranscriberThread("test.wav")
-        self.assertEqual(thread._get_subprocess_attempt_timeout_seconds(), 1800)
+        thread = TranscriberThread("test.wav")
+        self.assertEqual(thread._get_subprocess_attempt_timeout_seconds(), 600)
+
+    def test_is_transcription_fatal_failure_matches_timeout_and_crash(self):
+        self.assertTrue(worker_engine.is_transcription_fatal_failure("Transcription subprocess timed out."))
+        self.assertTrue(
+            worker_engine.is_transcription_fatal_failure(
+                "Transcription subprocess crashed with exit code -9 (possible native crash in transcription backend)."
+            )
+        )
+        self.assertFalse(worker_engine.is_transcription_fatal_failure("boom"))
 
 
 class TestTranscriberThreadRunBranches(unittest.TestCase):
     def _build_thread(self, **kwargs):
-        thread = worker.TranscriberThread("test.wav", **kwargs)
+        thread = TranscriberThread("test.wav", **kwargs)
         thread.finished = MagicMock()
         thread.progress = MagicMock()
         thread.status_update = MagicMock()
         thread.error = MagicMock()
         return thread
 
-    @patch("src.worker.platform.system", return_value="Linux")
-    @patch("src.worker.QSettings")
-    @patch("src.worker.os.path.getsize", return_value=100)
-    @patch("src.worker._run_transcription_in_subprocess", side_effect=RuntimeError("boom"))
+    @patch("src.worker_components.transcriber_thread.platform.system", return_value="Linux")
+    @patch("src.worker_components.transcriber_thread.QSettings")
+    @patch("src.worker_components.transcriber_thread.os.path.getsize", return_value=100)
+    @patch("src.worker_components.transcriber_thread._run_transcription_in_subprocess", side_effect=RuntimeError("boom"))
     def test_run_non_windows_runtimeerror_emits_error(
         self, _mock_run, _mock_getsize, MockQSettings, _mock_system
     ):
@@ -123,14 +136,14 @@ class TestTranscriberThreadRunBranches(unittest.TestCase):
         thread.error.emit.assert_called_once()
         self.assertIn("boom", thread.error.emit.call_args.args[0])
 
-    @patch("src.worker.platform.system", return_value="Windows")
-    @patch("src.worker.torch.cuda.empty_cache")
-    @patch("src.worker.torch.cuda.synchronize", side_effect=RuntimeError("sync-fail"))
-    @patch("src.worker.torch.cuda.is_available", return_value=True)
-    @patch("src.worker.QSettings")
-    @patch("src.worker.os.path.getsize", return_value=100)
-    @patch("src.worker._run_openai_whisper_fallback", side_effect=RuntimeError("fallback exploded"))
-    @patch("src.worker._run_transcription_in_subprocess")
+    @patch("src.worker_components.transcriber_thread.platform.system", return_value="Windows")
+    @patch("src.worker_components.transcriber_thread.torch.cuda.empty_cache")
+    @patch("src.worker_components.transcriber_thread.torch.cuda.synchronize", side_effect=RuntimeError("sync-fail"))
+    @patch("src.worker_components.transcriber_thread.torch.cuda.is_available", return_value=True)
+    @patch("src.worker_components.transcriber_thread.QSettings")
+    @patch("src.worker_components.transcriber_thread.os.path.getsize", return_value=100)
+    @patch("src.worker_components.transcriber_thread._run_openai_whisper_fallback", side_effect=RuntimeError("fallback exploded"))
+    @patch("src.worker_components.transcriber_thread._run_transcription_in_subprocess")
     def test_run_windows_fallback_failure_emits_error_and_tolerates_cuda_sync_error(
         self,
         _mock_run,
@@ -156,10 +169,10 @@ class TestTranscriberThreadRunBranches(unittest.TestCase):
         self.assertIn("fallback exploded", thread.error.emit.call_args.args[0])
         mock_cuda_empty_cache.assert_called_once()
 
-    @patch("src.worker.platform.system", return_value="Linux")
-    @patch("src.worker.QSettings")
-    @patch("src.worker.os.path.getsize", return_value=100)
-    @patch("src.worker._run_transcription_in_subprocess")
+    @patch("src.worker_components.transcriber_thread.platform.system", return_value="Linux")
+    @patch("src.worker_components.transcriber_thread.QSettings")
+    @patch("src.worker_components.transcriber_thread.os.path.getsize", return_value=100)
+    @patch("src.worker_components.transcriber_thread._run_transcription_in_subprocess")
     def test_run_cancelled_during_progress_loop(self, mock_run_subprocess, _mock_getsize, MockQSettings, _mock_system):
         mock_run_subprocess.return_value = [{"start": 1.0, "end": 2.0, "text": "hello"}]
         MockQSettings.return_value = MagicMock()
@@ -172,12 +185,12 @@ class TestTranscriberThreadRunBranches(unittest.TestCase):
         thread.finished.emit.assert_not_called()
         thread.error.emit.assert_not_called()
 
-    @patch("src.worker.platform.system", return_value="Linux")
-    @patch("src.worker._should_use_gpu_for_diarization", return_value=(False, "test guard"))
-    @patch("src.worker.QSettings")
-    @patch("src.worker.os.path.getsize", return_value=100)
-    @patch("src.worker._get_pyannote_pipeline_class")
-    @patch("src.worker._run_transcription_in_subprocess")
+    @patch("src.worker_components.transcriber_thread.platform.system", return_value="Linux")
+    @patch("src.worker_components.transcriber_thread._should_use_gpu_for_diarization", return_value=(False, "test guard"))
+    @patch("src.worker_components.transcriber_thread.QSettings")
+    @patch("src.worker_components.transcriber_thread.os.path.getsize", return_value=100)
+    @patch("src.worker_components.transcriber_thread._get_pyannote_pipeline_class")
+    @patch("src.worker_components.transcriber_thread._run_transcription_in_subprocess")
     def test_run_diarization_labels_and_scaled_progress(
         self,
         mock_run_subprocess,
@@ -225,12 +238,12 @@ class TestTranscriberThreadRunBranches(unittest.TestCase):
         self.assertIn("[SPEAKER_02]", result["text"])
         pipeline.to.assert_not_called()
 
-    @patch("src.worker.platform.system", return_value="Linux")
-    @patch("src.worker.QSettings")
-    @patch("src.worker.os.path.getsize", return_value=100)
-    @patch("src.worker.logging.warning")
-    @patch("src.worker._get_pyannote_pipeline_class", return_value=None)
-    @patch("src.worker._run_transcription_in_subprocess")
+    @patch("src.worker_components.transcriber_thread.platform.system", return_value="Linux")
+    @patch("src.worker_components.transcriber_thread.QSettings")
+    @patch("src.worker_components.transcriber_thread.os.path.getsize", return_value=100)
+    @patch("src.worker_components.transcriber_thread.logging.warning")
+    @patch("src.worker_components.transcriber_thread._get_pyannote_pipeline_class", return_value=None)
+    @patch("src.worker_components.transcriber_thread._run_transcription_in_subprocess")
     def test_run_diarization_requested_but_pyannote_unavailable_logs_warning(
         self,
         mock_run_subprocess,

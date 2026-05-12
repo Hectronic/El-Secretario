@@ -1,7 +1,7 @@
 import pytest
 from unittest.mock import patch
 from PyQt6.QtCore import QCoreApplication
-from src.worker import TranscriberThread
+from src.worker_components.transcriber_thread import TranscriberThread
 
 @pytest.fixture
 def app(qtbot):
@@ -16,9 +16,9 @@ def test_transcriber_thread_oom_fallback(app, tmp_path):
     # Force TranscriberThread to start with cuda. The subprocess should fail once
     # with OOM and then retry on CPU.
     with patch("torch.cuda.is_available", return_value=True), \
-         patch("src.worker.platform.system", return_value="Linux"), \
-         patch("src.worker._run_transcription_in_subprocess") as mock_run_subprocess, \
-         patch("src.worker.os.path.getsize", return_value=100):
+         patch("src.worker_components.transcriber_thread.platform.system", return_value="Linux"), \
+         patch("src.worker_components.transcriber_thread._run_transcription_in_subprocess") as mock_run_subprocess, \
+         patch("src.worker_components.transcriber_thread.os.path.getsize", return_value=100):
 
         mock_run_subprocess.side_effect = [
             RuntimeError("CUDA failed with error out of memory"),

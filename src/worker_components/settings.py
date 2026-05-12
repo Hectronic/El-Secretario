@@ -31,7 +31,7 @@ def persist_working_transcription_settings(settings, *, effective_backend: str, 
 
 
 def get_subprocess_attempt_timeout_seconds(settings) -> int:
-    default_timeout = 120 if platform.system() == "Windows" else 1800
+    default_timeout = 120 if platform.system() == "Windows" else 600
     try:
         configured = settings.value(
             "transcription_attempt_timeout_seconds",

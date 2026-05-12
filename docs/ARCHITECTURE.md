@@ -1,0 +1,110 @@
+# Architecture Notes
+
+This document records the current architecture and the target direction for expanding El Secretario without returning to large flat modules.
+
+## Current Shape
+
+El Secretario is a PyQt desktop application with local persistence, audio/STT processing, AI-assisted summarization, RAG search, and chat workflows.
+
+Main runtime areas:
+
+- `main.py`: application bootstrap, environment guards, Qt application setup, and `MainWindow` launch.
+- `src/ui/`: PyQt widgets and UI coordinators.
+- `src/ui/main_window/`: main shell and coordinators for tabs, sidebar actions, sidebar content, sidebar sync, setup actions, and floating chat.
+  - `content_tabs.py` now owns note/chat/summary tab lifecycle and context-driven tab openers.
+- `src/ui/chat/`: pure-ish chat state/rendering/context helpers used by `ChatWidget`.
+- `src/ui/settings/`: settings panels grouped by product area.
+- `src/ui/audio_editor/`: waveform editor and audio-editing UI.
+- `src/worker_components/`: transcription worker internals, runtime/device selection, subprocess isolation, and fallback policy.
+- `src/stt_providers/`: provider adapters for `faster-whisper`, `openai-whisper`, and `sherpa-onnx`.
+- `src/database.py`: SQLite schema, migrations, and persistence operations for records, chats, summaries, logs, and tasks.
+- `src/notebook_database.py`: notebook-specific persistence.
+- `src/rag_engine.py`: Chroma-backed RAG indexing/search with Windows-safe subprocess fallbacks.
+- `src/ai_provider.py`, `src/ai_assistant.py`, `src/summary_generator.py`: AI provider abstraction and summary/chat generation flows.
+
+## Refactor Baseline
+
+The repository has already moved several high-growth areas away from older flat modules:
+
+- `src/ui/main_window.py` has been split into the `src/ui/main_window/` package. `MainWindow` remains in `src/ui/main_window/__init__.py`, while tab handling, floating chat, sidebar actions, sidebar content, sidebar sync, and setup actions live in focused coordinators.
+- Chat-specific helpers have been extracted from `src/ui/chat_widget.py` into `src/ui/chat/`, including context building, session state, session loading/applying, rendering, theme styles, header state, busy state, and the add-context dialog.
+- Settings UI has been split into `src/ui/settings/` panels for audio, general, prompts, and RAG configuration.
+- The audio editor has moved from a flat widget into `src/ui/audio_editor/`, with separate widget and waveform modules.
+- Legacy worker code has moved from `src/worker.py` and `src/whisper_subprocess.py` into `src/worker_components/` plus provider adapters in `src/stt_providers/`.
+- Shared dialogs/components have started moving out of broad modules into targeted files such as `src/ui/filter_dialog.py`, `src/ui/speaker_dialog.py`, `src/ui/secret_field_widget.py`, and `src/ui/context_manager_panel.py`.
+- Summary queue helper logic has started moving from `src/ui/summary_task_queue.py` to `src/app/summary_queue/`, leaving the existing Qt queue manager as the compatibility/UI adapter.
+- Tests now partially mirror the new feature packages under `tests/ui/main_window/`, `tests/ui/chat/`, `tests/ui/settings/`, `tests/ui/audio_editor/`, `tests/worker_components/`, and `tests/stt_providers/`.
+
+See `docs/specs/REFACTOR-2026-05-feature-packages.md` for the behavior-preserving refactor record.
+
+## Product Capabilities
+
+The product currently has these major capability groups:
+
+- Capture and import audio.
+- Transcribe and diarize recordings with configurable STT backends.
+- Edit recordings with safe backups and automatic retranscription.
+- Organize recordings as favorites, tags/collections, notebooks, and calendar views.
+- Search semantically with RAG and keyword fallback behavior.
+- Chat with selected recordings, dates, notebooks, collections, and explicit context.
+- Generate recording, daily, and weekly summaries.
+- Extract and manage tasks from recordings and summaries.
+- Export/import metadata and application data.
+- Configure providers, prompts, runtime preferences, RAG behavior, theme, and secrets.
+
+## Boundaries
+
+Use these boundaries when adding new features:
+
+- UI widgets own presentation, user interaction, and Qt signal wiring only.
+- Coordinators own cross-widget orchestration inside a UI area, especially `MainWindow` behavior.
+- Services own non-Qt business workflows and should be testable without constructing a widget.
+- Provider adapters own external/runtime-specific integration details.
+- Persistence classes own SQL and data shape translation, not UI decisions.
+- Specs own expected product behavior and acceptance tests before implementation.
+
+## Current Architecture Risks
+
+- `src/ui/main_window/__init__.py` remains the main orchestration hotspot. It still mixes app composition, tab lifecycle, chat lifecycle, sidebar state, notebook actions, search, settings, RAG runtime, task queue status, and startup summary scheduling.
+- `src/ui/main_window/bootstrap.py` now owns the deterministic startup sequence, but the remaining shell still owns a lot of application wiring.
+- `src/ui/main_window/content_tabs.py` has started pulling tab-opening behavior out of the shell, but `MainWindow` still has legacy wrappers for some content actions.
+- `src/database.py` is a broad repository and migration layer. It contains unrelated aggregates in one class: records, chat sessions, summaries, tasks, logs, import helpers, and schema migrations.
+- `src/ui/recording_widget.py` mixes record metadata editing, playback, transcription, AI actions, task extraction, RAG indexing, speaker management, and legacy trim controls.
+- `src/ui/welcome_widget.py` mixes landing page layout, recorder configuration, microphone testing, favorites, search, today view, and settings persistence.
+- `src/ui/summary_task_queue.py` is located under UI but behaves like an application service for background jobs, retries, queue history, RAG reindexing, transcription, summaries, and task extraction.
+- `src/rag_engine.py` combines vector store adapter, in-memory fallback, subprocess entrypoints, keyword fallback, Chroma compatibility, and Windows safety policy.
+- `src/ui/styles.py` is a large shared stylesheet module. It is useful centrally, but feature-specific styling should not keep growing there by default.
+
+## Target Direction
+
+Prefer incremental extraction over large rewrites.
+
+Recommended package direction:
+
+- `src/app/`: application services and use cases that coordinate persistence, workers, RAG, and AI without depending on widgets.
+- `src/domain/`: small dataclasses/value objects for records, tasks, summaries, chat contexts, transcription requests, and audio-edit plans.
+- `src/persistence/`: repositories and migrations split by aggregate.
+- `src/services/`: reusable workflows such as transcription orchestration, summary scheduling, task extraction, RAG indexing, export/import, and audio editing.
+- `src/ui/<feature>/`: widgets plus feature-specific presenters/coordinators.
+- `src/integrations/`: AI, STT, vector store, filesystem, and platform-specific adapters.
+
+Do not move everything at once. Move code when a spec or change touches that area and tests can pin behavior first.
+
+## Refactor Queue
+
+Recommended next cuts:
+
+1. Continue extracting summary/task queue logic out of `src/ui/summary_task_queue.py` into `src/app/summary_queue/`, leaving a thin Qt adapter for signals.
+2. Split `DBManager` into repositories after adding contract tests for each aggregate: records, chats, summaries, tasks, logs, and imports.
+3. Move RAG subprocess/keyword/vector-store adapter logic out of `RAGEngine` into smaller adapter modules.
+4. Continue shrinking `MainWindow` by moving notebook, search, settings, collections/calendar, and the remaining content wrappers into focused coordinators.
+5. Split `RecordingWidget` into metadata, playback, transcription, AI actions, and task panels once tests cover the current widget behavior.
+6. Move `WelcomeWidget` recorder configuration and microphone test behavior into a separate component/service.
+
+## Testing Expectations
+
+- Use `./.venv/bin/python -m pytest` first, then `./venv/bin/python -m pytest`, or `./run_with_test.sh`.
+- New code should have tests mirroring the source package.
+- Refactors should add characterization tests before behavior-preserving moves.
+- Shared UI, worker, STT, or threading changes should run focused tests and then the full suite before finishing.
+- Refactors should use the `spec-driven-refactor` skill so specs and architecture notes stay current.

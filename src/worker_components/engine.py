@@ -25,6 +25,20 @@ def is_subprocess_timeout(error: RuntimeError) -> bool:
     return "subprocess timed out" in str(error).lower()
 
 
+def is_transcription_fatal_failure(error) -> bool:
+    """Return True for backend failures that should be skipped immediately.
+
+    These are the cases where the subprocess already failed hard enough that
+    retrying the same file usually just burns time without improving the result.
+    """
+    message = str(error or "").lower()
+    return (
+        "subprocess timed out" in message
+        or "subprocess crashed with exit code" in message
+        or "subprocess finished without returning a result" in message
+    )
+
+
 def subprocess_fallback_profiles(device: str, compute_type: str, *, is_windows: bool):
     candidates = []
     if device == "cuda":

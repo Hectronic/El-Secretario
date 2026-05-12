@@ -29,6 +29,11 @@ Apply this guardrail to any code change in this repository.
 5. Keep docs aligned with feature changes.
 - Update relevant docs after significant changes.
 - If a document exists in multiple languages, update all language variants.
+- Keep the refactored UI architecture documented in this repo:
+  - `src/ui/main_window/` is the home for `MainWindow` coordinators.
+  - `src/ui/chat/` is the home for chat-specific dialogs and helpers.
+  - Shared chat UI should live in `src/ui/context_manager_panel.py`.
+  - Tests should follow the package structure under `tests/ui/`.
 
 6. Preserve transcription runtime preferences.
 - Respect configured STT backend, device, compute type, and `force_cpu`.
