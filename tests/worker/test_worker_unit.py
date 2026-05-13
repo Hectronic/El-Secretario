@@ -104,6 +104,15 @@ class TestWorkerUnit(unittest.TestCase):
         thread = TranscriberThread("test.wav")
         self.assertEqual(thread._get_subprocess_attempt_timeout_seconds(), 600)
 
+    @patch("src.worker_components.transcriber_thread.platform.system", return_value="Linux")
+    @patch("src.worker_components.transcriber_thread.QSettings")
+    def test_get_subprocess_attempt_timeout_scales_with_duration(self, MockQSettings, _mock_system):
+        qsettings = MagicMock()
+        qsettings.value.return_value = "600"
+        MockQSettings.return_value = qsettings
+        thread = TranscriberThread("test.wav", total_duration=3600)  # 1 hour
+        self.assertEqual(thread._get_subprocess_attempt_timeout_seconds(), 4620)
+
     def test_is_transcription_fatal_failure_matches_timeout_and_crash(self):
         self.assertTrue(worker_engine.is_transcription_fatal_failure("Transcription subprocess timed out."))
         self.assertTrue(
@@ -112,6 +121,77 @@ class TestWorkerUnit(unittest.TestCase):
             )
         )
         self.assertFalse(worker_engine.is_transcription_fatal_failure("boom"))
+
+    @patch("src.worker_components.transcriber_thread.trim_audio_segment")
+    @patch("src.worker_components.transcriber_thread.tempfile.TemporaryDirectory")
+    def test_chunked_transcription_splits_audio_and_offsets_segments(self, mock_tmp_dir, mock_trim):
+        tmp_ctx = MagicMock()
+        tmp_ctx.__enter__.return_value = "/tmp/chunks"
+        tmp_ctx.__exit__.return_value = None
+        mock_tmp_dir.return_value = tmp_ctx
+
+        thread = TranscriberThread("long.wav", model_size="base", total_duration=2500)
+        calls = []
+
+        def _fake_once(*, audio_path, duration_seconds):
+            calls.append((audio_path, duration_seconds))
+            return [{"start": 0.0, "end": 10.0, "text": "ok"}]
+
+        thread._transcribe_faster_whisper_once = _fake_once
+        thread.isInterruptionRequested = MagicMock(return_value=False)
+        thread.status_update = MagicMock()
+
+        merged = thread._transcribe_faster_whisper_chunked(
+            chunk_cfg={
+                "enabled": True,
+                "threshold_seconds": 1800,
+                "chunk_size_seconds": 1000,
+                "overlap_seconds": 100,
+            }
+        )
+
+        self.assertEqual(len(calls), 3)
+        self.assertEqual(calls[0][1], 1000)
+        self.assertEqual(calls[1][1], 1000)
+        self.assertEqual(calls[2][1], 700)
+        self.assertEqual(len(merged), 3)
+        self.assertEqual(merged[0]["start"], 0.0)
+        self.assertEqual(merged[1]["start"], 900.0)
+        self.assertEqual(merged[2]["start"], 1800.0)
+        self.assertEqual(mock_trim.call_count, 3)
+
+    @patch("src.worker_components.transcriber_thread._run_transcription_in_subprocess")
+    @patch("src.worker_components.transcriber_thread.QSettings")
+    @patch("src.worker_components.transcriber_thread.platform.system", return_value="Linux")
+    def test_run_chunking_cancellation_exits_without_finished_or_error(
+        self,
+        _mock_system,
+        MockQSettings,
+        _mock_run_subprocess,
+    ):
+        qsettings = MagicMock()
+        qsettings.value.side_effect = lambda key, default=None, type=None: {
+            "transcription_chunking_enabled": True,
+            "transcription_chunk_threshold_seconds": 10,
+            "transcription_chunk_size_seconds": 10,
+            "transcription_chunk_overlap_seconds": 1,
+            "transcription_attempt_timeout_seconds": 600,
+        }.get(key, default)
+        MockQSettings.return_value = qsettings
+
+        thread = TranscriberThread("long.wav", model_size="base", total_duration=120)
+        thread.finished = MagicMock()
+        thread.progress = MagicMock()
+        thread.status_update = MagicMock()
+        thread.error = MagicMock()
+        thread._transcribe_faster_whisper_chunked = MagicMock(return_value=[])
+        thread.isInterruptionRequested = MagicMock(return_value=True)
+
+        thread.run()
+
+        thread.status_update.emit.assert_any_call("Cancelled.")
+        thread.finished.emit.assert_not_called()
+        thread.error.emit.assert_not_called()
 
 
 class TestTranscriberThreadRunBranches(unittest.TestCase):

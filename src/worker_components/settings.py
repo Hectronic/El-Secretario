@@ -41,3 +41,47 @@ def get_subprocess_attempt_timeout_seconds(settings) -> int:
         return max(30, int(configured))
     except Exception:
         return default_timeout
+
+
+def get_subprocess_attempt_timeout_for_duration_seconds(
+    settings,
+    *,
+    total_duration_seconds: float | int | None,
+) -> int:
+    """Return per-attempt subprocess timeout scaled for long recordings.
+
+    The configured timeout remains the baseline. For long recordings we add
+    duration-based slack to avoid false timeouts while keeping an upper cap so
+    truly stuck subprocesses still terminate.
+    """
+    baseline = get_subprocess_attempt_timeout_seconds(settings)
+    try:
+        duration = float(total_duration_seconds or 0.0)
+    except Exception:
+        duration = 0.0
+
+    if duration <= 0.0:
+        return baseline
+
+    # Scale with audio length while keeping a strict upper bound.
+    scaled = int(round((duration * 1.2) + 300.0))
+    return max(30, min(5400, max(baseline, scaled)))
+
+
+def get_transcription_chunking_config(settings) -> dict:
+    """Return chunking config for long recordings."""
+    enabled = bool(settings.value("transcription_chunking_enabled", True, type=bool))
+    threshold = max(300, int(settings.value("transcription_chunk_threshold_seconds", 1800, type=int)))
+    chunk_size = max(180, int(settings.value("transcription_chunk_size_seconds", 1200, type=int)))
+    overlap = max(0, int(settings.value("transcription_chunk_overlap_seconds", 15, type=int)))
+
+    # Ensure forward progress when iterating chunks.
+    if overlap >= chunk_size:
+        overlap = max(0, chunk_size // 10)
+
+    return {
+        "enabled": enabled,
+        "threshold_seconds": threshold,
+        "chunk_size_seconds": chunk_size,
+        "overlap_seconds": overlap,
+    }

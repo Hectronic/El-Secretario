@@ -191,6 +191,23 @@ class TestSummaryQueue(unittest.TestCase):
             self.assertIn("queued", events)
             self.assertIn("started", events)
 
+    def test_runtime_stats_counts_history_and_live_state(self):
+        self.queue_manager._queue.append({"type": "summary"})
+        self.queue_manager._current_task = {"type": "transcription", "record_id": 10}
+        self.queue_manager._append_history("queued", {"type": "summary"})
+        self.queue_manager._append_history("finished", {"type": "summary"})
+        self.queue_manager._append_history("failed", {"type": "summary"}, "boom")
+        self.queue_manager._append_history("skipped", {"type": "transcription"}, "dup")
+
+        stats = self.queue_manager.get_runtime_stats()
+
+        self.assertEqual(stats["running"], 1)
+        self.assertEqual(stats["pending"], 1)
+        self.assertEqual(stats["queued"], 1)
+        self.assertEqual(stats["finished"], 1)
+        self.assertEqual(stats["failed"], 1)
+        self.assertEqual(stats["skipped"], 1)
+
     def test_external_trace_is_added_to_session_history(self):
         self.queue_manager.add_external_trace(
             "Retrying transcription with safer profile",

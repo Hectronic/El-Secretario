@@ -229,6 +229,8 @@ class MainWindow(QMainWindow):
         status = self.statusBar()
         self.task_status_label = QLabel("Summary queue idle.")
         self.task_status_label.setStyleSheet("padding-right: 8px;")
+        self.task_metrics_label = QLabel("Q r0 p0 f0 e0 s0")
+        self.task_metrics_label.setStyleSheet("padding-right: 8px; color: #90A4AE;")
         
         self.open_queue_btn = QPushButton("📋 View Queue")
         self.open_queue_btn.setFlat(True)
@@ -243,8 +245,10 @@ class MainWindow(QMainWindow):
         self.task_queue_progress.setValue(0)
         
         status.addPermanentWidget(self.task_status_label, 1)
+        status.addPermanentWidget(self.task_metrics_label)
         status.addPermanentWidget(self.open_queue_btn)
         status.addPermanentWidget(self.task_queue_progress)
+        self._refresh_task_metrics()
 
     def open_queue_manager_tab(self):
         """Open the task queue management tab."""
@@ -268,6 +272,27 @@ class MainWindow(QMainWindow):
         self.summary_task_queue.queue_changed.connect(self._on_summary_queue_changed)
         self.summary_task_queue.task_progress.connect(self.handle_progress)
         self.summary_task_queue.task_status_update.connect(self.handle_status_message)
+        if hasattr(self.summary_task_queue, "history_changed"):
+            self.summary_task_queue.history_changed.connect(lambda *_: self._refresh_task_metrics())
+
+    def _refresh_task_metrics(self):
+        try:
+            stats = self.summary_task_queue.get_runtime_stats()
+        except Exception:
+            stats = None
+        if not isinstance(stats, dict):
+            pending = int(getattr(self.summary_task_queue, "pending_count", 0) or 0)
+            running = 1 if getattr(self.summary_task_queue, "is_running", False) else 0
+            self.task_metrics_label.setText(f"Q r{running} p{pending} f0 e0 s0")
+            return
+        self.task_metrics_label.setText(
+            "Q "
+            f"r{int(stats.get('running', 0))} "
+            f"p{int(stats.get('pending', 0))} "
+            f"f{int(stats.get('finished', 0))} "
+            f"e{int(stats.get('failed', 0))} "
+            f"s{int(stats.get('skipped', 0))}"
+        )
 
     def _format_task_name(self, task):
         t_type = task.get("type")
@@ -295,12 +320,14 @@ class MainWindow(QMainWindow):
         self.task_status_label.setText(
             f"Queued task: {self._format_task_name(task)} (#{position} in queue)"
         )
+        self._refresh_task_metrics()
 
     def _on_summary_task_started(self, task, remaining_pending):
         self.regen_worker = self.summary_task_queue.current_worker
         self.task_status_label.setText(
             f"Running: {self._format_task_name(task)} ({self.summary_task_queue.pending_count} pending)"
         )
+        self._refresh_task_metrics()
 
     def _on_summary_task_finished(self, task):
         try:
@@ -360,6 +387,7 @@ class MainWindow(QMainWindow):
             self.task_status_label.setText(
                 f"Finished: {self._format_task_name(task)}"
             )
+            self._refresh_task_metrics()
         except Exception as e:
             import logging
             logging.error(f"Error in _on_summary_task_finished: {e}", exc_info=True)
@@ -370,6 +398,7 @@ class MainWindow(QMainWindow):
             self.task_status_label.setText(
                 f"Regeneration failed for {self._format_task_name(task)}: {error_msg}"
             )
+            self._refresh_task_metrics()
         except Exception:
             pass
 
@@ -377,9 +406,11 @@ class MainWindow(QMainWindow):
         self.task_status_label.setText(
             f"Skipped regeneration for {self._format_task_name(task)}: {reason}"
         )
+        self._refresh_task_metrics()
 
     def _on_summary_queue_changed(self, pending_count, is_running):
         self.refresh_tasks_sidebar()
+        self._refresh_task_metrics()
         if is_running:
             self.task_queue_progress.setRange(0, 0)
             self.task_queue_progress.setVisible(True)

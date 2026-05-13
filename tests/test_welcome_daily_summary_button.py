@@ -645,6 +645,7 @@ class TestMainWindowDailySummaryIntegration(unittest.TestCase):
 
         self.window._on_summary_queue_changed(3, True)
         self.window.refresh_tasks_sidebar.assert_called()
+        self.assertTrue(self.window.task_metrics_label.text().startswith("Q "))
         self.assertEqual(self.window.task_queue_progress.minimum(), 0)
         self.assertEqual(self.window.task_queue_progress.maximum(), 0)
 
@@ -653,6 +654,7 @@ class TestMainWindowDailySummaryIntegration(unittest.TestCase):
         self.assertEqual(self.window.task_queue_progress.maximum(), 1)
         self.assertEqual(self.window.task_queue_progress.value(), 0)
         self.assertEqual(self.window.task_status_label.text(), "Summary queue idle.")
+        self.assertIn("p0", self.window.task_metrics_label.text())
 
         self.window.summary_task_queue._current_worker = None
         self.window.handle_progress(-1)

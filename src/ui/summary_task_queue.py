@@ -138,6 +138,25 @@ class SummaryTaskQueueManager(QObject):
         """Return session execution history (newest first)."""
         return self._history.newest_first()
 
+    def get_runtime_stats(self) -> Dict[str, int]:
+        """Return lightweight runtime counters for queue observability widgets."""
+        stats = {
+            "running": 1 if self._current_task is not None else 0,
+            "pending": len(self._queue),
+            "queued": 0,
+            "finished": 0,
+            "failed": 0,
+            "skipped": 0,
+            "cancelled": 0,
+            "cleared": 0,
+            "trace": 0,
+        }
+        for entry in self._history.newest_first():
+            event = str(entry.get("event") or "").strip().lower()
+            if event in stats:
+                stats[event] += 1
+        return stats
+
     def remove_task_at(self, index: int) -> bool:
         """Remove a task from the pending queue at the given index."""
         if 0 <= index < len(self._queue):

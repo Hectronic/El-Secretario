@@ -82,3 +82,48 @@ def test_get_subprocess_attempt_timeout_seconds_defaults_and_falls_back():
 
     qsettings.value.side_effect = RuntimeError("boom")
     assert worker_settings.get_subprocess_attempt_timeout_seconds(qsettings) in (120, 600)
+
+
+def test_get_subprocess_attempt_timeout_for_duration_uses_baseline_for_short_audio():
+    qsettings = MagicMock()
+    qsettings.value.return_value = "120"
+
+    timeout = worker_settings.get_subprocess_attempt_timeout_for_duration_seconds(
+        qsettings,
+        total_duration_seconds=30,
+    )
+
+    assert timeout == 336
+
+
+def test_get_subprocess_attempt_timeout_for_duration_scales_for_long_audio_with_cap():
+    qsettings = MagicMock()
+    qsettings.value.return_value = "120"
+
+    timeout = worker_settings.get_subprocess_attempt_timeout_for_duration_seconds(
+        qsettings,
+        total_duration_seconds=7200,  # 2 hours
+    )
+
+    assert timeout == 5400
+
+
+def test_get_transcription_chunking_config_applies_defaults_and_clamps():
+    qsettings = MagicMock()
+
+    def _value(key, default=None, type=None):
+        values = {
+            "transcription_chunking_enabled": True,
+            "transcription_chunk_threshold_seconds": 60,   # clamped to 300
+            "transcription_chunk_size_seconds": 120,       # clamped to 180
+            "transcription_chunk_overlap_seconds": 240,    # adjusted below chunk size
+        }
+        return values.get(key, default)
+
+    qsettings.value.side_effect = _value
+    cfg = worker_settings.get_transcription_chunking_config(qsettings)
+
+    assert cfg["enabled"] is True
+    assert cfg["threshold_seconds"] == 300
+    assert cfg["chunk_size_seconds"] == 180
+    assert cfg["overlap_seconds"] == 18

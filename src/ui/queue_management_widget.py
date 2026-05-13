@@ -74,6 +74,10 @@ class QueueManagementWidget(QWidget):
         self.live_progress.setTextVisible(True)
         self.live_progress.setFormat("Idle")
         current_group.addWidget(self.live_progress)
+
+        self.metrics_label = QLabel("Metrics: running=0 pending=0 queued=0 finished=0 failed=0 skipped=0")
+        self.metrics_label.setStyleSheet("padding: 8px; color: #B0BEC5; font-size: 12px;")
+        current_group.addWidget(self.metrics_label)
         layout.addLayout(current_group)
         
         # Pending Tasks List
@@ -178,6 +182,8 @@ class QueueManagementWidget(QWidget):
                 self.wait_label.setText(f"Wait: {seconds_left}s")
         else:
             self.wait_label.setText("Wait: none")
+
+        self._refresh_metrics()
             
         # 2. Update pending list
         # Block signals to avoid issues while refreshing
@@ -208,6 +214,27 @@ class QueueManagementWidget(QWidget):
         self.history_list.clear()
         for entry in history:
             self.history_list.addItem(QListWidgetItem(self._format_history_entry(entry)))
+
+    def _refresh_metrics(self):
+        if hasattr(self.task_queue, "get_runtime_stats"):
+            stats = self.task_queue.get_runtime_stats() or {}
+            self.metrics_label.setText(
+                "Metrics: "
+                f"running={int(stats.get('running', 0))} "
+                f"pending={int(stats.get('pending', 0))} "
+                f"queued={int(stats.get('queued', 0))} "
+                f"finished={int(stats.get('finished', 0))} "
+                f"failed={int(stats.get('failed', 0))} "
+                f"skipped={int(stats.get('skipped', 0))}"
+            )
+            return
+
+        # Backward-compatible fallback for older queue providers.
+        pending = len(self.task_queue.get_queue_list()) if hasattr(self.task_queue, "get_queue_list") else 0
+        running = 1 if self.task_queue.get_current_task() else 0
+        self.metrics_label.setText(
+            f"Metrics: running={running} pending={pending} queued=0 finished=0 failed=0 skipped=0"
+        )
 
     def _format_history_entry(self, entry):
         when = entry.get("time") or "--:--:--"

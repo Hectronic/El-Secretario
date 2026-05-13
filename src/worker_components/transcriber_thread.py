@@ -16,11 +16,13 @@ import gc
 import logging
 import os
 import platform
+import tempfile
 from types import SimpleNamespace
 
 import torch
 from PyQt6.QtCore import QSettings, QThread, pyqtSignal
 
+from src.audio import trim_audio_segment
 from src.transcription_options import get_whisper_model_name, is_sherpa_onnx_model
 from src.worker_components import device_selection as worker_device_selection
 from src.worker_components import engine as worker_engine
@@ -183,9 +185,87 @@ class TranscriberThread(QThread):
     def _get_subprocess_attempt_timeout_seconds(self) -> int:
         try:
             settings = QSettings("Hectronic", "Secretario")
-            return worker_settings.get_subprocess_attempt_timeout_seconds(settings)
+            return worker_settings.get_subprocess_attempt_timeout_for_duration_seconds(
+                settings,
+                total_duration_seconds=self.total_duration,
+            )
         except Exception:
             return 120 if platform.system() == "Windows" else 600
+
+    def _get_subprocess_attempt_timeout_seconds_for_duration(self, duration_seconds: float) -> int:
+        try:
+            settings = QSettings("Hectronic", "Secretario")
+            return worker_settings.get_subprocess_attempt_timeout_for_duration_seconds(
+                settings,
+                total_duration_seconds=duration_seconds,
+            )
+        except Exception:
+            return 120 if platform.system() == "Windows" else 600
+
+    def _transcribe_faster_whisper_once(self, *, audio_path: str, duration_seconds: float):
+        per_attempt_timeout = self._get_subprocess_attempt_timeout_seconds_for_duration(duration_seconds)
+        fallback_result = worker_engine.run_faster_whisper_with_fallback(
+            audio_path=audio_path,
+            model_size=self.model_size,
+            device=self.device,
+            compute_type=self.compute_type,
+            language=self.language,
+            per_attempt_timeout=per_attempt_timeout,
+            status_emit=self.status_update.emit,
+            flush_logs=_flush_log_handlers,
+            run_transcription=_run_transcription_in_subprocess,
+            run_openai_fallback=_run_openai_whisper_fallback,
+        )
+        self.model_size = fallback_result["model_size"]
+        self.device = fallback_result["device"]
+        self.compute_type = fallback_result["compute_type"]
+        self.effective_backend = fallback_result["effective_backend"]
+        self.force_cpu = self.device == "cpu"
+        return fallback_result["segments"]
+
+    def _transcribe_faster_whisper_chunked(self, *, chunk_cfg: dict):
+        total_duration = float(self.total_duration or 0.0)
+        chunk_size = float(chunk_cfg["chunk_size_seconds"])
+        overlap = float(chunk_cfg["overlap_seconds"])
+        step = max(1.0, chunk_size - overlap)
+
+        self.status_update.emit(
+            f"Long recording detected ({int(total_duration)}s). Transcribing in chunks of {int(chunk_size)}s..."
+        )
+        merged_segments = []
+        chunk_start = 0.0
+        chunk_index = 0
+
+        with tempfile.TemporaryDirectory(prefix="secretario_stt_chunk_") as tmp_dir:
+            while chunk_start < total_duration:
+                if self.isInterruptionRequested():
+                    self.status_update.emit("Cancelled.")
+                    return []
+                chunk_end = min(total_duration, chunk_start + chunk_size)
+                chunk_duration = max(0.0, chunk_end - chunk_start)
+                if chunk_duration <= 0:
+                    break
+
+                chunk_index += 1
+                self.status_update.emit(
+                    f"Chunk {chunk_index}: {int(chunk_start)}s-{int(chunk_end)}s ({int(chunk_duration)}s)"
+                )
+                chunk_file = os.path.join(tmp_dir, f"chunk_{chunk_index:04d}.wav")
+                trim_audio_segment(self.audio_path, chunk_start, chunk_end, chunk_file)
+
+                chunk_segments = self._transcribe_faster_whisper_once(
+                    audio_path=chunk_file,
+                    duration_seconds=chunk_duration,
+                )
+                for seg in chunk_segments:
+                    start = float(seg.get("start", 0.0)) + chunk_start
+                    end = float(seg.get("end", start)) + chunk_start
+                    merged_segments.append({**seg, "start": start, "end": end})
+
+                chunk_start += step
+
+        merged_segments.sort(key=lambda s: float(s.get("start", 0.0)))
+        return merged_segments
 
     def run(self):
         try:
@@ -241,25 +321,22 @@ class TranscriberThread(QThread):
                     self.compute_type,
                 )
                 _flush_log_handlers()
-                per_attempt_timeout = self._get_subprocess_attempt_timeout_seconds()
-                fallback_result = worker_engine.run_faster_whisper_with_fallback(
-                    audio_path=self.audio_path,
-                    model_size=self.model_size,
-                    device=self.device,
-                    compute_type=self.compute_type,
-                    language=self.language,
-                    per_attempt_timeout=per_attempt_timeout,
-                    status_emit=self.status_update.emit,
-                    flush_logs=_flush_log_handlers,
-                    run_transcription=_run_transcription_in_subprocess,
-                    run_openai_fallback=_run_openai_whisper_fallback,
+                chunk_cfg = worker_settings.get_transcription_chunking_config(settings)
+                should_chunk = (
+                    chunk_cfg.get("enabled", True)
+                    and self.total_duration > 0
+                    and float(self.total_duration) >= float(chunk_cfg.get("threshold_seconds", 1800))
                 )
-                serialized_segments = fallback_result["segments"]
-                self.model_size = fallback_result["model_size"]
-                self.device = fallback_result["device"]
-                self.compute_type = fallback_result["compute_type"]
-                self.effective_backend = fallback_result["effective_backend"]
-                self.force_cpu = self.device == "cpu"
+                if should_chunk:
+                    serialized_segments = self._transcribe_faster_whisper_chunked(chunk_cfg=chunk_cfg)
+                else:
+                    serialized_segments = self._transcribe_faster_whisper_once(
+                        audio_path=self.audio_path,
+                        duration_seconds=float(self.total_duration or 0.0),
+                    )
+                if self.isInterruptionRequested():
+                    self.status_update.emit("Cancelled.")
+                    return
 
                 whisper_segments = [SimpleNamespace(**s) for s in serialized_segments]
                 logging.info("Whisper checkpoint W2: subprocess transcription completed.")

@@ -69,6 +69,9 @@ Users need long-running AI and transcription work to run sequentially, visibly, 
 - 2026-05-11: extracted transcription worker kwargs preparation from `_start_next_if_idle` to `src/app/summary_queue/workers.py`.
 - 2026-05-11: fatal transcription subprocess timeouts and crashes are now marked as skipped in the central queue so later tasks continue immediately.
 - 2026-05-11: batch processing now renders fatal transcription errors as skipped in the UI and continues to later items.
+- 2026-05-12: batch processing progress now advances on terminal success, failure, or skip so the UI reflects finished work instead of only successful completions.
+- 2026-05-12: batch processing now requires the central queue; the legacy direct transcription path was removed so all heavy work goes through the unified queue.
+- 2026-05-12: queue observability now includes runtime metrics (`running`, `pending`, `queued`, `finished`, `failed`, `skipped`) exposed by the queue manager and rendered in the queue management widget.
 
 ## Open Questions
 

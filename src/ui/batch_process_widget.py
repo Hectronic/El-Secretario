@@ -15,11 +15,9 @@
 import os
 from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QPushButton, 
                              QLabel, QProgressBar, QTextEdit, QMessageBox, QListWidget, QListWidgetItem)
-from PyQt6.QtCore import Qt, pyqtSignal, QTimer
+from PyQt6.QtCore import Qt, pyqtSignal, QSettings
 from src.database import DBManager
 from src.worker_components.engine import is_transcription_fatal_failure
-from src.worker_components.transcriber_thread import TranscriberThread
-from PyQt6.QtCore import QSettings
 from src.transcription_options import get_saved_transcription_model
 
 class BatchProcessWidget(QWidget):
@@ -30,8 +28,6 @@ class BatchProcessWidget(QWidget):
         self.db = DBManager()
         self.task_queue = task_queue
         self.queue = []
-        self.current_thread = None
-        self.thread = None
         self.is_processing = False
         self.total_files = 0
         self.processed_count = 0
@@ -47,6 +43,10 @@ class BatchProcessWidget(QWidget):
             self.task_queue.task_finished.connect(self._on_queue_task_finished)
             self.task_queue.task_failed.connect(self._on_queue_task_failed)
             self.task_queue.task_skipped.connect(self._on_queue_task_skipped)
+        else:
+            self.start_btn.setEnabled(False)
+            self.status_label.setText("Task queue is required for batch processing.")
+            self.log("Batch processing disabled: no central task queue available.")
         
     def init_ui(self):
         layout = QVBoxLayout(self)
@@ -82,7 +82,6 @@ class BatchProcessWidget(QWidget):
         
         self.remove_btn = QPushButton("Remove Selected")
         self.remove_btn.clicked.connect(self.remove_selected)
-        self.remove_btn.clicked.connect(self.remove_selected)
         list_btn_layout.addWidget(self.remove_btn)
 
         self.retry_btn = QPushButton("Retry Failed")
@@ -116,7 +115,6 @@ class BatchProcessWidget(QWidget):
         self.queue = self.db.fetch_pending_diarization()
         self.total_files = len(self.queue)
         self.file_progress_label.setText(f"0/{self.total_files} files processed")
-        self.file_progress_label.setText(f"0/{self.total_files} files processed")
         self.log(f"Found {self.total_files} pending recordings.")
         
         self.pending_list.clear()
@@ -141,6 +139,9 @@ class BatchProcessWidget(QWidget):
         else:
             self.start_btn.setEnabled(True)
             self.status_label.setText("Ready to start.")
+        if not self.task_queue:
+            self.start_btn.setEnabled(False)
+            self.status_label.setText("Task queue is required for batch processing.")
 
     def remove_selected(self):
         selected_items = self.pending_list.selectedItems()
@@ -162,20 +163,14 @@ class BatchProcessWidget(QWidget):
         self.log_text.append(message)
         
     def start_processing(self):
+        if not self.task_queue:
+            self.log("Batch processing requires the central queue.")
+            self.status_label.setText("Task queue is required for batch processing.")
+            return
+
         if not self.queue:
             return
 
-        if self.task_queue:
-            self._start_processing_via_queue()
-            return
-
-        self.is_processing = True
-        self.start_btn.setEnabled(False)
-        self.stop_btn.setEnabled(True)
-        self.processed_count = 0
-        self.process_next()
-
-    def _start_processing_via_queue(self):
         self.is_processing = True
         self.start_btn.setEnabled(False)
         self.stop_btn.setEnabled(True)
@@ -250,6 +245,11 @@ class BatchProcessWidget(QWidget):
         if background is not None:
             item.setBackground(background)
 
+    def _update_file_progress(self):
+        total = max(self.total_files, 1)
+        self.file_progress_label.setText(f"{self.processed_count}/{self.total_files} files processed")
+        self.progress_bar.setValue(int((self.processed_count / total) * 100))
+
     def _find_item_by_record_id(self, record_id):
         for i in range(self.pending_list.count()):
             item = self.pending_list.item(i)
@@ -295,9 +295,7 @@ class BatchProcessWidget(QWidget):
         if first_terminal_event and task.get("type") == "transcription" and record_id in self._queued_record_ids:
             self._queued_record_ids.discard(record_id)
             self.processed_count += 1
-            if self.total_files > 0:
-                self.file_progress_label.setText(f"{self.processed_count}/{self.total_files} files processed")
-                self.progress_bar.setValue(int((self.processed_count / self.total_files) * 100))
+            self._update_file_progress()
             self._set_current_item_status(record_id, f"Finished: {task.get('title') or f'Recording {record_id}'}")
         self._finish_queue_mode_if_done()
 
@@ -312,6 +310,8 @@ class BatchProcessWidget(QWidget):
             self._queued_record_ids.discard(record_id)
             label = "SKIPPED" if is_transcription_fatal_failure(error_msg) else "FAILED"
             self._set_current_item_status(record_id, f"{label}: {task.get('title') or f'Recording {record_id}'}")
+            self.processed_count += 1
+            self._update_file_progress()
         self._finish_queue_mode_if_done()
 
     def _on_queue_task_skipped(self, task, _reason):
@@ -328,181 +328,14 @@ class BatchProcessWidget(QWidget):
                 f"SKIPPED: {task.get('title') or f'Recording {record_id}'}",
                 background=Qt.GlobalColor.lightGray,
             )
+            self.processed_count += 1
+            self._update_file_progress()
         self._finish_queue_mode_if_done()
         
     def stop_processing(self):
-        if self.task_queue:
-            self.is_processing = False
-            self.log("Batch items were queued in the central queue. Use the queue manager to stop them.")
-            self.status_label.setText("Queued batch is managed by the central queue.")
-            return
         self.is_processing = False
-        self.status_label.setText("Stopping after current file...")
-        self.log("Stopping requested...")
-        # We can't easily kill the thread safely, so we just stop the queue.
-        # If we wanted to kill it, we'd need to add a stop flag to the thread.
-        
-    def process_next(self):
-        if not self.is_processing or not self.queue:
-            self.finish_processing()
-            return
-            
-        # Peek at the next item, don't pop it yet until we know it's processed or failed
-        # Actually, we need to pop it from the queue to advance, but we keep it in the list
-        # until success.
-        
-        record = self.queue[0]
-        self.current_record = record
-        
-        # Find the item in the list
-        self.current_item = None
-        for i in range(self.pending_list.count()):
-            item = self.pending_list.item(i)
-            if item.data(Qt.ItemDataRole.UserRole)['id'] == record['id']:
-                self.current_item = item
-                break
-        
-        if self.current_item:
-            self.current_item.setText(f"Processing: {record['filename']}...")
-            self.current_item.setBackground(Qt.GlobalColor.yellow)
-
-        filename = record['filename']
-        file_path = os.path.join(os.getcwd(), "recordings", filename)
-        
-        if not os.path.exists(file_path):
-            self.log(f"File not found: {filename}. Skipping.")
-            self.on_file_error(f"File not found: {file_path}")
-            return
-            
-        self.status_label.setText(f"Processing: {filename}")
-        self.log(f"Starting: {filename}")
-        self.progress_bar.setValue(0)
-        
-        settings = QSettings("Hectronic", "Secretario")
-        hf_token = settings.value("hf_token", "")
-        force_cpu = settings.value("force_cpu", False, type=bool)
-        compute_type = settings.value("compute_type", "auto")
-        transcription_backend = settings.value("transcription_backend", "auto")
-        model_size = get_saved_transcription_model(settings)
-        if compute_type == "auto":
-            compute_type = None
-        
-        self.thread = TranscriberThread(
-            file_path, 
-            model_size=model_size,
-            compute_type=compute_type,
-            hf_token=hf_token, 
-            enable_diarization=True,
-            total_duration=record['duration'],
-            force_cpu=force_cpu,
-            backend_preference=transcription_backend,
-        )
-        
-        self.thread.finished.connect(self.on_file_finished)
-        self.thread.progress.connect(self.progress_bar.setValue)
-        self.thread.status_update.connect(lambda s: self.status_label.setText(f"{filename}: {s}"))
-        self.thread.error.connect(self.on_file_error)
-        self.thread.start()
-        
-
-        
-    def cleanup_thread(self):
-        if self.thread:
-            try:
-                if self.thread.isRunning():
-                    self.thread.requestInterruption()
-                    self.thread.quit()
-                    self.thread.wait(3000)
-                self.thread.deleteLater()
-            except:
-                pass
-            self.thread = None
-            
-    def on_file_finished(self, result):
-        self.cleanup_thread() # Cleanup previous thread
-        if not self.is_processing:
-            return
-
-        record_id = self.current_record['id']
-        text = result["text"]
-        
-        # Update DB
-        self.db.update_transcription(
-            record_id, 
-            text, 
-            is_diarized=result.get("is_diarized", False), 
-            transcription_model=result.get("model_name")
-        )
-        
-        # Log transcription event
-        self.db.log_transcription(
-            model_name=result["model_name"],
-            audio_duration=result["audio_duration"],
-            audio_size_bytes=result["audio_size_bytes"],
-            transcription_time_seconds=result["transcription_time"],
-            record_id=record_id
-        )
-        
-        self.log(f"Finished: {self.current_record['filename']}")
-        self.processed_count += 1
-        self.file_progress_label.setText(f"{self.processed_count}/{self.total_files} files processed")
-        
-        # Remove from queue and list on success
-        if self.queue:
-            self.queue.pop(0)
-            
-        if self.current_item:
-            row = self.pending_list.row(self.current_item)
-            self.pending_list.takeItem(row)
-        
-        self.process_next()
-        
-    def on_file_error(self, err):
-        self.cleanup_thread() # Cleanup previous thread
-        error_msg = str(err)
-        self.log(f"Error processing {self.current_record['filename']}: {error_msg}")
-        
-        record_id = self.current_record['id']
-        
-        # Save error to DB
-        self.db.set_error(record_id, error_msg)
-        attempts = self.db.increment_attempt(record_id)
-        
-        # Update item in list to show error
-        if self.current_item:
-            is_fatal = is_transcription_fatal_failure(error_msg)
-            label = "SKIPPED" if is_fatal else "FAILED"
-            self.current_item.setText(f"{label}: {self.current_record['filename']} (Attempts: {attempts})")
-            self.current_item.setBackground(Qt.GlobalColor.red if not is_fatal else Qt.GlobalColor.lightGray)
-            self.current_item.setForeground(Qt.GlobalColor.white if not is_fatal else Qt.GlobalColor.black)
-            self.current_item.setToolTip(error_msg)
-
-        if is_transcription_fatal_failure(error_msg):
-            self.log("Fatal transcription failure detected. Skipping to next file.")
-            self.status_label.setText(f"Skipping {self.current_record['filename']}...")
-            if self.queue:
-                self.queue.pop(0)
-            self.process_next()
-            return
-
-        # Retry logic
-        if attempts < 3:
-            self.log(f"Retrying... (Attempt {attempts + 1}/3)")
-            self.status_label.setText(f"Retrying {self.current_record['filename']}...")
-            # We don't pop from queue, so it will be retried in next process_next call
-            # But we need to delay slightly? Loop handled via signal, so safe to call process_next
-            # Maybe add a small delay?
-            QTimer.singleShot(2000, self.process_next)
-            return
-
-        self.log("Max retries reached. Moving to next file.")
-
-        # Remove from queue so we move to next, but KEEP in list
-        if self.queue:
-            self.queue.pop(0)
-            
-        # Continue to next even on error
-        self.process_next()
+        self.status_label.setText("Queued batch is managed by the central queue.")
+        self.log("Batch items were queued in the central queue. Use the queue manager to stop them.")
 
     def retry_failed(self):
         """Reset attempts for selected failed items."""
@@ -521,19 +354,9 @@ class BatchProcessWidget(QWidget):
         
         self.load_pending()
         self.log("Reset attempts for failed items.")
-        
-    def finish_processing(self):
-        self.is_processing = False
-        self.start_btn.setEnabled(True)
-        self.stop_btn.setEnabled(False)
-        self.status_label.setText("Batch processing finished.")
-        self.progress_bar.setValue(100)
-        self.log("All done.")
-        QMessageBox.information(self, "Done", "Batch processing completed.")
 
     def cleanup(self):
         self.is_processing = False
-        self.cleanup_thread()
 
     def closeEvent(self, event):
         self.cleanup()
