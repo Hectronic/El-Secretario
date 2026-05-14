@@ -32,7 +32,7 @@ The repository has already moved several high-growth areas away from older flat 
 - The audio editor has moved from a flat widget into `src/ui/audio_editor/`, with separate widget and waveform modules.
 - Legacy worker code has moved from `src/worker.py` and `src/whisper_subprocess.py` into `src/worker_components/` plus provider adapters in `src/stt_providers/`.
 - Shared dialogs/components have started moving out of broad modules into targeted files such as `src/ui/filter_dialog.py`, `src/ui/speaker_dialog.py`, `src/ui/secret_field_widget.py`, and `src/ui/context_manager_panel.py`.
-- Summary queue helper logic has started moving from `src/ui/summary_task_queue.py` to `src/app/summary_queue/`, leaving the existing Qt queue manager as the compatibility/UI adapter.
+- Summary queue logic now lives in `src/app/summary_queue/` (tasks/completion/history/rag_reindex/workers/runtime/threads/worker_factory/worker_signals/worker_lifecycle/actions/presentation), while `src/ui/summary_task_queue.py` remains a thin Qt queue adapter for signals and worker lifecycle wiring.
 - Tests now partially mirror the new feature packages under `tests/ui/main_window/`, `tests/ui/chat/`, `tests/ui/settings/`, `tests/ui/audio_editor/`, `tests/worker_components/`, and `tests/stt_providers/`.
 
 See `docs/specs/REFACTOR-2026-05-feature-packages.md` for the behavior-preserving refactor record.
@@ -71,7 +71,7 @@ Use these boundaries when adding new features:
 - `src/database.py` is a broad repository and migration layer. It contains unrelated aggregates in one class: records, chat sessions, summaries, tasks, logs, import helpers, and schema migrations.
 - `src/ui/recording_widget.py` mixes record metadata editing, playback, transcription, AI actions, task extraction, RAG indexing, speaker management, and legacy trim controls.
 - `src/ui/welcome_widget.py` mixes landing page layout, recorder configuration, microphone testing, favorites, search, today view, and settings persistence.
-- `src/ui/summary_task_queue.py` is located under UI but behaves like an application service for background jobs, retries, queue history, RAG reindexing, transcription, summaries, and task extraction.
+- `src/ui/summary_task_queue.py` still carries queue orchestration and signal wiring complexity, but most non-Qt queue logic already lives in `src/app/summary_queue/`.
 - `src/rag_engine.py` combines vector store adapter, in-memory fallback, subprocess entrypoints, keyword fallback, Chroma compatibility, and Windows safety policy.
 - `src/ui/styles.py` is a large shared stylesheet module. It is useful centrally, but feature-specific styling should not keep growing there by default.
 
@@ -94,12 +94,11 @@ Do not move everything at once. Move code when a spec or change touches that are
 
 Recommended next cuts:
 
-1. Continue extracting summary/task queue logic out of `src/ui/summary_task_queue.py` into `src/app/summary_queue/`, leaving a thin Qt adapter for signals.
-2. Split `DBManager` into repositories after adding contract tests for each aggregate: records, chats, summaries, tasks, logs, and imports.
-3. Move RAG subprocess/keyword/vector-store adapter logic out of `RAGEngine` into smaller adapter modules.
-4. Continue shrinking `MainWindow` by moving notebook, search, settings, collections/calendar, and the remaining content wrappers into focused coordinators.
-5. Split `RecordingWidget` into metadata, playback, transcription, AI actions, and task panels once tests cover the current widget behavior.
-6. Move `WelcomeWidget` recorder configuration and microphone test behavior into a separate component/service.
+1. Split `DBManager` into repositories after adding contract tests for each aggregate: records, chats, summaries, tasks, logs, and imports.
+2. Move RAG subprocess/keyword/vector-store adapter logic out of `RAGEngine` into smaller adapter modules.
+3. Continue shrinking `MainWindow` by moving notebook, search, settings, collections/calendar, and the remaining content wrappers into focused coordinators.
+4. Split `RecordingWidget` into metadata, playback, transcription, AI actions, and task panels once tests cover the current widget behavior.
+5. Move `WelcomeWidget` recorder configuration and microphone test behavior into a separate component/service.
 
 ## Testing Expectations
 

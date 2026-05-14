@@ -2,7 +2,7 @@
 
 Status: Implemented
 Owner: TBD
-Last updated: 2026-05-11
+Last updated: 2026-05-14
 
 ## Problem
 
@@ -40,9 +40,15 @@ Users need long-running AI and transcription work to run sequentially, visibly, 
 - Application helpers: `src/app/summary_queue/helpers.py` owns non-Qt helper logic for task extraction parsing and audio duration probing.
 - Task factories: `src/app/summary_queue/tasks.py` owns queue task payload construction, source normalization, and dedupe key calculation.
 - Queue history: `src/app/summary_queue/history.py` owns session history storage, newest-first projection, and consecutive status-trace deduplication.
-- RAG reindexing: `src/app/summary_queue/rag_reindex.py` owns candidate selection, existing-index checks, metadata building, and the indexing loop. `RAGReindexThread` remains the Qt signal wrapper.
+- RAG reindexing: `src/app/summary_queue/rag_reindex.py` owns candidate selection, existing-index checks, metadata building, and the indexing loop.
+- Runtime/thread helpers: `src/app/summary_queue/runtime.py` owns worker stop/cleanup utilities, retry-wait message shaping, and runtime stats aggregation.
+- Qt thread wrappers: `src/app/summary_queue/threads.py` owns `RAGReindexThread` so `src/ui/summary_task_queue.py` stays focused on adapter orchestration.
 - Completion handling: `src/app/summary_queue/completion.py` owns post-worker persistence and returns actions for the Qt adapter to apply.
 - Worker config: `src/app/summary_queue/workers.py` owns transcription worker kwargs preparation from settings and queued task data.
+- Worker creation: `src/app/summary_queue/worker_factory.py` owns per-task worker construction and task-type specific signal hookups.
+- Worker signal wiring: `src/app/summary_queue/worker_signals.py` owns common worker signal wiring (`error`, `finished`, optional status/retry).
+- Worker start lifecycle: `src/app/summary_queue/worker_lifecycle.py` owns the queue-start lifecycle for current-worker set, started events, history append, queue-state emit, and start.
+- Queue widget presentation/actions: `src/app/summary_queue/presentation.py` and `src/app/summary_queue/actions.py` own UI-facing formatting/snapshots and queue action orchestration extracted from `QueueManagementWidget`.
 - Persistence: `src/database.py` owns summary, transcription, and task persistence.
 - Workers/integrations: `src/summary_generator.py`, `src/ai_assistant.py`, `src/worker_components/transcriber_thread.py`, and RAG engine integrations provide the actual work.
 - Platform constraints: queued transcription must preserve backend, device, compute type, `force_cpu`, diarization, and CUDA cleanup policy.
@@ -72,6 +78,12 @@ Users need long-running AI and transcription work to run sequentially, visibly, 
 - 2026-05-12: batch processing progress now advances on terminal success, failure, or skip so the UI reflects finished work instead of only successful completions.
 - 2026-05-12: batch processing now requires the central queue; the legacy direct transcription path was removed so all heavy work goes through the unified queue.
 - 2026-05-12: queue observability now includes runtime metrics (`running`, `pending`, `queued`, `finished`, `failed`, `skipped`) exposed by the queue manager and rendered in the queue management widget.
+- 2026-05-13: extracted queue runtime helpers (`stop_worker`, cleanup, retry-wait state shaping, runtime stats aggregation) to `src/app/summary_queue/runtime.py`.
+- 2026-05-13: moved `RAGReindexThread` from `src/ui/summary_task_queue.py` to `src/app/summary_queue/threads.py` to reduce Qt thread wiring in the UI adapter.
+- 2026-05-14: extracted queue action/presentation logic from `src/ui/queue_management_widget.py` to `src/app/summary_queue/actions.py` and `src/app/summary_queue/presentation.py`, including consolidated queue snapshots.
+- 2026-05-14: extracted worker creation from `SummaryTaskQueueManager._start_next_if_idle` to `src/app/summary_queue/worker_factory.py`.
+- 2026-05-14: extracted common worker signal wiring from `SummaryTaskQueueManager._start_next_if_idle` to `src/app/summary_queue/worker_signals.py`.
+- 2026-05-14: extracted queue worker start lifecycle from `SummaryTaskQueueManager._start_next_if_idle` to `src/app/summary_queue/worker_lifecycle.py`.
 
 ## Open Questions
 

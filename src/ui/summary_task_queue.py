@@ -16,7 +16,7 @@ from collections import deque
 import logging
 from typing import Deque, Dict, Optional, Tuple, Any, List
 
-from PyQt6.QtCore import QObject, pyqtSignal, QSettings, QTimer, QThread
+from PyQt6.QtCore import QObject, pyqtSignal, QSettings, QTimer
 
 from src.app.summary_queue.completion import handle_worker_completion
 from src.app.summary_queue.history import QueueHistory
@@ -24,7 +24,12 @@ from src.app.summary_queue.helpers import (
     parse_task_extraction_result as _parse_task_extraction_result,
     read_audio_duration_seconds as _read_audio_duration_seconds,
 )
-from src.app.summary_queue.rag_reindex import run_rag_reindex
+from src.app.summary_queue.runtime import (
+    build_retry_wait_state,
+    cleanup_between_jobs,
+    collect_runtime_stats,
+    stop_worker,
+)
 from src.app.summary_queue.tasks import (
     build_daily_summary_task,
     build_rag_reindex_task,
@@ -35,41 +40,15 @@ from src.app.summary_queue.tasks import (
     normalize_source,
     task_key,
 )
-from src.app.summary_queue.workers import build_transcription_worker_kwargs
+from src.app.summary_queue.worker_factory import build_queue_worker
+from src.app.summary_queue.worker_signals import connect_queue_worker_signals
+from src.app.summary_queue.worker_lifecycle import start_queue_worker_lifecycle
+from src.app.summary_queue.threads import RAGReindexThread
 from src.summary_generator import SummaryGenerator
 from src.ai_assistant import AIAssistant
 from src.database import DBManager
 from src.worker_components.engine import is_transcription_fatal_failure
 from src.worker_components.transcriber_thread import TranscriberThread
-
-
-class RAGReindexThread(QThread):
-    """Rebuild RAG entries without blocking the queue manager or UI thread."""
-
-    task_completed = pyqtSignal(dict)
-    progress = pyqtSignal(int)
-    status_update = pyqtSignal(str)
-    error = pyqtSignal(str)
-
-    def __init__(self, db: DBManager, rag_engine, scope: str = "all", parent=None):
-        super().__init__(parent)
-        self.db = db
-        self.rag = rag_engine
-        self.scope = (scope or "all").strip().lower()
-
-    def run(self):
-        try:
-            result = run_rag_reindex(
-                self.db,
-                self.rag,
-                self.scope,
-                is_interrupted=self.isInterruptionRequested,
-                on_status=self.status_update.emit,
-                on_progress=self.progress.emit,
-            )
-            self.task_completed.emit(result)
-        except Exception as e:
-            self.error.emit(str(e))
 
 
 class SummaryTaskQueueManager(QObject):
@@ -140,29 +119,20 @@ class SummaryTaskQueueManager(QObject):
 
     def get_runtime_stats(self) -> Dict[str, int]:
         """Return lightweight runtime counters for queue observability widgets."""
-        stats = {
-            "running": 1 if self._current_task is not None else 0,
-            "pending": len(self._queue),
-            "queued": 0,
-            "finished": 0,
-            "failed": 0,
-            "skipped": 0,
-            "cancelled": 0,
-            "cleared": 0,
-            "trace": 0,
-        }
-        for entry in self._history.newest_first():
-            event = str(entry.get("event") or "").strip().lower()
-            if event in stats:
-                stats[event] += 1
-        return stats
+        return collect_runtime_stats(
+            has_current_task=self._current_task is not None,
+            pending_count=len(self._queue),
+            history_entries=self._history.newest_first(),
+        )
 
     def remove_task_at(self, index: int) -> bool:
         """Remove a task from the pending queue at the given index."""
         if 0 <= index < len(self._queue):
             del self._queue[index]
             self._emit_queue_state()
+            logging.info("Queue: removed pending task at index=%s (remaining=%s).", index, len(self._queue))
             return True
+        logging.debug("Queue: remove_task_at ignored invalid index=%s (size=%s).", index, len(self._queue))
         return False
 
     def move_task(self, from_index: int, to_index: int) -> bool:
@@ -172,7 +142,14 @@ class SummaryTaskQueueManager(QObject):
             del self._queue[from_index]
             self._queue.insert(to_index, task)
             self._emit_queue_state()
+            logging.info("Queue: moved pending task from %s to %s.", from_index, to_index)
             return True
+        logging.debug(
+            "Queue: move_task ignored invalid range from=%s to=%s (size=%s).",
+            from_index,
+            to_index,
+            len(self._queue),
+        )
         return False
 
     def enqueue_daily_summary(self, summary_data: Dict) -> bool:
@@ -180,6 +157,7 @@ class SummaryTaskQueueManager(QObject):
         if task is None:
             self.task_skipped.emit(summary_data, "Daily summary task missing date.")
             self._append_history("skipped", summary_data, "Daily summary task missing date.")
+            logging.warning("Queue: daily summary skipped because date is missing.")
             return False
         return self._enqueue_unique_task(task)
 
@@ -198,6 +176,7 @@ class SummaryTaskQueueManager(QObject):
             task = build_task_extraction_task(record_id, title=title, source=source)
             self.task_skipped.emit(task, "Tasks already generated for this record.")
             self._append_history("skipped", task, "Tasks already generated for this record.")
+            logging.info("Queue: task extraction skipped for record_id=%s (AI tasks already exist).", record_id)
             return False
 
         resolved_title = (title or "").strip()
@@ -230,6 +209,7 @@ class SummaryTaskQueueManager(QObject):
         payload = dict(task or {})
         if not payload:
             payload = {"type": "transcription"}
+        # External traces are intentionally persisted as queue history entries so UI diagnostics stay chronological.
         self._append_history(event, payload, msg)
         self.task_status_update.emit(msg)
 
@@ -239,15 +219,18 @@ class SummaryTaskQueueManager(QObject):
         if self._current_task and self._task_key(self._current_task) == dedupe_key:
             self.task_skipped.emit(task, "Task already running.")
             self._append_history("skipped", task, "Task already running.")
+            logging.info("Queue: skipped duplicate running task type=%s.", task.get("type"))
             return False
 
         for queued_task in self._queue:
             if self._task_key(queued_task) == dedupe_key:
                 self.task_skipped.emit(task, "Task already queued.")
                 self._append_history("skipped", task, "Task already queued.")
+                logging.info("Queue: skipped duplicate queued task type=%s.", task.get("type"))
                 return False
 
         self._queue.append(task)
+        logging.info("Queue: enqueued task type=%s (pending=%s).", task.get("type"), len(self._queue))
         self.task_enqueued.emit(task, len(self._queue))
         self._append_history("queued", task)
         self._emit_queue_state()
@@ -258,18 +241,9 @@ class SummaryTaskQueueManager(QObject):
         pending_removed = len(self._queue)
         current_task = self._current_task
         self._queue.clear()
+        logging.info("Queue: cancel_all requested (pending_removed=%s, had_current=%s).", pending_removed, bool(current_task))
         if self._current_worker and self._current_worker.isRunning():
-            try:
-                if hasattr(self._current_worker, "cancel"):
-                    self._current_worker.cancel()
-                self._current_worker.requestInterruption()
-                self._current_worker.quit()
-                if not self._current_worker.wait(15000) and hasattr(self._current_worker, "terminate"):
-                    logging.warning("Forcing queue worker shutdown during cancel_all.")
-                    self._current_worker.terminate()
-                    self._current_worker.wait(5000)
-            except Exception:
-                pass
+            stop_worker(self._current_worker, log_context="cancel_all")
         self._current_worker = None
         self._current_task = None
         self._current_task_had_error = False
@@ -283,23 +257,13 @@ class SummaryTaskQueueManager(QObject):
 
     def cancel_current(self) -> bool:
         if not self._current_worker:
+            logging.debug("Queue: cancel_current ignored because no worker is running.")
             return False
 
         worker = self._current_worker
         task = self._current_task or {}
-        try:
-            if hasattr(worker, "cancel"):
-                worker.cancel()
-            if hasattr(worker, "requestInterruption"):
-                worker.requestInterruption()
-            if hasattr(worker, "quit"):
-                worker.quit()
-            if worker.isRunning() and not worker.wait(15000) and hasattr(worker, "terminate"):
-                logging.warning("Forcing queue worker shutdown during cancel_current.")
-                worker.terminate()
-                worker.wait(5000)
-        except Exception:
-            pass
+        stop_worker(worker, log_context="cancel_current")
+        logging.info("Queue: stop requested for current task type=%s.", task.get("type"))
 
         self._clear_wait_state()
         self.task_status_update.emit("Stopping current task...")
@@ -317,8 +281,10 @@ class SummaryTaskQueueManager(QObject):
 
     def _start_next_if_idle(self):
         if self._current_worker is not None:
+            logging.debug("Queue: start skipped because a worker is already running.")
             return
         if not self._queue:
+            logging.debug("Queue: start skipped because pending queue is empty.")
             self._emit_queue_state()
             return
 
@@ -326,61 +292,48 @@ class SummaryTaskQueueManager(QObject):
         self._current_task = task
         self._current_task_had_error = False
         self._clear_wait_state()
-        
+
+        # Exactly one worker is started at a time; this is the sequential execution gate.
         task_type = task["type"]
-        
+        logging.info("Queue: starting task type=%s.", task_type)
+
         try:
-            if task_type == "daily_summary":
-                tags_filter = task.get("tags_filter") or None
-                worker = SummaryGenerator(
-                    generate_daily=True,
-                    generate_weekly=False,
-                    generate_recordings=True,
-                    tags_filter=tags_filter,
-                    specific_dates=[task["date"]],
-                    exclude_today=False,
-                    parent=self,
-                )
-                worker.recording_summary_completed.connect(self._on_generator_recording_summary_completed)
-                worker.all_tasks_finished.connect(lambda *args: self._on_worker_completed())
-                worker.progress.connect(self._on_generator_progress)
-            elif task_type == "transcription":
-                settings = QSettings("Hectronic", "Secretario")
-                worker = TranscriberThread(
-                    **build_transcription_worker_kwargs(settings, task)
-                )
-                worker.finished.connect(self._on_worker_completed)
-                worker.progress.connect(self.task_progress.emit)
-                worker.status_update.connect(self._on_worker_status_update)
-            elif task_type == "rag_reindex":
-                worker = RAGReindexThread(
-                    self.db,
-                    self.rag_engine,
-                    scope=task.get("reindex_scope", "all"),
-                    parent=self,
-                )
-                worker.task_completed.connect(self._on_worker_completed)
-                worker.progress.connect(self.task_progress.emit)
-            else:
-                worker = AIAssistant("", task_type, task.get("text", ""))
-                worker.task_completed.connect(lambda t_type, result: self._on_worker_completed(result))
-                self.task_progress.emit(-1)
-                
-            self._current_worker = worker
-            worker.error.connect(self._on_worker_error)
-            worker.finished.connect(self._on_worker_completely_finished)
-            if hasattr(worker, "status_update") and task_type != "transcription":
-                worker.status_update.connect(self._on_worker_status_update)
-            if hasattr(worker, "retry_wait"):
-                worker.retry_wait.connect(self._on_worker_retry_wait)
-            
-            self.task_started.emit(task, len(self._queue))
-            self._append_history("started", task)
-            self._emit_queue_state()
-            worker.start()
+            worker = build_queue_worker(
+                task,
+                parent=self,
+                db=self.db,
+                rag_engine=self.rag_engine,
+                on_worker_completed=self._on_worker_completed,
+                on_generator_recording_summary_completed=self._on_generator_recording_summary_completed,
+                on_generator_progress=self._on_generator_progress,
+                on_progress_emit=self.task_progress.emit,
+                on_status_update=self._on_worker_status_update,
+                settings_cls=QSettings,
+                summary_generator_cls=SummaryGenerator,
+                transcriber_cls=TranscriberThread,
+                rag_reindex_thread_cls=RAGReindexThread,
+                ai_assistant_cls=AIAssistant,
+            )
+
+            connect_queue_worker_signals(
+                worker,
+                task_type=task_type,
+                on_error=self._on_worker_error,
+                on_finished=self._on_worker_completely_finished,
+                on_status_update=self._on_worker_status_update,
+                on_retry_wait=self._on_worker_retry_wait,
+            )
+            start_queue_worker_lifecycle(
+                worker=worker,
+                task=task,
+                pending_remaining=len(self._queue),
+                set_current_worker=lambda w: setattr(self, "_current_worker", w),
+                emit_task_started=self.task_started.emit,
+                append_history=self._append_history,
+                emit_queue_state=self._emit_queue_state,
+            )
         except Exception as e:
-            import logging
-            logging.error(f"Failed to start summary worker: {e}", exc_info=True)
+            logging.error("Queue: failed to start worker for task type=%s: %s", task_type, e, exc_info=True)
             self._on_worker_error(str(e))
 
     def _on_generator_progress(self, current, total):
@@ -410,16 +363,19 @@ class SummaryTaskQueueManager(QObject):
     def _on_worker_completed(self, result: Any = None):
         task = self._current_task or {}
         if result is None:
+            logging.debug("Queue: worker completed without result for task type=%s.", task.get("type"))
             return
 
         try:
+            logging.info("Queue: applying completion actions for task type=%s.", task.get("type"))
             for action in handle_worker_completion(self.db, task, result):
                 self._apply_completion_action(action)
         except Exception as e:
-            logging.error(f"Queue persistence error: {e}", exc_info=True)
+            logging.error("Queue: persistence error for task type=%s: %s", task.get("type"), e, exc_info=True)
 
     def _apply_completion_action(self, action: Dict):
         action_type = action.get("type")
+        logging.debug("Queue: applying completion action type=%s.", action_type)
         if action_type == "enqueue_task_extraction":
             self.enqueue_task_extraction(
                 action["record_id"],
@@ -437,6 +393,8 @@ class SummaryTaskQueueManager(QObject):
             )
         elif action_type == "status":
             self.task_status_update.emit(action.get("message", ""))
+        else:
+            logging.debug("Queue: ignored unknown completion action type=%s.", action_type)
 
     def _on_worker_error(self, error_msg: str):
         task = self._current_task or {}
@@ -447,9 +405,11 @@ class SummaryTaskQueueManager(QObject):
             self._append_history("skipped", task, message)
             self.task_skipped.emit(task, message)
             self.task_status_update.emit(f"Skipping failed transcription: {message}")
+            logging.warning("Queue: fatal transcription failure converted to skipped: %s", message)
         else:
             self._append_history("failed", task, message)
             self.task_failed.emit(task, message)
+            logging.error("Queue: task failed type=%s error=%s", task.get("type"), message)
 
     def _on_worker_status_update(self, message: str):
         msg = str(message or "").strip()
@@ -472,6 +432,7 @@ class SummaryTaskQueueManager(QObject):
         if task:
             if not self._current_task_had_error:
                 self._append_history("finished", task)
+                logging.info("Queue: task finished successfully type=%s.", task.get("type"))
             self.task_finished.emit(task)
         self._current_task_had_error = False
         if worker:
@@ -480,33 +441,24 @@ class SummaryTaskQueueManager(QObject):
             if len(self._zombie_workers) > 5:
                 self._zombie_workers.pop(0)
         # Opportunistic cleanup between queued jobs helps long pending runs.
-        try:
-            import gc
-            gc.collect()
-            try:
-                import torch
-                if torch.cuda.is_available():
-                    torch.cuda.empty_cache()
-            except Exception:
-                pass
-        except Exception:
-            pass
+        cleanup_between_jobs()
         self._emit_queue_state()
         self._start_next_if_idle()
 
     def _on_worker_retry_wait(self, delay_seconds: float, attempt: int, total_attempts: int, error_text: str):
-        wait = max(1, int(round(float(delay_seconds))))
+        wait, description, status_message = build_retry_wait_state(
+            delay_seconds,
+            attempt,
+            total_attempts,
+            error_text,
+        )
         self._wait_remaining_seconds = wait
-        short_error = str(error_text or "").strip().replace("\n", " ")
-        if len(short_error) > 120:
-            short_error = short_error[:117] + "..."
-        self._wait_description = f"Retry {attempt + 1}/{total_attempts} in progress"
+        self._wait_description = description
         self.wait_state_changed.emit(True, self._wait_remaining_seconds, self._wait_description)
         if not self._wait_timer.isActive():
             self._wait_timer.start()
-        self.task_status_update.emit(
-            f"Waiting {self._wait_remaining_seconds}s before retry ({attempt + 1}/{total_attempts}). {short_error}"
-        )
+        self.task_status_update.emit(status_message)
+        logging.info("Queue: retry wait state set (%ss) for attempt %s/%s.", wait, attempt + 1, total_attempts)
 
     def _tick_wait_timer(self):
         if self._wait_remaining_seconds <= 0:
@@ -528,3 +480,4 @@ class SummaryTaskQueueManager(QObject):
     def _append_history(self, event: str, task: Dict, message: str = ""):
         self._history.append(event, task, message)
         self.history_changed.emit(len(self._history))
+        logging.debug("Queue: history appended event=%s task_type=%s.", event, (task or {}).get("type"))

@@ -326,5 +326,51 @@ class TestSummaryQueue(unittest.TestCase):
         self.assertEqual(record["transcription_model"], "base")
         enqueue_summary.assert_not_called()
 
+    def test_remove_task_at_and_move_task_cover_valid_and_invalid_indices(self):
+        with patch.object(self.queue_manager, "_start_next_if_idle"):
+            self.queue_manager.enqueue_recording_summary(1, "a", "t1")
+            self.queue_manager.enqueue_recording_summary(2, "b", "t2")
+
+        self.assertFalse(self.queue_manager.remove_task_at(99))
+        self.assertTrue(self.queue_manager.move_task(0, 0))
+        self.assertFalse(self.queue_manager.move_task(0, 99))
+        self.assertTrue(self.queue_manager.remove_task_at(0))
+
+    def test_cancel_current_returns_false_when_idle(self):
+        self.assertFalse(self.queue_manager.cancel_current())
+
+    def test_start_next_if_idle_returns_early_when_busy_or_empty(self):
+        fake_worker = MagicMock()
+        self.queue_manager._current_worker = fake_worker
+        self.queue_manager._start_next_if_idle()
+        self.assertIs(self.queue_manager._current_worker, fake_worker)
+
+        self.queue_manager._current_worker = None
+        self.queue_manager._queue.clear()
+        self.queue_manager._start_next_if_idle()
+        self.assertIsNone(self.queue_manager.get_current_task())
+
+    def test_on_worker_completed_ignores_none_result(self):
+        self.queue_manager._current_task = {"type": "summary", "record_id": 1}
+        with patch("src.ui.summary_task_queue.handle_worker_completion") as completion:
+            self.queue_manager._on_worker_completed(None)
+        completion.assert_not_called()
+
+    def test_apply_completion_action_ignores_unknown_action(self):
+        self.queue_manager._apply_completion_action({"type": "unknown"})
+
+    def test_generator_recording_summary_completed_ignores_missing_or_non_dict_record(self):
+        with patch.object(self.queue_manager.db, "fetch_record", return_value=None), \
+             patch.object(self.queue_manager, "enqueue_task_extraction") as enqueue_mock:
+            self.queue_manager._on_generator_recording_summary_completed(999, "Title")
+        enqueue_mock.assert_not_called()
+
+    def test_generator_recording_summary_completed_ignores_empty_ai_text(self):
+        record_id = self.db.save("test.wav", "", 10.0, "Title")
+        with patch.object(self.queue_manager.db, "get_record_ai_text", return_value=""), \
+             patch.object(self.queue_manager, "enqueue_task_extraction") as enqueue_mock:
+            self.queue_manager._on_generator_recording_summary_completed(record_id, "Title")
+        enqueue_mock.assert_not_called()
+
 if __name__ == '__main__':
     unittest.main()

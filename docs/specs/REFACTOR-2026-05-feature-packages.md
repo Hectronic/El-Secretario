@@ -1,7 +1,7 @@
 # REFACTOR-2026-05: Feature Package Split
 
 Status: Implemented
-Last updated: 2026-05-11
+Last updated: 2026-05-14
 
 ## Goal
 
@@ -35,6 +35,9 @@ Reduce large flat modules and create expansion points for future product work wi
 - From Week Details selection sync in `src/ui/main_window/__init__.py` to `src/ui/main_window/selection_sync_actions.py`: sidebar calendar/date/tag synchronization and dependent sidebar refresh.
 - From history click navigation in `src/ui/main_window/__init__.py` to `src/ui/main_window/history_navigation_actions.py`: routing history row clicks to recording/note/summary tabs.
 - From summary regeneration flow in `src/ui/main_window/__init__.py` to `src/ui/main_window/summary_actions.py`: payload normalization and daily summary enqueue from summary views.
+- From runtime-heavy queue helpers in `src/ui/summary_task_queue.py` to `src/app/summary_queue/`: worker stop/cleanup/retry-wait runtime helpers and RAG reindex thread now live in app-level modules (`runtime.py`, `threads.py`) while UI keeps signal orchestration.
+- From queue-management widget logic in `src/ui/queue_management_widget.py` to `src/app/summary_queue/`: action orchestration (`actions.py`) and presentation/snapshot mapping (`presentation.py`) now live in app-level modules while the widget primarily applies mapped view state.
+- From worker startup internals in `src/ui/summary_task_queue.py` to `src/app/summary_queue/`: worker construction (`worker_factory.py`), common signal wiring (`worker_signals.py`), and queue-start lifecycle (`worker_lifecycle.py`) now live in focused modules.
 
 ## Specs Affected
 
@@ -69,7 +72,7 @@ Reduce large flat modules and create expansion points for future product work wi
 - `src/database.py` remains a broad persistence gateway and should be split by aggregate once contract tests are explicit.
 - `src/ui/recording_widget.py` still mixes metadata, playback, transcription, AI actions, RAG indexing, task extraction, and legacy trim controls.
 - `src/ui/welcome_widget.py` still mixes landing layout, recorder configuration, microphone tests, favorites, today view, search, and settings persistence.
-- `src/ui/summary_task_queue.py` behaves like an application service and should move out of `src/ui/` behind a Qt adapter.
+- `src/ui/summary_task_queue.py` now acts mostly as a Qt adapter; keep moving any remaining business-only helpers into `src/app/summary_queue/`.
 - `src/rag_engine.py` still combines vector-store adapter, fallback store, subprocess entrypoints, keyword search, and Windows safety policy.
 
 ## Follow-Ups

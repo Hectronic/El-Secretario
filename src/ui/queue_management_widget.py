@@ -14,6 +14,14 @@
 
 from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QListWidget, 
                              QListWidgetItem, QPushButton, QLabel, QMessageBox, QProgressBar)
+from src.app.summary_queue.actions import QueueActionCoordinator
+from src.app.summary_queue.presentation import (
+    build_queue_management_snapshot,
+    format_history_entry,
+    format_task_display,
+    map_progress_state,
+    normalize_status_message,
+)
 
 class QueueManagementWidget(QWidget):
     """Operational view for the central background-task queue.
@@ -27,6 +35,7 @@ class QueueManagementWidget(QWidget):
     def __init__(self, task_queue, parent=None):
         super().__init__(parent)
         self.task_queue = task_queue
+        self.actions = QueueActionCoordinator(task_queue)
         
         self.init_ui()
         self.refresh_queue()
@@ -133,57 +142,39 @@ class QueueManagementWidget(QWidget):
         layout.addWidget(description)
 
     def _format_task_display(self, task):
-        t_type = task.get("type", "Unknown")
-        label = f"[{t_type.replace('_', ' ').capitalize()}] "
-        
-        if t_type == "summary":
-            label += task.get("title", "Unknown Recording")
-        elif t_type == "task_extraction":
-            label += f"Tasks for: {task.get('title', 'Unknown')}"
-        elif t_type == "transcription":
-            label += f"Transcription: {task.get('title', 'Unknown')}"
-        elif t_type == "daily_summary":
-            label += f"Day: {task.get('date', 'Unknown')}"
-        elif t_type == "weekly_summary":
-            label += f"Week: {task.get('date', 'Unknown')}"
-        elif t_type == "rag_reindex":
-            scope = task.get("reindex_scope", "all")
-            label += "Rebuild semantic index (missing only)" if scope == "missing" else "Rebuild semantic index (all)"
-            
-        tags = task.get("tags_filter") or task.get("tags")
-        if tags:
-            label += f" ({tags})"
-
-        source = task.get("source")
-        if source:
-            label += f" · {str(source).replace('_', ' ')}"
-            
-        return label
+        return format_task_display(task)
 
     def refresh_queue(self):
-        # 1. Update current task
         current = self.task_queue.get_current_task()
-        if current:
-            self.current_task_label.setText(self._format_task_display(current))
+        is_waiting, seconds_left, desc = self.task_queue.get_wait_state()
+        pending = self.task_queue.get_queue_list()
+        history = self.task_queue.get_session_history() if hasattr(self.task_queue, "get_session_history") else []
+        runtime_stats = self.task_queue.get_runtime_stats() if hasattr(self.task_queue, "get_runtime_stats") else None
+        snapshot = build_queue_management_snapshot(
+            current_task=current,
+            pending_tasks=pending,
+            is_waiting=is_waiting,
+            seconds_left=seconds_left,
+            wait_description=desc,
+            history_entries=history,
+            runtime_stats=runtime_stats,
+            fallback_running=1 if current else 0,
+            fallback_pending=len(pending),
+        )
+
+        # 1. Update current/wait state labels
+        self.current_task_label.setText(snapshot["current_label"])
+        if snapshot["has_current_task"]:
             if self.live_status_label.text().strip().lower() == "status: idle":
                 self.live_status_label.setText("Status: running...")
         else:
-            self.current_task_label.setText("None (Idle)")
             self.live_status_label.setText("Status: idle")
             self.live_progress.setRange(0, 1)
             self.live_progress.setValue(0)
             self.live_progress.setFormat("Idle")
+        self.wait_label.setText(snapshot["wait_label"])
 
-        is_waiting, seconds_left, desc = self.task_queue.get_wait_state()
-        if is_waiting:
-            if desc:
-                self.wait_label.setText(f"Wait: {seconds_left}s - {desc}")
-            else:
-                self.wait_label.setText(f"Wait: {seconds_left}s")
-        else:
-            self.wait_label.setText("Wait: none")
-
-        self._refresh_metrics()
+        self.metrics_label.setText(snapshot["metrics_label"])
             
         # 2. Update pending list
         # Block signals to avoid issues while refreshing
@@ -193,10 +184,8 @@ class QueueManagementWidget(QWidget):
         current_row = self.queue_list.currentRow()
         
         self.queue_list.clear()
-        pending = self.task_queue.get_queue_list()
-        
-        for task in pending:
-            item = QListWidgetItem(self._format_task_display(task))
+        for label in snapshot["pending_labels"]:
+            item = QListWidgetItem(label)
             self.queue_list.addItem(item)
             
         # Restore selection
@@ -204,102 +193,60 @@ class QueueManagementWidget(QWidget):
             self.queue_list.setCurrentRow(current_row)
             
         self.queue_list.blockSignals(False)
-        self.refresh_history()
+        self._apply_history_labels(snapshot["history_labels"])
 
     def refresh_history(self):
-        history = []
-        if hasattr(self.task_queue, "get_session_history"):
-            history = self.task_queue.get_session_history()
+        history = self.task_queue.get_session_history() if hasattr(self.task_queue, "get_session_history") else []
+        labels = [format_history_entry(entry) for entry in history]
+        self._apply_history_labels(labels)
 
+    def _apply_history_labels(self, labels):
         self.history_list.clear()
-        for entry in history:
-            self.history_list.addItem(QListWidgetItem(self._format_history_entry(entry)))
-
-    def _refresh_metrics(self):
-        if hasattr(self.task_queue, "get_runtime_stats"):
-            stats = self.task_queue.get_runtime_stats() or {}
-            self.metrics_label.setText(
-                "Metrics: "
-                f"running={int(stats.get('running', 0))} "
-                f"pending={int(stats.get('pending', 0))} "
-                f"queued={int(stats.get('queued', 0))} "
-                f"finished={int(stats.get('finished', 0))} "
-                f"failed={int(stats.get('failed', 0))} "
-                f"skipped={int(stats.get('skipped', 0))}"
-            )
-            return
-
-        # Backward-compatible fallback for older queue providers.
-        pending = len(self.task_queue.get_queue_list()) if hasattr(self.task_queue, "get_queue_list") else 0
-        running = 1 if self.task_queue.get_current_task() else 0
-        self.metrics_label.setText(
-            f"Metrics: running={running} pending={pending} queued=0 finished=0 failed=0 skipped=0"
-        )
+        for label in labels:
+            self.history_list.addItem(QListWidgetItem(label))
 
     def _format_history_entry(self, entry):
-        when = entry.get("time") or "--:--:--"
-        event = (entry.get("event") or "info").replace("_", " ").capitalize()
-        task = entry.get("task") or {}
-        message = entry.get("message") or ""
-        base = f"[{when}] {event}: {self._format_task_display(task)}"
-        if message:
-            base += f" - {message}"
-        return base
+        return format_history_entry(entry)
 
     def _on_status_update(self, message):
-        msg = (message or "").strip()
-        if not msg:
+        status_text = normalize_status_message(message)
+        if not status_text:
             return
-        self.live_status_label.setText(f"Status: {msg}")
+        self.live_status_label.setText(status_text)
 
     def _on_progress_update(self, value):
-        if value == -1:
-            self.live_progress.setRange(0, 0)
-            self.live_progress.setFormat("Working...")
+        mapped = map_progress_state(value)
+        if mapped["mode"] == "ignore":
             return
-        if value == -2:
-            self.live_progress.setRange(0, 1)
-            self.live_progress.setValue(0)
-            self.live_progress.setFormat("Idle")
-            return
-        if value < 0:
-            return
-        self.live_progress.setRange(0, 100)
-        self.live_progress.setValue(int(value))
-        self.live_progress.setFormat(f"{int(value)}%")
+        self.live_progress.setRange(int(mapped["min"]), int(mapped["max"]))
+        self.live_progress.setValue(int(mapped["value"]))
+        self.live_progress.setFormat(str(mapped["format"]))
 
     def _move_up(self):
         row = self.queue_list.currentRow()
-        if row > 0:
-            if self.task_queue.move_task(row, row - 1):
-                self.queue_list.setCurrentRow(row - 1)
+        new_row = self.actions.move_up(row)
+        if new_row != row:
+            self.queue_list.setCurrentRow(new_row)
 
     def _move_down(self):
         row = self.queue_list.currentRow()
-        if row != -1 and row < self.queue_list.count() - 1:
-            if self.task_queue.move_task(row, row + 1):
-                self.queue_list.setCurrentRow(row + 1)
+        new_row = self.actions.move_down(row, self.queue_list.count())
+        if new_row != row:
+            self.queue_list.setCurrentRow(new_row)
 
     def _remove_selected(self):
         row = self.queue_list.currentRow()
-        if row != -1:
-            self.task_queue.remove_task_at(row)
+        self.actions.remove_selected(row)
 
     def _clear_all(self):
         if QMessageBox.question(self, "Clear Queue", "Remove all pending tasks?") == QMessageBox.StandardButton.Yes:
-            # We don't cancel the running one, just clear pending
-            while self.task_queue.pending_count > (1 if self.task_queue.is_running else 0):
-                # remove_task_at works on pending queue (excluding current)
-                # but pending_count includes current. 
-                # Our remove_task_at(0) removes the first pending.
-                if not self.task_queue.remove_task_at(0):
-                    break
+            self.actions.clear_pending()
 
     def _stop_current(self):
-        self.task_queue.cancel_current()
+        self.actions.stop_current()
         self.refresh_queue()
 
     def _stop_all(self):
         if QMessageBox.question(self, "Stop All", "Stop current task and clear all pending tasks?") == QMessageBox.StandardButton.Yes:
-            self.task_queue.cancel_all()
+            self.actions.stop_all()
             self.refresh_queue()
