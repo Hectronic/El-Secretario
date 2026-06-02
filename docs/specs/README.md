@@ -11,6 +11,18 @@ This folder is the product behavior registry for El Secretario. Use it to define
 5. Update README/docs when behavior becomes user-visible.
 6. Record follow-up refactors explicitly instead of hiding them inside feature work.
 
+## Refactor and Specs Steward Subagent
+
+The `Refactor and Specs Steward` subagent defined in `AGENTS.md` should be activated when a change touches code that is still broad, under-refactored, or missing an explicit spec contract.
+
+Use it when:
+- A touched file is listed in a refactor record's hotspot or follow-up section.
+- A behavior change cannot be mapped to a `SPEC-XXX` row in the feature registry below.
+- New logic is being added to a broad module instead of the smallest owning feature package.
+- A compatibility shim, migration path, duplicated helper, or deferred cleanup is introduced.
+
+The subagent must leave the specs folder current by updating the affected spec, creating a new spec, or recording the refactor follow-up here. It should keep behavior-preserving refactors small and backed by focused tests.
+
 ## Spec Format
 
 Use this template for new specs:
@@ -101,6 +113,7 @@ What user or product problem is being solved?
 
 - Spec status is updated.
 - Acceptance criteria are covered by tests or explicit manual checks.
+- Refactor/spec stewardship has been applied when touched code is a hotspot or lacks a matching spec.
 - Relevant README and docs are updated in all maintained language variants.
 - Focused tests pass.
 - Full test suite is run for shared UI, worker, STT, or threading changes.

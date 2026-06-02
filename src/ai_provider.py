@@ -32,10 +32,18 @@ GEMINI_MODELS = [
 ]
 
 DEFAULT_OLLAMA_HOST = "http://localhost:11434"
-NON_OLLAMA_MAX_RETRIES = 5
+NON_OLLAMA_MAX_RETRIES = 2
 NON_OLLAMA_BASE_BACKOFF_SECONDS = 1.0
 NON_OLLAMA_PRE_REQUEST_DELAY_SECONDS = 0.35
 NON_OLLAMA_MAX_BACKOFF_SECONDS = 16.0
+NON_RETRYABLE_RATE_LIMIT_PATTERNS = (
+    "429",
+    "quota",
+    "rate limit",
+    "rate_limit",
+    "resource_exhausted",
+    "resource exhausted",
+)
 
 
 class AIProvider(ABC):
@@ -296,6 +304,11 @@ def _extract_retry_delay_seconds(error: Exception | str) -> float | None:
     return None
 
 
+def _is_non_retryable_rate_limit_error(error: Exception | str) -> bool:
+    text = str(error or "").lower()
+    return any(pattern in text for pattern in NON_RETRYABLE_RATE_LIMIT_PATTERNS)
+
+
 def generate_content_with_retry(
     provider: AIProvider,
     settings,
@@ -319,8 +332,10 @@ def generate_content_with_retry(
         time.sleep(NON_OLLAMA_PRE_REQUEST_DELAY_SECONDS)
 
     last_error = None
+    attempts_made = 0
 
     for attempt in range(1, total_attempts + 1):
+        attempts_made = attempt
         try:
             result = provider.generate_content(prompt)
             text = str(result or "").strip()
@@ -329,6 +344,14 @@ def generate_content_with_retry(
             last_error = RuntimeError("Empty response from AI provider.")
         except Exception as exc:
             last_error = exc
+
+        if not is_ollama and _is_non_retryable_rate_limit_error(last_error):
+            logging.warning(
+                "%s failed with quota/rate-limit error. Not retrying. Error: %s",
+                operation_name,
+                last_error,
+            )
+            break
 
         if attempt >= total_attempts:
             break
@@ -353,4 +376,4 @@ def generate_content_with_retry(
                 pass
         time.sleep(delay)
 
-    raise RuntimeError(f"{operation_name} failed after {total_attempts} attempts: {last_error}")
+    raise RuntimeError(f"{operation_name} failed after {attempts_made} attempts: {last_error}")

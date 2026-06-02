@@ -2,7 +2,7 @@
 
 Status: Implemented
 Owner: TBD
-Last updated: 2026-05-14
+Last updated: 2026-05-27
 
 ## Problem
 
@@ -33,6 +33,7 @@ Users need long-running AI and transcription work to run sequentially, visibly, 
 - Given RAG reindexing runs, when eligible records are found, then each record's AI text is indexed with title/date/tags/type metadata.
 - Given a duplicate task is queued or already running, when the same dedupe key is requested, then the duplicate request is skipped.
 - Given a worker emits retry wait state, when the queue receives it, then wait state and status signals are emitted.
+- Given Gemini returns a quota or rate-limit error, when queued AI work handles the failure, then it stops retrying immediately so the exhausted API key is not consumed further.
 
 ## Architecture Notes
 
@@ -50,12 +51,13 @@ Users need long-running AI and transcription work to run sequentially, visibly, 
 - Worker start lifecycle: `src/app/summary_queue/worker_lifecycle.py` owns the queue-start lifecycle for current-worker set, started events, history append, queue-state emit, and start.
 - Queue widget presentation/actions: `src/app/summary_queue/presentation.py` and `src/app/summary_queue/actions.py` own UI-facing formatting/snapshots and queue action orchestration extracted from `QueueManagementWidget`.
 - Persistence: `src/database.py` owns summary, transcription, and task persistence.
-- Workers/integrations: `src/summary_generator.py`, `src/ai_assistant.py`, `src/worker_components/transcriber_thread.py`, and RAG engine integrations provide the actual work.
+- Workers/integrations: `src/summary_generator.py`, `src/ai_assistant.py`, `src/ai_provider.py`, `src/worker_components/transcriber_thread.py`, and RAG engine integrations provide the actual work.
+- AI provider retry policy: `src/ai_provider.py` retries cloud-provider transient failures conservatively and treats Gemini quota/rate-limit errors as terminal for the current operation.
 - Platform constraints: queued transcription must preserve backend, device, compute type, `force_cpu`, diarization, and CUDA cleanup policy.
 
 ## Test Plan
 
-- Unit: helper parsing, audio-duration fallback, dedupe keys, queue history, skip behavior.
+- Unit: helper parsing, audio-duration fallback, dedupe keys, queue history, skip behavior, AI provider retry policy.
 - Integration: summary-to-task chaining, queued transcription persistence, queue widget updates, RAG reindex worker.
 - UI: queue management widget reflects current/pending/history state.
 - Manual: run a real queued summary, task extraction, transcription, and RAG reindex on Ubuntu and Windows before release.
@@ -84,6 +86,7 @@ Users need long-running AI and transcription work to run sequentially, visibly, 
 - 2026-05-14: extracted worker creation from `SummaryTaskQueueManager._start_next_if_idle` to `src/app/summary_queue/worker_factory.py`.
 - 2026-05-14: extracted common worker signal wiring from `SummaryTaskQueueManager._start_next_if_idle` to `src/app/summary_queue/worker_signals.py`.
 - 2026-05-14: extracted queue worker start lifecycle from `SummaryTaskQueueManager._start_next_if_idle` to `src/app/summary_queue/worker_lifecycle.py`.
+- 2026-05-27: reduced cloud AI retry attempts and made Gemini quota/rate-limit errors terminal so exhausted API keys fail fast instead of retrying repeatedly.
 
 ## Open Questions
 

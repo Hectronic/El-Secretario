@@ -149,6 +149,80 @@ def _get_or_create_collection_compatible(client, name: str, embedding_fn):
         raise
 
 
+def _parse_semantic_query_results(results: Dict[str, Any]) -> List[Dict[str, Any]]:
+    parsed_results = []
+    ids_outer = results.get("ids") or []
+    docs_outer = results.get("documents") or []
+    metas_outer = results.get("metadatas") or []
+    dists_outer = results.get("distances") or []
+    if not ids_outer:
+        return parsed_results
+
+    ids = ids_outer[0] or []
+    docs = docs_outer[0] if docs_outer else []
+    metas = metas_outer[0] if metas_outer else []
+    dists = dists_outer[0] if dists_outer else []
+
+    for i in range(len(ids)):
+        metadata = metas[i] if i < len(metas) else {}
+        if str((metadata or {}).get("deleted", "0")) == "1":
+            continue
+        parsed_results.append(
+            {
+                "id": ids[i],
+                "text": docs[i] if i < len(docs) else "",
+                "metadata": metadata or {},
+                "distance": dists[i] if i < len(dists) else 0.0,
+            }
+        )
+    return parsed_results
+
+
+def _keyword_rank_raw_results(raw: Dict[str, Any], query: str, n_results: int) -> List[Dict[str, Any]]:
+    ids = raw.get("ids") or []
+    docs = raw.get("documents") or []
+    metas = raw.get("metadatas") or []
+    terms = [t for t in query.lower().split() if t]
+    scored = []
+    for idx, doc_id in enumerate(ids):
+        text = docs[idx] if idx < len(docs) else ""
+        metadata = metas[idx] if idx < len(metas) else {}
+        if str((metadata or {}).get("deleted", "0")) == "1":
+            continue
+        text_l = (text or "").lower()
+        score = sum(text_l.count(term) for term in terms) if terms else 0
+        scored.append(
+            {
+                "id": doc_id,
+                "text": text or "",
+                "metadata": metadata or {},
+                "distance": float(-score),
+            }
+        )
+    scored.sort(key=lambda r: r["distance"])
+    return scored[:n_results]
+
+
+def _build_search_where_clause(
+    where_clause: Optional[Dict[str, Any]],
+    ids: Optional[List[str]],
+) -> Dict[str, Any]:
+    final_where = {}
+    if where_clause:
+        final_where = where_clause.copy()
+
+    if ids:
+        if len(ids) == 1:
+            final_where["id"] = ids[0]
+        else:
+            final_where["id"] = {"$in": ids}
+
+    deleted_filter = {"deleted": {"$ne": "1"}}
+    if final_where:
+        return {"$and": [final_where, deleted_filter]}
+    return deleted_filter
+
+
 class RAGEngine:
     def __init__(self, persist_directory: str = "chroma_db"):
         self.persist_directory = persist_directory
@@ -259,30 +333,12 @@ class RAGEngine:
         Returns a list of results (id, text, metadata, distance).
         ids: Optional list of document IDs to restrict search to.
         """
-        final_where = {}
-        
-        # If explicit where_clause is provided, use it
-        if where_clause:
-            final_where = where_clause.copy()
-        
+        # If explicit where_clause is provided, use it.
         # Tag filter - REMOVED because $contains is not supported by ChromaDB
         # Caller should resolve tags to IDs and pass them in 'ids' argument
         # if tag_filter and tag_filter != "All":
         #     final_where["tags"] = {"$contains": tag_filter}
-            
-        # ID filter (if provided)
-        if ids:
-            if len(ids) == 1:
-                final_where["id"] = ids[0]
-            else:
-                final_where["id"] = {"$in": ids}
-                
-        # Always ignore soft-deleted documents.
-        deleted_filter = {"deleted": {"$ne": "1"}}
-        if final_where:
-            final_where = {"$and": [final_where, deleted_filter]}
-        else:
-            final_where = deleted_filter
+        final_where = _build_search_where_clause(where_clause, ids)
 
         if self._subprocess_query_mode:
             if not self._semantic_query_disabled:
@@ -320,21 +376,7 @@ class RAGEngine:
                 where=final_where
             )
         
-        # Parse results into a cleaner format
-        parsed_results = []
-        if results['ids']:
-            for i in range(len(results['ids'][0])):
-                metadata = results['metadatas'][0][i] if results['metadatas'] else {}
-                if str((metadata or {}).get("deleted", "0")) == "1":
-                    continue
-                parsed_results.append({
-                    'id': results['ids'][0][i],
-                    'text': results['documents'][0][i],
-                    'metadata': metadata,
-                    'distance': results['distances'][0][i] if results['distances'] else 0.0
-                })
-                
-        return parsed_results
+        return _parse_semantic_query_results(results)
 
 
     def delete_document(self, doc_id: str) -> None:
@@ -373,20 +415,7 @@ class RAGEngine:
 def _rag_upsert_subprocess_entry(payload: Dict[str, Any], result_path: str):
     result = {"ok": False, "error": "unknown error"}
     try:
-        import chromadb
-        from chromadb.config import Settings
-        from chromadb.utils import embedding_functions
-
-        chroma_settings = Settings(anonymized_telemetry=False)
-        client = chromadb.PersistentClient(path=payload["persist_directory"], settings=chroma_settings)
-        embedding_fn = embedding_functions.SentenceTransformerEmbeddingFunction(
-            model_name="all-MiniLM-L6-v2"
-        )
-        collection = _get_or_create_collection_compatible(
-            client,
-            name="transcriptions",
-            embedding_fn=embedding_fn,
-        )
+        collection = _init_subprocess_collection(payload["persist_directory"])
         collection.upsert(
             ids=[payload["doc_id"]],
             documents=[payload["text"]],
@@ -404,26 +433,25 @@ def _rag_upsert_subprocess_entry(payload: Dict[str, Any], result_path: str):
             pass
 
 
-def _rag_upsert_in_subprocess(
+def _run_json_subprocess_task(
     *,
-    persist_directory: str,
-    doc_id: str,
-    text: str,
-    metadata: Dict[str, Any],
-    timeout_seconds: int = 30,
-) -> bool:
+    target,
+    payload: Dict[str, Any],
+    timeout_seconds: int,
+    temp_prefix: str,
+    timeout_error: str,
+    crash_error: str,
+    missing_result_error: str,
+    operation_error: str,
+    setup_error: str,
+    setup_error_arg: Any = None,
+) -> Optional[Dict[str, Any]]:
     try:
         ctx = mp.get_context("spawn")
-        payload = {
-            "persist_directory": persist_directory,
-            "doc_id": doc_id,
-            "text": text,
-            "metadata": metadata,
-        }
-        fd, result_path = tempfile.mkstemp(prefix="rag_upsert_", suffix=".json")
+        fd, result_path = tempfile.mkstemp(prefix=temp_prefix, suffix=".json")
         os.close(fd)
         proc = ctx.Process(
-            target=_rag_upsert_subprocess_entry,
+            target=target,
             args=(payload, result_path),
             daemon=False,
         )
@@ -432,23 +460,26 @@ def _rag_upsert_in_subprocess(
         if proc.is_alive():
             proc.terminate()
             proc.join(timeout=5)
-            logging.error("RAG subprocess upsert timed out for doc_id=%s", doc_id)
-            return False
+            logging.error(timeout_error)
+            return None
         if proc.exitcode != 0:
-            logging.error("RAG subprocess upsert crashed for doc_id=%s with exitcode=%s", doc_id, proc.exitcode)
-            return False
+            logging.error(crash_error, proc.exitcode)
+            return None
         if not os.path.exists(result_path):
-            logging.error("RAG subprocess upsert finished without result for doc_id=%s", doc_id)
-            return False
+            logging.error(missing_result_error)
+            return None
         with open(result_path, "r", encoding="utf-8") as f:
             result = json.load(f)
         if not result.get("ok"):
-            logging.error("RAG subprocess upsert error for doc_id=%s: %s", doc_id, result.get("error"))
-            return False
-        return True
+            logging.error(operation_error, result.get("error"))
+            return None
+        return result
     except Exception as e:
-        logging.error("RAG subprocess upsert setup failed for doc_id=%s: %s", doc_id, e, exc_info=True)
-        return False
+        if setup_error_arg is None:
+            logging.error(setup_error, e, exc_info=True)
+        else:
+            logging.error(setup_error, setup_error_arg, e, exc_info=True)
+        return None
     finally:
         if "result_path" in locals():
             try:
@@ -457,23 +488,39 @@ def _rag_upsert_in_subprocess(
                 pass
 
 
+def _rag_upsert_in_subprocess(
+    *,
+    persist_directory: str,
+    doc_id: str,
+    text: str,
+    metadata: Dict[str, Any],
+    timeout_seconds: int = 30,
+) -> bool:
+    payload = {
+        "persist_directory": persist_directory,
+        "doc_id": doc_id,
+        "text": text,
+        "metadata": metadata,
+    }
+    result = _run_json_subprocess_task(
+        target=_rag_upsert_subprocess_entry,
+        payload=payload,
+        timeout_seconds=timeout_seconds,
+        temp_prefix="rag_upsert_",
+        timeout_error=f"RAG subprocess upsert timed out for doc_id={doc_id}",
+        crash_error=f"RAG subprocess upsert crashed for doc_id={doc_id} with exitcode=%s",
+        missing_result_error=f"RAG subprocess upsert finished without result for doc_id={doc_id}",
+        operation_error=f"RAG subprocess upsert error for doc_id={doc_id}: %s",
+        setup_error="RAG subprocess upsert setup failed for doc_id=%s: %s",
+        setup_error_arg=doc_id,
+    )
+    return result is not None
+
+
 def _rag_query_subprocess_entry(payload: Dict[str, Any], result_path: str):
     result = {"ok": False, "error": "unknown error"}
     try:
-        import chromadb
-        from chromadb.config import Settings
-        from chromadb.utils import embedding_functions
-
-        chroma_settings = Settings(anonymized_telemetry=False)
-        client = chromadb.PersistentClient(path=payload["persist_directory"], settings=chroma_settings)
-        embedding_fn = embedding_functions.SentenceTransformerEmbeddingFunction(
-            model_name="all-MiniLM-L6-v2"
-        )
-        collection = _get_or_create_collection_compatible(
-            client,
-            name="transcriptions",
-            embedding_fn=embedding_fn,
-        )
+        collection = _init_subprocess_collection(payload["persist_directory"])
         query_result = collection.query(
             query_texts=[payload["query"]],
             n_results=payload["n_results"],
@@ -498,68 +545,30 @@ def _rag_query_in_subprocess(
     where: Dict[str, Any],
     timeout_seconds: int = 30,
 ) -> Optional[Dict[str, Any]]:
-    try:
-        ctx = mp.get_context("spawn")
-        payload = {
-            "persist_directory": persist_directory,
-            "query": query,
-            "n_results": n_results,
-            "where": where,
-        }
-        fd, result_path = tempfile.mkstemp(prefix="rag_query_", suffix=".json")
-        os.close(fd)
-        proc = ctx.Process(
-            target=_rag_query_subprocess_entry,
-            args=(payload, result_path),
-            daemon=False,
-        )
-        proc.start()
-        proc.join(timeout=timeout_seconds)
-        if proc.is_alive():
-            proc.terminate()
-            proc.join(timeout=5)
-            logging.error("RAG subprocess query timed out")
-            return None
-        if proc.exitcode != 0:
-            logging.error("RAG subprocess query crashed with exitcode=%s", proc.exitcode)
-            return None
-        if not os.path.exists(result_path):
-            logging.error("RAG subprocess query finished without result file")
-            return None
-        with open(result_path, "r", encoding="utf-8") as f:
-            result = json.load(f)
-        if not result.get("ok"):
-            logging.error("RAG subprocess query error: %s", result.get("error"))
-            return None
-        return result.get("result")
-    except Exception as e:
-        logging.error("RAG subprocess query setup failed: %s", e, exc_info=True)
-        return None
-    finally:
-        if "result_path" in locals():
-            try:
-                os.remove(result_path)
-            except OSError:
-                pass
+    payload = {
+        "persist_directory": persist_directory,
+        "query": query,
+        "n_results": n_results,
+        "where": where,
+    }
+    result = _run_json_subprocess_task(
+        target=_rag_query_subprocess_entry,
+        payload=payload,
+        timeout_seconds=timeout_seconds,
+        temp_prefix="rag_query_",
+        timeout_error="RAG subprocess query timed out",
+        crash_error="RAG subprocess query crashed with exitcode=%s",
+        missing_result_error="RAG subprocess query finished without result file",
+        operation_error="RAG subprocess query error: %s",
+        setup_error="RAG subprocess query setup failed: %s",
+    )
+    return result.get("result") if result else None
 
 
 def _rag_keyword_search_subprocess_entry(payload: Dict[str, Any], result_path: str):
     result = {"ok": False, "error": "unknown error"}
     try:
-        import chromadb
-        from chromadb.config import Settings
-        from chromadb.utils import embedding_functions
-
-        chroma_settings = Settings(anonymized_telemetry=False)
-        client = chromadb.PersistentClient(path=payload["persist_directory"], settings=chroma_settings)
-        embedding_fn = embedding_functions.SentenceTransformerEmbeddingFunction(
-            model_name="all-MiniLM-L6-v2"
-        )
-        collection = _get_or_create_collection_compatible(
-            client,
-            name="transcriptions",
-            embedding_fn=embedding_fn,
-        )
+        collection = _init_subprocess_collection(payload["persist_directory"])
         raw = collection.get(
             where=payload["where"],
             include=["documents", "metadatas"],
@@ -583,66 +592,41 @@ def _rag_keyword_search_in_subprocess(
     where: Dict[str, Any],
     timeout_seconds: int = 30,
 ) -> List[Dict[str, Any]]:
-    try:
-        ctx = mp.get_context("spawn")
-        payload = {
-            "persist_directory": persist_directory,
-            "query": query,
-            "n_results": n_results,
-            "where": where,
-        }
-        fd, result_path = tempfile.mkstemp(prefix="rag_kw_query_", suffix=".json")
-        os.close(fd)
-        proc = ctx.Process(
-            target=_rag_keyword_search_subprocess_entry,
-            args=(payload, result_path),
-            daemon=False,
-        )
-        proc.start()
-        proc.join(timeout=timeout_seconds)
-        if proc.is_alive():
-            proc.terminate()
-            proc.join(timeout=5)
-            logging.error("RAG keyword subprocess query timed out")
-            return []
-        if proc.exitcode != 0:
-            logging.error("RAG keyword subprocess query crashed with exitcode=%s", proc.exitcode)
-            return []
-        if not os.path.exists(result_path):
-            logging.error("RAG keyword subprocess query finished without result file")
-            return []
-        with open(result_path, "r", encoding="utf-8") as f:
-            result = json.load(f)
-        if not result.get("ok"):
-            logging.error("RAG keyword subprocess query error: %s", result.get("error"))
-            return []
-        raw = result.get("result") or {}
-        ids = raw.get("ids") or []
-        docs = raw.get("documents") or []
-        metas = raw.get("metadatas") or []
-        terms = [t for t in query.lower().split() if t]
-        scored = []
-        for idx, doc_id in enumerate(ids):
-            text = docs[idx] if idx < len(docs) else ""
-            metadata = metas[idx] if idx < len(metas) else {}
-            if str((metadata or {}).get("deleted", "0")) == "1":
-                continue
-            text_l = (text or "").lower()
-            score = sum(text_l.count(term) for term in terms) if terms else 0
-            scored.append({
-                "id": doc_id,
-                "text": text or "",
-                "metadata": metadata or {},
-                "distance": float(-score),
-            })
-        scored.sort(key=lambda r: r["distance"])
-        return scored[:n_results]
-    except Exception as e:
-        logging.error("RAG keyword subprocess query setup failed: %s", e, exc_info=True)
+    payload = {
+        "persist_directory": persist_directory,
+        "query": query,
+        "n_results": n_results,
+        "where": where,
+    }
+    result = _run_json_subprocess_task(
+        target=_rag_keyword_search_subprocess_entry,
+        payload=payload,
+        timeout_seconds=timeout_seconds,
+        temp_prefix="rag_kw_query_",
+        timeout_error="RAG keyword subprocess query timed out",
+        crash_error="RAG keyword subprocess query crashed with exitcode=%s",
+        missing_result_error="RAG keyword subprocess query finished without result file",
+        operation_error="RAG keyword subprocess query error: %s",
+        setup_error="RAG keyword subprocess query setup failed: %s",
+    )
+    if not result:
         return []
-    finally:
-        if "result_path" in locals():
-            try:
-                os.remove(result_path)
-            except OSError:
-                pass
+    raw = result.get("result") or {}
+    return _keyword_rank_raw_results(raw, query, n_results)
+
+
+def _init_subprocess_collection(persist_directory: str):
+    import chromadb
+    from chromadb.config import Settings
+    from chromadb.utils import embedding_functions
+
+    chroma_settings = Settings(anonymized_telemetry=False)
+    client = chromadb.PersistentClient(path=persist_directory, settings=chroma_settings)
+    embedding_fn = embedding_functions.SentenceTransformerEmbeddingFunction(
+        model_name="all-MiniLM-L6-v2"
+    )
+    return _get_or_create_collection_compatible(
+        client,
+        name="transcriptions",
+        embedding_fn=embedding_fn,
+    )

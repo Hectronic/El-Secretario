@@ -46,3 +46,28 @@ This document contains useful information and strict rules for AI agents working
 5. Run focused tests first.
 6. Run the full suite before finishing when shared UI, worker, STT, or threading code is touched.
 7. Update documentation when behavior changes.
+
+## Subagents
+
+### Refactor and Specs Steward
+
+Trigger this subagent whenever a task modifies code that is not yet well refactored, is listed as a hotspot, or lacks a matching product spec in `docs/specs/`.
+
+Activation checks:
+- The changed file is listed in `docs/specs/REFACTOR-2026-05-feature-packages.md` under `Remaining Hotspots`.
+- The changed behavior is not covered by an existing `SPEC-XXX` entry in `docs/specs/README.md`.
+- The change adds behavior to a broad module when a smaller feature package already owns the area.
+- The implementation needs compatibility shims, migration glue, or duplicated logic that should be recorded as follow-up refactor work.
+
+Responsibilities:
+- Identify the smallest owner package for the behavior and move or shape code toward that boundary when it is safe.
+- Add or update tests before refactoring behavior-sensitive code.
+- Update the relevant spec in `docs/specs/`, or create a new `SPEC-XXX` when the behavior has no product contract.
+- Update `docs/specs/README.md` feature registry, refactor records, hotspots, or Definition of Done when the change alters ownership or follow-up work.
+- Keep refactors incremental and behavior-preserving unless the user explicitly requested a behavior change.
+- Run focused tests for the touched area and the broader suite when shared UI, worker, STT, threading, provider, or persistence contracts are affected.
+
+Expected output:
+- A short note naming the spec or refactor record updated.
+- The files moved or reshaped, if any.
+- The exact focused and broader test commands run.

@@ -2,8 +2,11 @@
 import pytest
 import warnings
 from src.rag_engine import (
+    _build_search_where_clause,
     _InMemoryCollection,
     _InMemoryChromaClient,
+    _keyword_rank_raw_results,
+    _parse_semantic_query_results,
     _get_or_create_collection_compatible,
     _suppress_sentencepiece_swig_deprecation_warnings,
     RAGEngine,
@@ -337,3 +340,53 @@ def test_matches_where_logic_directly(collection):
     
     # $and with non-existent key
     assert collection._matches_where(entry, {"nonexistent": "foo"}) is False
+
+
+def test_parse_semantic_query_results_filters_deleted_and_fills_distance():
+    raw = {
+        "ids": [["1", "2"]],
+        "documents": [["hello", "world"]],
+        "metadatas": [[{"deleted": "0"}, {"deleted": "1"}]],
+        "distances": [[0.2, 0.9]],
+    }
+    parsed = _parse_semantic_query_results(raw)
+    assert parsed == [{"id": "1", "text": "hello", "metadata": {"deleted": "0"}, "distance": 0.2}]
+
+    raw_no_dist = {
+        "ids": [["x"]],
+        "documents": [["z"]],
+        "metadatas": [[{}]],
+    }
+    parsed_no_dist = _parse_semantic_query_results(raw_no_dist)
+    assert parsed_no_dist[0]["distance"] == 0.0
+
+
+def test_keyword_rank_raw_results_scores_and_limits():
+    raw = {
+        "ids": ["a", "b", "c"],
+        "documents": ["apple apple", "apple", "banana"],
+        "metadatas": [{"deleted": "0"}, {"deleted": "0"}, {"deleted": "1"}],
+    }
+    ranked = _keyword_rank_raw_results(raw, "apple", 2)
+    assert [r["id"] for r in ranked] == ["a", "b"]
+    assert ranked[0]["distance"] < ranked[1]["distance"]
+
+
+def test_build_search_where_clause_composes_where_ids_and_deleted_filter():
+    assert _build_search_where_clause(None, None) == {"deleted": {"$ne": "1"}}
+
+    single = _build_search_where_clause({"color": "blue"}, ["id2"])
+    assert single == {
+        "$and": [
+            {"color": "blue", "id": "id2"},
+            {"deleted": {"$ne": "1"}},
+        ]
+    }
+
+    multi = _build_search_where_clause({}, ["id1", "id3"])
+    assert multi == {
+        "$and": [
+            {"id": {"$in": ["id1", "id3"]}},
+            {"deleted": {"$ne": "1"}},
+        ]
+    }

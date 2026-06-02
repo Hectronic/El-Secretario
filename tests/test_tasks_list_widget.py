@@ -177,6 +177,21 @@ def test_global_filter_precedence_over_local_tag(qtbot):
     assert tags_filter == "alpha"
 
 
+def test_global_filters_accept_qdate_python_date_and_string(qtbot):
+    db = _FakeDB()
+    widget = TasksListWidget(db)
+    qtbot.addWidget(widget)
+
+    widget.set_global_filters(week_monday=QDate(2026, 3, 2), date_filter=QDate(2026, 3, 5))
+    assert db.by_range_calls[-1][:2] == ("2026-03-02", "2026-03-05")
+
+    widget.set_global_filters(week_monday=date(2026, 3, 2), date_filter=None)
+    assert db.by_range_calls[-1][:2] == ("2026-03-02", "2026-03-08")
+
+    widget.set_global_filters(week_monday="2026-03-02", date_filter="2026-03-05")
+    assert db.by_range_calls[-1][:2] == ("2026-03-02", "2026-03-05")
+
+
 def test_refresh_snapshot_modes(qtbot):
     db = _FakeDB()
 

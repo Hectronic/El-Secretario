@@ -3,6 +3,7 @@ import pytest
 from unittest.mock import MagicMock, patch
 from src.ai_provider import (
     _extract_retry_delay_seconds, 
+    _is_non_retryable_rate_limit_error,
     generate_content_with_retry,
     AIProvider
 )
@@ -18,6 +19,12 @@ def test_extract_retry_delay_seconds_regex():
     
     # Test case insensitive
     assert _extract_retry_delay_seconds("RETRY IN 5S") == 5.0
+
+
+def test_identifies_rate_limit_errors_as_non_retryable():
+    assert _is_non_retryable_rate_limit_error("429 RESOURCE_EXHAUSTED: quota exceeded")
+    assert _is_non_retryable_rate_limit_error("Rate limit reached")
+    assert not _is_non_retryable_rate_limit_error("Temporary network error")
 
 @patch('time.sleep', return_value=None)
 @patch('src.ai_provider._get_provider_type')
@@ -57,6 +64,25 @@ def test_generate_content_with_retry_all_fails(mock_get_type, mock_sleep, mock_s
         )
     
     assert mock_provider.generate_content.call_count == 3
+
+
+@patch('time.sleep', return_value=None)
+@patch('src.ai_provider._get_provider_type')
+def test_generate_content_with_retry_rate_limit_fails_without_retry(mock_get_type, mock_sleep, mock_settings):
+    mock_get_type.return_value = 'gemini'
+    mock_provider = MagicMock(spec=AIProvider)
+    mock_provider.generate_content.side_effect = RuntimeError(
+        "429 RESOURCE_EXHAUSTED: You exceeded your current quota"
+    )
+
+    with pytest.raises(RuntimeError, match="failed after 1 attempts"):
+        generate_content_with_retry(
+            provider=mock_provider,
+            settings=mock_settings,
+            prompt="Hello",
+        )
+
+    assert mock_provider.generate_content.call_count == 1
 
 @patch('time.sleep', return_value=None)
 @patch('src.ai_provider._get_provider_type')

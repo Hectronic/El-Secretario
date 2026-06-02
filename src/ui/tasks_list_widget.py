@@ -6,7 +6,7 @@
 
 from datetime import date, timedelta
 
-from PyQt6.QtCore import Qt, QSettings, pyqtSignal
+from PyQt6.QtCore import Qt, QDate, QSettings, pyqtSignal
 from PyQt6.QtWidgets import (
     QWidget,
     QVBoxLayout,
@@ -275,6 +275,16 @@ class TasksListWidget(QWidget):
     def _has_global_context(self):
         return bool(self.global_start_date and self.global_end_date)
 
+    def _date_to_iso(self, value):
+        if value is None:
+            return None
+        if isinstance(value, QDate):
+            return value.toString("yyyy-MM-dd") if value.isValid() else None
+        if isinstance(value, date):
+            return value.isoformat()
+        text = str(value).strip()
+        return text or None
+
     def _effective_tags_filter(self):
         if self.snapshot_mode and self.global_tags_filter:
             return self.global_tags_filter
@@ -325,11 +335,18 @@ class TasksListWidget(QWidget):
             return
 
         if week_monday:
-            self.global_start_date = week_monday.toString("yyyy-MM-dd")
-            self.global_end_date = date_filter or week_monday.addDays(6).toString("yyyy-MM-dd")
+            self.global_start_date = self._date_to_iso(week_monday)
+            if date_filter:
+                self.global_end_date = self._date_to_iso(date_filter)
+            elif isinstance(week_monday, QDate):
+                self.global_end_date = week_monday.addDays(6).toString("yyyy-MM-dd")
+            elif isinstance(week_monday, date):
+                self.global_end_date = (week_monday + timedelta(days=6)).isoformat()
+            else:
+                self.global_end_date = self.global_start_date
         elif date_filter:
-            self.global_start_date = date_filter
-            self.global_end_date = date_filter
+            self.global_start_date = self._date_to_iso(date_filter)
+            self.global_end_date = self.global_start_date
         else:
             self.global_start_date = None
             self.global_end_date = None

@@ -1,11 +1,13 @@
 ---
 name: spec-driven-refactor
-description: Keep El Secretario specs and architecture docs aligned while refactoring. Use when Codex refactors, splits, moves, renames, or reorganizes code in this repository, especially under src/, tests/, docs/, or skills/, so existing specs are updated or new specs/refactor records are created with acceptance criteria, affected modules, and validation.
+description: Keep El Secretario specs and architecture docs aligned while refactoring. Use when Codex refactors, splits, moves, renames, or reorganizes code in this repository, and also when a change touches code that is listed as a hotspot, is not yet well refactored, or lacks a matching SPEC-XXX contract in docs/specs. Ensure existing specs are updated or new specs/refactor records are created with acceptance criteria, affected modules, and validation.
 ---
 
 # Spec Driven Refactor
 
 Use this skill together with `refactor-workflow`, `project-dev-standards`, and `pyqt-venv-dev-test` when refactoring this repository.
+
+Also use it as the workflow for the `Refactor and Specs Steward` subagent defined in `AGENTS.md`.
 
 ## Workflow
 
