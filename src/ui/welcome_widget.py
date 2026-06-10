@@ -18,10 +18,19 @@ from PyQt6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLab
 from PyQt6.QtCore import Qt, pyqtSignal, QTimer, QSettings, QTime, QPointF
 from PyQt6.QtGui import QPixmap, QPainter, QColor, QPen
 from src.ui.styles import LIST_WIDGET_STYLE
+from src.ui.welcome.button_factory import (
+    create_big_button,
+    create_round_button,
+    create_squircle_button,
+)
+from src.ui.welcome.capture_state import (
+    build_recording_config,
+    load_capture_settings,
+    populate_microphones,
+    save_capture_settings,
+)
 from src.transcription_options import (
     DEFAULT_TRANSCRIPTION_MODEL,
-    DEFAULT_WELCOME_TRANSCRIPTION_MODEL,
-    get_saved_transcription_model,
     get_transcription_model_options,
 )
 import numpy as np
@@ -120,52 +129,15 @@ class WelcomeWidget(QWidget):
         self._connect_config_signals()
 
     def _load_saved_config(self):
-        saved_mic = self.settings.value("rec_config/mic", None)
-        prefer_index = self.settings.value("audio_prefer_device_index", False, type=bool)
-        if saved_mic is None:
-            # Try global default from settings.
-            if prefer_index:
-                saved_mic_index = self.settings.value("default_mic_index", None)
-                try:
-                    index = self.mic_combo.findData(int(saved_mic_index)) if saved_mic_index is not None else -1
-                except (TypeError, ValueError):
-                    index = -1
-                if index >= 0:
-                    self.mic_combo.setCurrentIndex(index)
-            if self.mic_combo.currentIndex() <= 0:
-                saved_mic_name = self.settings.value("default_mic_name", "")
-                if saved_mic_name:
-                    index = self.mic_combo.findText(saved_mic_name)
-                    if index >= 0:
-                        self.mic_combo.setCurrentIndex(index)
-        elif saved_mic:
-            index = self.mic_combo.findData(saved_mic)
-            if index >= 0:
-                self.mic_combo.setCurrentIndex(index)
-        
-        saved_model = get_saved_transcription_model(
+        load_capture_settings(
             self.settings,
-            default=DEFAULT_WELCOME_TRANSCRIPTION_MODEL,
+            mic_combo=self.mic_combo,
+            model_combo=self.model_combo,
+            lang_combo=self.lang_combo,
+            diarization_check=self.diarization_check,
+            sys_audio_check=self.sys_audio_check,
+            auto_summary_check=self.auto_summary_check,
         )
-        self.model_combo.setCurrentText(saved_model)
-        
-        saved_lang = self.settings.value("rec_config/language", "Auto")
-        self.lang_combo.setCurrentText(saved_lang)
-        
-        saved_diar = self.settings.value("rec_config/diarization", False, type=bool)
-        self.diarization_check.setChecked(saved_diar)
-        
-        saved_sys_audio = self.settings.value("rec_config/capture_system_audio", None)
-        if saved_sys_audio is None:
-            # Try global default from settings
-            saved_sys_audio = self.settings.value("capture_system_audio", False, type=bool)
-        else:
-            saved_sys_audio = self.settings.value("rec_config/capture_system_audio", False, type=bool)
-            
-        self.sys_audio_check.setChecked(saved_sys_audio)
-
-        saved_auto_summary = self.settings.value("rec_config/auto_summarize_after_transcription", False, type=bool)
-        self.auto_summary_check.setChecked(saved_auto_summary)
         
     def _connect_config_signals(self):
         self.mic_combo.currentIndexChanged.connect(self._save_config)
@@ -176,12 +148,15 @@ class WelcomeWidget(QWidget):
         self.auto_summary_check.toggled.connect(self._save_config)
 
     def _save_config(self):
-        self.settings.setValue("rec_config/mic", self.mic_combo.currentData())
-        self.settings.setValue("rec_config/model", self.model_combo.currentText())
-        self.settings.setValue("rec_config/language", self.lang_combo.currentText())
-        self.settings.setValue("rec_config/diarization", self.diarization_check.isChecked())
-        self.settings.setValue("rec_config/capture_system_audio", self.sys_audio_check.isChecked())
-        self.settings.setValue("rec_config/auto_summarize_after_transcription", self.auto_summary_check.isChecked())
+        save_capture_settings(
+            self.settings,
+            mic_combo=self.mic_combo,
+            model_combo=self.model_combo,
+            lang_combo=self.lang_combo,
+            diarization_check=self.diarization_check,
+            sys_audio_check=self.sys_audio_check,
+            auto_summary_check=self.auto_summary_check,
+        )
         self.status_message_requested.emit("Recording configuration saved.")
 
     def _update_digital_clock(self):
@@ -661,32 +636,16 @@ class WelcomeWidget(QWidget):
 
     def populate_mics(self, keep_current=False):
         """Populate the microphone combo box with available devices."""
-        previous_data = self.mic_combo.currentData() if keep_current else None
-        previous_text = self.mic_combo.currentText() if keep_current else ""
-        if os.environ.get("EL_SECRETARIO_SKIP_AUDIO_ENUM", "").strip().lower() in {"1", "true", "yes"}:
-            self.mic_combo.clear()
-            self.mic_combo.addItem("Default (Auto)", None)
-            return
         global Recorder
         if Recorder is None:
             from src.audio import Recorder as _Recorder
             Recorder = _Recorder
-        devices = Recorder.get_input_devices()
-        self.mic_combo.clear()
-        # Add default option first
-        self.mic_combo.addItem("Default (Auto)", None)
-        for idx, name in devices:
-            self.mic_combo.addItem(name, idx)
-        if keep_current:
-            if previous_data is not None:
-                idx_by_data = self.mic_combo.findData(previous_data)
-                if idx_by_data >= 0:
-                    self.mic_combo.setCurrentIndex(idx_by_data)
-                    return
-            if previous_text:
-                idx_by_text = self.mic_combo.findText(previous_text)
-                if idx_by_text >= 0:
-                    self.mic_combo.setCurrentIndex(idx_by_text)
+        populate_microphones(
+            self.mic_combo,
+            recorder_getter=lambda: Recorder,
+            skip_audio_enum=os.environ.get("EL_SECRETARIO_SKIP_AUDIO_ENUM", "").strip().lower() in {"1", "true", "yes"},
+            keep_current=keep_current,
+        )
 
     def on_rescan_mics_clicked(self):
         self.populate_mics(keep_current=True)
@@ -807,15 +766,14 @@ class WelcomeWidget(QWidget):
         if self.test_stream is not None:
             self.stop_mic_test()
             
-        lang_map = {"Auto": None, "Spanish": "es", "English": "en"}
-        return {
-            "device_index": self.mic_combo.currentData(),
-            "model": self.model_combo.currentText(),
-            "language": lang_map.get(self.lang_combo.currentText()),
-            "diarization": self.diarization_check.isChecked(),
-            "capture_system_audio": self.sys_audio_check.isChecked(),
-            "auto_summarize_after_transcription": self.auto_summary_check.isChecked(),
-        }
+        return build_recording_config(
+            mic_combo=self.mic_combo,
+            model_combo=self.model_combo,
+            lang_combo=self.lang_combo,
+            diarization_check=self.diarization_check,
+            sys_audio_check=self.sys_audio_check,
+            auto_summary_check=self.auto_summary_check,
+        )
 
     def on_new_recording(self):
         """Emit new recording signal with configuration."""
@@ -832,95 +790,13 @@ class WelcomeWidget(QWidget):
         self.import_audio_requested.emit(config)
 
     def create_big_button(self, text, color, callback, width=200, height=150, class_name=None):
-        btn = QPushButton(text)
-        if class_name:
-            btn.setProperty("class", class_name)
-        btn.setFixedSize(width, height)
-        
-        # Only apply hardcoded style if NO class is provided
-        if not class_name:
-            btn.setStyleSheet(f"""
-                QPushButton {{
-                    background-color: {color};
-                    color: white;
-                    font-size: 16px;
-                    font-weight: bold;
-                    border-radius: 10px;
-                }}
-                QPushButton:hover {{
-                    background-color: {color}cc;
-                }}
-            """)
-        btn.clicked.connect(callback)
-        return btn
+        return create_big_button(text, color, callback, width=width, height=height, class_name=class_name)
 
     def create_round_button(self, text, color, callback, size=120, class_name=None):
-        btn = QPushButton(text)
-        if class_name:
-            btn.setProperty("class", class_name)
-        btn.setFixedSize(size, size)
-        
-        if not class_name:
-            btn.setStyleSheet(f"""
-                QPushButton {{
-                    background-color: {color};
-                    color: white;
-                    font-size: 20px;
-                    font-weight: bold;
-                    border-radius: {size // 2}px;
-                    border: 5px solid #fff;
-                }}
-                QPushButton:hover {{
-                    background-color: {color}cc;
-                    border-color: #eee;
-                }}
-                QPushButton:pressed {{
-                    background-color: {color}aa;
-                    border-color: #ccc;
-                }}
-            """)
-        btn.clicked.connect(callback)
-        return btn
+        return create_round_button(text, color, callback, size=size, class_name=class_name)
 
     def create_squircle_button(self, text, color, callback, width=100, height=90, class_name=None):
-        from PyQt6.QtGui import QColor
-        btn = QPushButton(text)
-        if class_name:
-            btn.setProperty("class", class_name)
-        btn.setFixedSize(width, height)
-        border_radius = int(height * 0.25)
-        
-        if not class_name:
-            bg = QColor(color)
-            hover_bg = bg.lighter(115).name()
-            pressed_bg = bg.darker(110).name()
-
-            btn.setStyleSheet(f"""
-                QPushButton {{
-                    background-color: {color};
-                    color: white;
-                    font-size: 20px;
-                    font-weight: bold;
-                    border-top-right-radius: {border_radius}px;
-                    border-bottom-right-radius: {border_radius}px;
-                    border-top-left-radius: 0px;
-                    border-bottom-left-radius: 0px;
-                    border: 2px solid #555;
-                    border-left: none;
-                }}
-                QPushButton:hover {{
-                    background-color: {hover_bg};
-                    border: 2px solid #777;
-                    border-left: none;
-                }}
-                QPushButton:pressed {{
-                    background-color: {pressed_bg};
-                    border: 2px solid #999;
-                    border-left: none;
-                }}
-            """)
-        btn.clicked.connect(callback)
-        return btn
+        return create_squircle_button(text, color, callback, width=width, height=height, class_name=class_name)
 
     def on_search_triggered(self):
         text = self.search_input.text().strip()

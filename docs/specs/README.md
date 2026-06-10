@@ -80,12 +80,12 @@ What user or product problem is being solved?
 
 | ID | Capability | Status | Main Code Areas | Representative Tests |
 | --- | --- | --- | --- | --- |
-| SPEC-001 | Audio capture and import | Implemented | `src/audio.py`, `src/ui/welcome_widget.py`, `src/ui/recording_in_progress_widget.py`, `src/ui/main_window/` | `tests/test_recording_flow.py`, `tests/test_z_audio.py` |
+| [SPEC-001](SPEC-001-audio-capture-and-import.md) | Audio capture and import | Implemented | `src/audio.py`, `src/ui/welcome_widget.py`, `src/ui/welcome/`, `src/ui/recording_in_progress_widget.py`, `src/ui/main_window/` | `tests/test_recording_flow.py`, `tests/test_welcome_daily_summary_button.py`, `tests/test_notes.py`, `tests/ui/welcome/`, `tests/test_z_audio.py` |
 | SPEC-002 | Transcription runtime and STT provider selection | Implemented | `src/transcription_options.py`, `src/worker_components/`, `src/stt_providers/` | `tests/test_transcription_options.py`, `tests/worker/`, `tests/worker_components/`, `tests/stt_providers/` |
 | SPEC-003 | Diarization and speaker management | Implemented | `src/worker_components/transcriber_thread.py`, `src/ui/speaker_dialog.py`, `src/ui/recording/speaker_actions.py`, `src/ui/recording_widget.py` | `tests/test_diarization_toggle.py`, `tests/ui/test_speaker_dialog.py`, `tests/ui/recording/test_speaker_actions.py` |
 | [SPEC-004](SPEC-004-recording-metadata-notes-favorites-deletion.md) | Recording metadata, notes, favorites, deletion | Implemented | `src/database.py`, `src/ui/recording_widget.py`, `src/ui/recording/`, `src/ui/note_widget.py`, `src/ui/components.py` | `tests/test_database.py`, `tests/test_notes.py`, `tests/test_deletion.py`, `tests/test_recording_widget_ui.py`, `tests/ui/recording/` |
 | SPEC-005 | Waveform audio editor and safe retranscription | Implemented | `src/ui/audio_editor/`, `src/ui/recording/audio_trim.py`, `src/audio.py`, `src/ui/main_window/recording_tabs.py` | `tests/ui/audio_editor/`, `tests/ui/recording/test_audio_trim.py`, `tests/test_audio_editing.py`, `tests/test_recording_flow.py` |
-| SPEC-006 | RAG indexing and semantic search | Implemented | `src/rag_engine.py`, `src/ui/search_results_widget.py`, `src/ui/main_window/` | `tests/test_rag_engine.py`, `tests/test_rag_fallback.py`, `tests/test_search.py` |
+| [SPEC-006](SPEC-006-rag-indexing-semantic-search.md) | RAG indexing and semantic search | Implemented | `src/rag_engine.py`, `src/rag/`, `src/ui/search_results_widget.py`, `src/ui/main_window/` | `tests/rag/`, `tests/test_rag_engine.py`, `tests/test_rag_fallback.py`, `tests/test_search.py` |
 | SPEC-007 | Chat sessions, context builder, and floating chat | Implemented | `src/ui/chat_widget.py`, `src/ui/chat/`, `src/ui/context_manager_panel.py`, `src/ui/main_window/chat_floating.py` | `tests/test_chat_widget_context.py`, `tests/ui/chat/`, `tests/ui/main_window/test_chat_floating.py` |
 | SPEC-008 | Active chat context sidebar | Implemented | `src/ui/context_manager_panel.py`, `src/ui/main_window/sidebar_sync.py`, `src/ui/main_window/sidebar_content.py` | `tests/test_chat_context_sync.py`, `tests/ui/main_window/test_sidebar_sync.py` |
 | SPEC-009 | Calendar navigation and date-filtered context | Implemented | `src/ui/calendar_widget.py`, `src/ui/main_window/sidebar_sync.py`, `src/database.py` | `tests/test_calendar_logic.py`, `tests/test_calendar_ui.py`, `tests/test_calendar_multiselection.py` |
@@ -99,7 +99,7 @@ What user or product problem is being solved?
 
 | ID | Status | Scope | Specs Affected |
 | --- | --- | --- | --- |
-| REFACTOR-2026-05 | Implemented | Feature-package split for main window, chat, settings, audio editor, workers, provider adapters, and mirrored tests | SPEC-002, SPEC-005, SPEC-007, SPEC-008, SPEC-013 |
+| REFACTOR-2026-05 | Implemented | Feature-package split for main window, chat, settings, audio editor, workers, provider adapters, RAG helpers, welcome screen helpers, and mirrored tests | SPEC-001, SPEC-002, SPEC-005, SPEC-006, SPEC-007, SPEC-008, SPEC-013 |
 
 ## Spec Granularity Rules
 

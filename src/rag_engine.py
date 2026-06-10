@@ -13,215 +13,28 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 import os
-import json
 import platform
 import logging
-import tempfile
-import multiprocessing as mp
-import warnings
 from typing import List, Dict, Any, Optional
+
+from src.rag.chroma_compat import suppress_sentencepiece_swig_deprecation_warnings
+from src.rag.chroma_store import create_chroma_store
+from src.rag.filters import build_search_where_clause
+from src.rag.results import parse_semantic_query_results
+from src.rag.subprocess_tasks import (
+    rag_keyword_search_in_subprocess,
+    rag_query_in_subprocess,
+    rag_upsert_in_subprocess,
+)
 
 # Reduce odds of PostHog/background telemetry crashes in desktop environments.
 os.environ.setdefault("ANONYMIZED_TELEMETRY", "False")
 os.environ.setdefault("POSTHOG_DISABLED", "1")
 
 
-_SENTENCEPIECE_SWIG_DEPRECATION_MESSAGES = (
-    r"builtin type SwigPyPacked has no __module__ attribute",
-    r"builtin type SwigPyObject has no __module__ attribute",
-    r"builtin type swigvarlink has no __module__ attribute",
-)
-
-
-def _suppress_sentencepiece_swig_deprecation_warnings() -> None:
-    """Hide known Python 3.12 SWIG warnings emitted by sentencepiece."""
-    for message in _SENTENCEPIECE_SWIG_DEPRECATION_MESSAGES:
-        warnings.filterwarnings(
-            "ignore",
-            message=message,
-            category=DeprecationWarning,
-        )
-
-
-_suppress_sentencepiece_swig_deprecation_warnings()
+suppress_sentencepiece_swig_deprecation_warnings()
 
 import chromadb
-from chromadb.config import Settings
-from chromadb.utils import embedding_functions
-
-
-class _InMemoryCollection:
-    """Minimal in-memory collection fallback compatible with the Chroma API we use."""
-
-    def __init__(self):
-        self._docs: Dict[str, Dict[str, Any]] = {}
-
-    def upsert(self, ids, documents, metadatas):
-        for doc_id, text, metadata in zip(ids, documents, metadatas):
-            self._docs[str(doc_id)] = {
-                "id": str(doc_id),
-                "document": text or "",
-                "metadata": dict(metadata or {}),
-            }
-
-    def delete(self, ids):
-        for doc_id in ids:
-            self._docs.pop(str(doc_id), None)
-
-    def query(self, query_texts, n_results=5, where=None):
-        query = (query_texts[0] if query_texts else "") or ""
-        q_lower = query.lower()
-
-        candidates = []
-        for doc_id, entry in self._docs.items():
-            if not self._matches_where(entry, where):
-                continue
-
-            text = entry.get("document", "") or ""
-            text_lower = text.lower()
-            # Prefer explicit term hits; fallback to deterministic tie-break by id.
-            score = text_lower.count(q_lower) if q_lower else 0
-            if q_lower and score == 0 and q_lower not in text_lower:
-                continue
-            candidates.append((score, doc_id, entry))
-
-        candidates.sort(key=lambda item: (-item[0], item[1]))
-        selected = candidates[: max(0, int(n_results or 0))]
-
-        return {
-            "ids": [[item[1] for item in selected]],
-            "documents": [[item[2].get("document", "") for item in selected]],
-            "metadatas": [[item[2].get("metadata", {}) for item in selected]],
-            "distances": [[float(1.0 / (1 + item[0])) for item in selected]],
-        }
-
-    def _matches_where(self, entry: Dict[str, Any], where: Optional[Dict[str, Any]]) -> bool:
-        if not where:
-            return True
-        if "$and" in where:
-            return all(self._matches_where(entry, clause) for clause in where.get("$and", []))
-
-        for key, expected in where.items():
-            if key == "$and":
-                continue
-            actual = entry["id"] if key == "id" else (entry.get("metadata", {}) or {}).get(key)
-            if isinstance(expected, dict):
-                if "$in" in expected and actual not in expected["$in"]:
-                    return False
-                if "$ne" in expected and actual == expected["$ne"]:
-                    return False
-            else:
-                if actual != expected:
-                    return False
-        return True
-
-
-class _InMemoryChromaClient:
-    """Minimal client fallback exposing get_or_create_collection."""
-
-    def __init__(self):
-        self._collections: Dict[str, _InMemoryCollection] = {}
-
-    def get_or_create_collection(self, name, embedding_function=None):  # noqa: ARG002
-        if name not in self._collections:
-            self._collections[name] = _InMemoryCollection()
-        return self._collections[name]
-
-
-def _get_or_create_collection_compatible(client, name: str, embedding_fn):
-    """
-    Open/create a collection while tolerating embedding-function conflicts
-    with previously persisted Chroma configurations.
-    """
-    try:
-        return client.get_or_create_collection(
-            name=name,
-            embedding_function=embedding_fn,
-        )
-    except ValueError as e:
-        msg = str(e).lower()
-        if "embedding function" in msg and ("conflict" in msg or "already exists" in msg):
-            logging.warning(
-                "Embedding function conflict for collection '%s'. Reusing existing collection configuration.",
-                name,
-            )
-            return client.get_or_create_collection(name=name)
-        raise
-
-
-def _parse_semantic_query_results(results: Dict[str, Any]) -> List[Dict[str, Any]]:
-    parsed_results = []
-    ids_outer = results.get("ids") or []
-    docs_outer = results.get("documents") or []
-    metas_outer = results.get("metadatas") or []
-    dists_outer = results.get("distances") or []
-    if not ids_outer:
-        return parsed_results
-
-    ids = ids_outer[0] or []
-    docs = docs_outer[0] if docs_outer else []
-    metas = metas_outer[0] if metas_outer else []
-    dists = dists_outer[0] if dists_outer else []
-
-    for i in range(len(ids)):
-        metadata = metas[i] if i < len(metas) else {}
-        if str((metadata or {}).get("deleted", "0")) == "1":
-            continue
-        parsed_results.append(
-            {
-                "id": ids[i],
-                "text": docs[i] if i < len(docs) else "",
-                "metadata": metadata or {},
-                "distance": dists[i] if i < len(dists) else 0.0,
-            }
-        )
-    return parsed_results
-
-
-def _keyword_rank_raw_results(raw: Dict[str, Any], query: str, n_results: int) -> List[Dict[str, Any]]:
-    ids = raw.get("ids") or []
-    docs = raw.get("documents") or []
-    metas = raw.get("metadatas") or []
-    terms = [t for t in query.lower().split() if t]
-    scored = []
-    for idx, doc_id in enumerate(ids):
-        text = docs[idx] if idx < len(docs) else ""
-        metadata = metas[idx] if idx < len(metas) else {}
-        if str((metadata or {}).get("deleted", "0")) == "1":
-            continue
-        text_l = (text or "").lower()
-        score = sum(text_l.count(term) for term in terms) if terms else 0
-        scored.append(
-            {
-                "id": doc_id,
-                "text": text or "",
-                "metadata": metadata or {},
-                "distance": float(-score),
-            }
-        )
-    scored.sort(key=lambda r: r["distance"])
-    return scored[:n_results]
-
-
-def _build_search_where_clause(
-    where_clause: Optional[Dict[str, Any]],
-    ids: Optional[List[str]],
-) -> Dict[str, Any]:
-    final_where = {}
-    if where_clause:
-        final_where = where_clause.copy()
-
-    if ids:
-        if len(ids) == 1:
-            final_where["id"] = ids[0]
-        else:
-            final_where["id"] = {"$in": ids}
-
-    deleted_filter = {"deleted": {"$ne": "1"}}
-    if final_where:
-        return {"$and": [final_where, deleted_filter]}
-    return deleted_filter
-
 
 class RAGEngine:
     def __init__(self, persist_directory: str = "chroma_db"):
@@ -241,52 +54,14 @@ class RAGEngine:
             and os.environ.get("EL_SECRETARIO_RAG_SUBPROCESS_QUERY", "1").strip().lower() in {"1", "true", "yes"}
         )
         self._semantic_query_disabled = False
-        os.makedirs(self.persist_directory, exist_ok=True)
-        chroma_settings = Settings(anonymized_telemetry=False)
-
-        logging.info(
-            "Initializing RAGEngine: persist_dir=%s windows=%s safe_delete_mode=%s subprocess_upsert_mode=%s telemetry_disabled=%s",
+        store = create_chroma_store(
             self.persist_directory,
-            self._is_windows,
-            self._safe_delete_mode,
-            self._subprocess_upsert_mode,
-            True,
+            chromadb_module=chromadb,
         )
-        # Initialize ChromaDB client. Fall back to in-memory client when
-        # persistence is unavailable in the current environment.
-        try:
-            self.client = chromadb.PersistentClient(path=persist_directory, settings=chroma_settings)
-            self.is_persistent = True
-        except Exception as e:
-            logging.warning(f"Persistent Chroma init failed, using in-memory fallback: {e}")
-            self.client = _InMemoryChromaClient()
-            self.is_persistent = False
-        
-        # Use SentenceTransformer if available, fallback to default.
-        # DefaultEmbeddingFunction (ONNX) can fail to load DLLs on some Windows setups.
-        try:
-            logging.info("Initializing embedding function (SentenceTransformer)...")
-            self.embedding_fn = embedding_functions.SentenceTransformerEmbeddingFunction(
-                model_name="all-MiniLM-L6-v2"
-            )
-        except Exception as e:
-            logging.warning(f"SentenceTransformer init failed, falling back to default: {e}")
-            try:
-                self.embedding_fn = embedding_functions.DefaultEmbeddingFunction()
-                logging.info("Fallback: Using DefaultEmbeddingFunction (ONNX).")
-            except Exception as e2:
-                logging.error(f"All embedding functions failed to initialize: {e2}")
-                self.embedding_fn = None
-        
-        logging.info("RAG Engine embedding function initialized: %s", 
-                     type(self.embedding_fn).__name__ if self.embedding_fn else "None")
-        
-        # Get or create collection
-        self.collection = _get_or_create_collection_compatible(
-            self.client,
-            name="transcriptions",
-            embedding_fn=self.embedding_fn,
-        )
+        self.client = store.client
+        self.is_persistent = store.is_persistent
+        self.embedding_fn = store.embedding_fn
+        self.collection = store.collection
 
     def add_document(self, doc_id: str, text: str, metadata: Optional[Dict[str, Any]] = None) -> None:
         """
@@ -306,7 +81,7 @@ class RAGEngine:
 
         # ChromaDB upsert handles both add and update
         if self._subprocess_upsert_mode:
-            ok = _rag_upsert_in_subprocess(
+            ok = rag_upsert_in_subprocess(
                 persist_directory=self.persist_directory,
                 doc_id=str(doc_id),
                 text=text,
@@ -338,11 +113,11 @@ class RAGEngine:
         # Caller should resolve tags to IDs and pass them in 'ids' argument
         # if tag_filter and tag_filter != "All":
         #     final_where["tags"] = {"$contains": tag_filter}
-        final_where = _build_search_where_clause(where_clause, ids)
+        final_where = build_search_where_clause(where_clause, ids)
 
         if self._subprocess_query_mode:
             if not self._semantic_query_disabled:
-                results = _rag_query_in_subprocess(
+                results = rag_query_in_subprocess(
                     persist_directory=self.persist_directory,
                     query=query,
                     n_results=n_results,
@@ -354,7 +129,7 @@ class RAGEngine:
                     logging.error(
                         "RAG subprocess query failed. Disabling semantic query for this session and using keyword fallback."
                     )
-                    return _rag_keyword_search_in_subprocess(
+                    return rag_keyword_search_in_subprocess(
                         persist_directory=self.persist_directory,
                         query=query,
                         n_results=n_results,
@@ -362,7 +137,7 @@ class RAGEngine:
                         timeout_seconds=30,
                     )
             else:
-                return _rag_keyword_search_in_subprocess(
+                return rag_keyword_search_in_subprocess(
                     persist_directory=self.persist_directory,
                     query=query,
                     n_results=n_results,
@@ -376,7 +151,7 @@ class RAGEngine:
                 where=final_where
             )
         
-        return _parse_semantic_query_results(results)
+        return parse_semantic_query_results(results)
 
 
     def delete_document(self, doc_id: str) -> None:
@@ -386,7 +161,7 @@ class RAGEngine:
             if self._safe_delete_mode:
                 # Windows workaround: avoid native rust delete path that can crash the process.
                 if self._subprocess_upsert_mode:
-                    ok = _rag_upsert_in_subprocess(
+                    ok = rag_upsert_in_subprocess(
                         persist_directory=self.persist_directory,
                         doc_id=sid,
                         text="",
@@ -410,223 +185,3 @@ class RAGEngine:
             logging.info("RAG hard-delete applied for doc_id=%s", sid)
         except Exception as e:
             logging.error("Error deleting document %s: %s", doc_id, e, exc_info=True)
-
-
-def _rag_upsert_subprocess_entry(payload: Dict[str, Any], result_path: str):
-    result = {"ok": False, "error": "unknown error"}
-    try:
-        collection = _init_subprocess_collection(payload["persist_directory"])
-        collection.upsert(
-            ids=[payload["doc_id"]],
-            documents=[payload["text"]],
-            metadatas=[payload["metadata"]],
-        )
-        result = {"ok": True}
-    except Exception as e:
-        result = {"ok": False, "error": str(e)}
-    finally:
-        try:
-            with open(result_path, "w", encoding="utf-8") as f:
-                json.dump(result, f)
-        except Exception:
-            # Parent process will treat missing result file as failure.
-            pass
-
-
-def _run_json_subprocess_task(
-    *,
-    target,
-    payload: Dict[str, Any],
-    timeout_seconds: int,
-    temp_prefix: str,
-    timeout_error: str,
-    crash_error: str,
-    missing_result_error: str,
-    operation_error: str,
-    setup_error: str,
-    setup_error_arg: Any = None,
-) -> Optional[Dict[str, Any]]:
-    try:
-        ctx = mp.get_context("spawn")
-        fd, result_path = tempfile.mkstemp(prefix=temp_prefix, suffix=".json")
-        os.close(fd)
-        proc = ctx.Process(
-            target=target,
-            args=(payload, result_path),
-            daemon=False,
-        )
-        proc.start()
-        proc.join(timeout=timeout_seconds)
-        if proc.is_alive():
-            proc.terminate()
-            proc.join(timeout=5)
-            logging.error(timeout_error)
-            return None
-        if proc.exitcode != 0:
-            logging.error(crash_error, proc.exitcode)
-            return None
-        if not os.path.exists(result_path):
-            logging.error(missing_result_error)
-            return None
-        with open(result_path, "r", encoding="utf-8") as f:
-            result = json.load(f)
-        if not result.get("ok"):
-            logging.error(operation_error, result.get("error"))
-            return None
-        return result
-    except Exception as e:
-        if setup_error_arg is None:
-            logging.error(setup_error, e, exc_info=True)
-        else:
-            logging.error(setup_error, setup_error_arg, e, exc_info=True)
-        return None
-    finally:
-        if "result_path" in locals():
-            try:
-                os.remove(result_path)
-            except OSError:
-                pass
-
-
-def _rag_upsert_in_subprocess(
-    *,
-    persist_directory: str,
-    doc_id: str,
-    text: str,
-    metadata: Dict[str, Any],
-    timeout_seconds: int = 30,
-) -> bool:
-    payload = {
-        "persist_directory": persist_directory,
-        "doc_id": doc_id,
-        "text": text,
-        "metadata": metadata,
-    }
-    result = _run_json_subprocess_task(
-        target=_rag_upsert_subprocess_entry,
-        payload=payload,
-        timeout_seconds=timeout_seconds,
-        temp_prefix="rag_upsert_",
-        timeout_error=f"RAG subprocess upsert timed out for doc_id={doc_id}",
-        crash_error=f"RAG subprocess upsert crashed for doc_id={doc_id} with exitcode=%s",
-        missing_result_error=f"RAG subprocess upsert finished without result for doc_id={doc_id}",
-        operation_error=f"RAG subprocess upsert error for doc_id={doc_id}: %s",
-        setup_error="RAG subprocess upsert setup failed for doc_id=%s: %s",
-        setup_error_arg=doc_id,
-    )
-    return result is not None
-
-
-def _rag_query_subprocess_entry(payload: Dict[str, Any], result_path: str):
-    result = {"ok": False, "error": "unknown error"}
-    try:
-        collection = _init_subprocess_collection(payload["persist_directory"])
-        query_result = collection.query(
-            query_texts=[payload["query"]],
-            n_results=payload["n_results"],
-            where=payload["where"],
-        )
-        result = {"ok": True, "result": query_result}
-    except Exception as e:
-        result = {"ok": False, "error": str(e)}
-    finally:
-        try:
-            with open(result_path, "w", encoding="utf-8") as f:
-                json.dump(result, f)
-        except Exception:
-            pass
-
-
-def _rag_query_in_subprocess(
-    *,
-    persist_directory: str,
-    query: str,
-    n_results: int,
-    where: Dict[str, Any],
-    timeout_seconds: int = 30,
-) -> Optional[Dict[str, Any]]:
-    payload = {
-        "persist_directory": persist_directory,
-        "query": query,
-        "n_results": n_results,
-        "where": where,
-    }
-    result = _run_json_subprocess_task(
-        target=_rag_query_subprocess_entry,
-        payload=payload,
-        timeout_seconds=timeout_seconds,
-        temp_prefix="rag_query_",
-        timeout_error="RAG subprocess query timed out",
-        crash_error="RAG subprocess query crashed with exitcode=%s",
-        missing_result_error="RAG subprocess query finished without result file",
-        operation_error="RAG subprocess query error: %s",
-        setup_error="RAG subprocess query setup failed: %s",
-    )
-    return result.get("result") if result else None
-
-
-def _rag_keyword_search_subprocess_entry(payload: Dict[str, Any], result_path: str):
-    result = {"ok": False, "error": "unknown error"}
-    try:
-        collection = _init_subprocess_collection(payload["persist_directory"])
-        raw = collection.get(
-            where=payload["where"],
-            include=["documents", "metadatas"],
-        )
-        result = {"ok": True, "result": raw}
-    except Exception as e:
-        result = {"ok": False, "error": str(e)}
-    finally:
-        try:
-            with open(result_path, "w", encoding="utf-8") as f:
-                json.dump(result, f)
-        except Exception:
-            pass
-
-
-def _rag_keyword_search_in_subprocess(
-    *,
-    persist_directory: str,
-    query: str,
-    n_results: int,
-    where: Dict[str, Any],
-    timeout_seconds: int = 30,
-) -> List[Dict[str, Any]]:
-    payload = {
-        "persist_directory": persist_directory,
-        "query": query,
-        "n_results": n_results,
-        "where": where,
-    }
-    result = _run_json_subprocess_task(
-        target=_rag_keyword_search_subprocess_entry,
-        payload=payload,
-        timeout_seconds=timeout_seconds,
-        temp_prefix="rag_kw_query_",
-        timeout_error="RAG keyword subprocess query timed out",
-        crash_error="RAG keyword subprocess query crashed with exitcode=%s",
-        missing_result_error="RAG keyword subprocess query finished without result file",
-        operation_error="RAG keyword subprocess query error: %s",
-        setup_error="RAG keyword subprocess query setup failed: %s",
-    )
-    if not result:
-        return []
-    raw = result.get("result") or {}
-    return _keyword_rank_raw_results(raw, query, n_results)
-
-
-def _init_subprocess_collection(persist_directory: str):
-    import chromadb
-    from chromadb.config import Settings
-    from chromadb.utils import embedding_functions
-
-    chroma_settings = Settings(anonymized_telemetry=False)
-    client = chromadb.PersistentClient(path=persist_directory, settings=chroma_settings)
-    embedding_fn = embedding_functions.SentenceTransformerEmbeddingFunction(
-        model_name="all-MiniLM-L6-v2"
-    )
-    return _get_or_create_collection_compatible(
-        client,
-        name="transcriptions",
-        embedding_fn=embedding_fn,
-    )

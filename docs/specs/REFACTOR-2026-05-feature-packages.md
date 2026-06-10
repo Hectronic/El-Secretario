@@ -43,6 +43,8 @@ Reduce large flat modules and create expansion points for future product work wi
 - From history click navigation in `src/ui/main_window/__init__.py` to `src/ui/main_window/history_navigation_actions.py`: routing history row clicks to recording/note/summary tabs.
 - From summary regeneration flow in `src/ui/main_window/__init__.py` to `src/ui/main_window/summary_actions.py`: payload normalization and daily summary enqueue from summary views.
 - From runtime-heavy queue helpers in `src/ui/summary_task_queue.py` to `src/app/summary_queue/`: worker stop/cleanup/retry-wait runtime helpers and RAG reindex thread now live in app-level modules (`runtime.py`, `threads.py`) while UI keeps signal orchestration.
+- From mixed RAG engine helpers in `src/rag_engine.py` to `src/rag/`: in-memory fallback storage, result parsing/ranking, filter composition, Chroma store initialization/compatibility, and subprocess task handling now live in focused modules while `RAGEngine` remains the public facade.
+- From repeated welcome-screen button construction in `src/ui/welcome_widget.py` to `src/ui/welcome/button_factory.py`: big, round, and squircle button constructors now live in a focused helper while `WelcomeWidget` keeps the same public methods and signals.
 - From queue-management widget logic in `src/ui/queue_management_widget.py` to `src/app/summary_queue/`: action orchestration (`actions.py`) and presentation/snapshot mapping (`presentation.py`) now live in app-level modules while the widget primarily applies mapped view state.
 - From worker startup internals in `src/ui/summary_task_queue.py` to `src/app/summary_queue/`: worker construction (`worker_factory.py`), common signal wiring (`worker_signals.py`), and queue-start lifecycle (`worker_lifecycle.py`) now live in focused modules.
 
@@ -50,13 +52,15 @@ Reduce large flat modules and create expansion points for future product work wi
 
 - SPEC-002: transcription runtime and STT provider selection now map to `src/worker_components/` and `src/stt_providers/`.
 - SPEC-005: waveform audio editor now maps to `src/ui/audio_editor/`.
+- SPEC-006: RAG indexing and semantic search now maps to `src/rag_engine.py` and `src/rag/`.
+- SPEC-001: audio capture and import now maps to `src/ui/welcome_widget.py`, `src/ui/welcome/`, `src/audio.py`, and `src/ui/main_window/`.
 - SPEC-007: chat sessions/context/floating chat now map to `src/ui/chat/`, `src/ui/chat_widget.py`, and `src/ui/main_window/chat_floating.py`.
 - SPEC-008: active chat context sidebar now maps to `src/ui/context_manager_panel.py`, `src/ui/main_window/sidebar_sync.py`, and `src/ui/main_window/sidebar_content.py`.
 - SPEC-013: settings panels now map to `src/ui/settings/`.
 
 ## Tests
 
-- Focused tests have been moved or added under `tests/ui/main_window/`, `tests/ui/chat/`, `tests/ui/settings/`, `tests/ui/audio_editor/`, `tests/worker_components/`, and `tests/stt_providers/`.
+- Focused tests have been moved or added under `tests/ui/main_window/`, `tests/ui/chat/`, `tests/ui/settings/`, `tests/ui/audio_editor/`, `tests/rag/`, `tests/worker_components/`, and `tests/stt_providers/`.
 - MainWindow coordinator extraction now includes direct unit tests for focused coordinators:
   - `tests/ui/main_window/test_tab_lifecycle.py`
   - `tests/ui/main_window/test_tasks_sidebar_actions.py`
@@ -80,7 +84,8 @@ Reduce large flat modules and create expansion points for future product work wi
 - `src/ui/recording_widget.py` is now mostly a Qt orchestration shell for the recording detail/audio-edit tab. UI panel construction, controls, state helpers, RAG indexing, record loading, direct transcription flow, AI actions, speaker mapping, and legacy trim helpers have been extracted under `src/ui/recording/`; remaining reductions should target deletion/open-chat/playback adapters and any broad persistence coupling.
 - `src/ui/welcome_widget.py` still mixes landing layout, recorder configuration, microphone tests, favorites, today view, search, and settings persistence.
 - `src/ui/summary_task_queue.py` now acts mostly as a Qt adapter; keep moving any remaining business-only helpers into `src/app/summary_queue/`.
-- `src/rag_engine.py` still combines vector-store adapter, fallback store, subprocess entrypoints, keyword search, and Windows safety policy.
+- `src/rag_engine.py` now owns the public RAG facade and Windows runtime-mode selection; fallback store, Chroma initialization/compatibility, result parsing/ranking, filter composition, and subprocess task handling have moved to `src/rag/`.
+- `src/ui/welcome_widget.py` still mixes landing layout, recorder configuration, microphone tests, favorites, today view, search, and settings persistence; `src/ui/welcome/button_factory.py` now owns shared button constructors.
 
 ## Follow-Ups
 

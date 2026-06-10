@@ -1,18 +1,24 @@
 # Copyright (C) 2026 Héctor Álvarez López <hectoralvarez.me>
-import pytest
-import warnings
-from src.rag_engine import (
-    _build_search_where_clause,
-    _InMemoryCollection,
-    _InMemoryChromaClient,
-    _keyword_rank_raw_results,
-    _parse_semantic_query_results,
-    _get_or_create_collection_compatible,
-    _suppress_sentencepiece_swig_deprecation_warnings,
-    RAGEngine,
-)
 import os
 import shutil
+import warnings
+
+import pytest
+
+from src.rag.chroma_compat import (
+    get_or_create_collection_compatible as _get_or_create_collection_compatible,
+    suppress_sentencepiece_swig_deprecation_warnings as _suppress_sentencepiece_swig_deprecation_warnings,
+)
+from src.rag.fallback_store import (
+    InMemoryChromaClient as _InMemoryChromaClient,
+    InMemoryCollection as _InMemoryCollection,
+)
+from src.rag.filters import build_search_where_clause as _build_search_where_clause
+from src.rag.results import (
+    keyword_rank_raw_results as _keyword_rank_raw_results,
+    parse_semantic_query_results as _parse_semantic_query_results,
+)
+from src.rag_engine import RAGEngine
 
 @pytest.fixture
 def collection():
