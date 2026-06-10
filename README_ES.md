@@ -10,7 +10,7 @@ El Secretario es una herramienta inteligente de transcripción y organización d
 
 - **Grabación e Importación de Audio**: Graba audio directamente en la aplicación o importa archivos existentes.
 - **Edición de grabaciones**: Abre una grabación en una segunda pestaña de edición, recorta segmentos de audio y vuelve a transcribir automáticamente el clip editado. El primer recorte conserva una copia `.orig` del archivo original.
-- **Transcripción y Diarización**: Transcribe audio automáticamente e identifica diferentes hablantes (diarización) utilizando backends locales de Whisper, `sherpa-onnx` y pyannote.audio.
+- **Transcripción y Diarización**: Transcribe audio automáticamente, copia la transcripción completa con un clic e identifica diferentes hablantes (diarización) utilizando backends locales de Whisper, `sherpa-onnx` y pyannote.audio.
 - **Búsqueda Inteligente (RAG)**: Utiliza Generación Aumentada por Recuperación (RAG) para chatear con tus grabaciones y encontrar información específica. Soporta Google Gemini y **Ollama** para ejecución local.
 - **Ventanas de Chat Flexibles**: Los chats pueden quedarse como pestañas normales, moverse a la barra flotante y minimizarse en fichas compactas para restaurarlos rápido.
 - **Contexto Activo del Chat en la Barra Lateral**: Cuando una pestaña de chat está activa, la barra lateral derecha de la app muestra una copia desplegable y abierta por defecto del contexto del chat, y la oculta al cambiar de pestaña o cerrar el chat.

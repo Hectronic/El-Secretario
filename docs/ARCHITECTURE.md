@@ -69,7 +69,7 @@ Use these boundaries when adding new features:
 - `src/ui/main_window/bootstrap.py` now owns the deterministic startup sequence, but the remaining shell still owns a lot of application wiring.
 - `src/ui/main_window/content_tabs.py` has started pulling tab-opening behavior out of the shell, but `MainWindow` still has legacy wrappers for some content actions.
 - `src/database.py` is a broad repository and migration layer. It contains unrelated aggregates in one class: records, chat sessions, summaries, tasks, logs, import helpers, and schema migrations.
-- `src/ui/recording_widget.py` mixes record metadata editing, playback, transcription, AI actions, task extraction, RAG indexing, speaker management, and legacy trim controls.
+- `src/ui/recording_widget.py` is now mostly a Qt orchestration shell for recording detail and legacy audio-edit tabs. Focused recording-tab UI builders, controls, small state helpers, direct transcription flow helpers, AI action helpers, speaker mapping, audio trim helpers, and RAG indexing helpers live under `src/ui/recording/`; remaining risk is broad widget-level orchestration and persistence coupling.
 - `src/ui/welcome_widget.py` mixes landing page layout, recorder configuration, microphone testing, favorites, search, today view, and settings persistence.
 - `src/ui/summary_task_queue.py` still carries queue orchestration and signal wiring complexity, but most non-Qt queue logic already lives in `src/app/summary_queue/`.
 - `src/rag_engine.py` combines vector store adapter, in-memory fallback, subprocess entrypoints, keyword fallback, Chroma compatibility, and Windows safety policy.
@@ -97,7 +97,7 @@ Recommended next cuts:
 1. Split `DBManager` into repositories after adding contract tests for each aggregate: records, chats, summaries, tasks, logs, and imports.
 2. Move RAG subprocess/keyword/vector-store adapter logic out of `RAGEngine` into smaller adapter modules.
 3. Continue shrinking `MainWindow` by moving notebook, search, settings, collections/calendar, and the remaining content wrappers into focused coordinators.
-4. Split `RecordingWidget` into metadata, playback, transcription, AI actions, and task panels once tests cover the current widget behavior.
+4. Continue shrinking `RecordingWidget` by moving deletion, open-chat, playback adapters, and persistence-facing orchestration into focused modules/services; UI builders, shared controls, direct transcription flow helpers, AI action helpers, speaker mapping, audio trim helpers, and RAG indexing helpers already live under `src/ui/recording/`.
 5. Move `WelcomeWidget` recorder configuration and microphone test behavior into a separate component/service.
 
 ## Testing Expectations

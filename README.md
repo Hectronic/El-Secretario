@@ -12,7 +12,7 @@ Read this in [Español](README_ES.md) | [Asturianu](README_AST.md)
 
 - **Audio Recording & Import**: Record audio directly within the app or import existing files.
 - **Recording Editing**: Open a recording in a second editor tab, trim audio segments, and automatically retranscribe the edited clip. The first trim keeps a `.orig` backup of the original file.
-- **Transcription & Diarization**: Automatically transcribe audio and identify different speakers (diarization) using local Whisper backends, `sherpa-onnx`, and pyannote.audio.
+- **Transcription & Diarization**: Automatically transcribe audio, copy the full transcription with one click, and identify different speakers (diarization) using local Whisper backends, `sherpa-onnx`, and pyannote.audio.
 - **Intelligent Search (RAG)**: Use Retrieval-Augmented Generation (RAG) to chat with your recordings and find specific information. Supports Google Gemini and **Ollama** for local execution.
 - **Flexible Chat Windows**: Chats can stay as regular tabs, move to the floating bar, and be minimized into compact chips for quick restore.
 - **Active Chat Context Sidebar**: When a chat tab is active, the app's right sidebar shows a collapsible, auto-opened mirror of the chat context and hides it again when you switch tabs or close the chat.

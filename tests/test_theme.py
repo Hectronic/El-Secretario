@@ -53,5 +53,12 @@ class TestTheme(unittest.TestCase):
         self.assertIn("background-color: #D1D1D1", sheet)
         self.assertIn("border: 2px solid #7B59AB", sheet)
 
+    def test_primary_buttons_have_disabled_state(self):
+        for theme in ("Light", "Dark", "SNES"):
+            with self.subTest(theme=theme):
+                apply_theme(theme)
+                sheet = app.styleSheet()
+                self.assertIn('QPushButton[class="calendar-primary-btn"]:disabled', sheet)
+
 if __name__ == '__main__':
     unittest.main()
