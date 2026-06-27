@@ -2,7 +2,7 @@
 
 Status: Implemented
 Owner: TBD
-Last updated: 2026-06-10
+Last updated: 2026-06-27
 
 ## Problem
 
@@ -34,6 +34,9 @@ Users need a fast landing surface to start a recording, import audio, search, an
 
 - UI: `src/ui/welcome_widget.py` owns the landing widget composition and user-facing signals.
 - UI helpers: `src/ui/welcome/button_factory.py` owns the reusable button constructors used by the welcome screen.
+- Capture helpers: `src/ui/welcome/capture_state.py` owns capture-setting persistence, microphone list hydration, and recording config mapping.
+- Mic test helpers: `src/ui/welcome/mic_test.py` owns stream startup/cleanup, RMS calculation, and VU meter state updates.
+- Landing data helpers: `src/ui/welcome/landing_data.py` owns search-result, favorites, and today-list query formatting for the welcome screen.
 - Main window: `src/ui/main_window/` wires welcome-screen signals into tabs, sidebar state, and daily-summary actions.
 - Persistence: `QSettings` stores capture preferences and the welcome widget reads them back on startup.
 - Workers/integrations: recorder startup, import flow, and search all route into downstream capture/search services rather than implementing heavy logic inside the widget.
@@ -55,9 +58,12 @@ Users need a fast landing surface to start a recording, import audio, search, an
 
 - 2026-06-10: created a dedicated spec for the welcome screen and its capture/import responsibilities.
 - 2026-06-10: extracted the welcome screen button constructors into `src/ui/welcome/button_factory.py` and kept `WelcomeWidget` as the signal/layout owner.
+- 2026-06-10: extracted capture-setting state helpers into `src/ui/welcome/capture_state.py`.
+- 2026-06-10: extracted microphone-test lifecycle helpers into `src/ui/welcome/mic_test.py`.
+- 2026-06-27: extracted welcome search-result, favorites, and today-list data formatting into `src/ui/welcome/landing_data.py`.
 
 ## Open Questions
 
-- Should microphone scanning and mic-test orchestration move into a dedicated `src/ui/welcome/mic_test.py` helper next?
-- Should favorites/today loading move into a dedicated landing-data helper once the screen is split further?
+- Should microphone scanning move from the widget wrapper into a fuller device-discovery helper once audio-device behavior has broader tests?
+- Should the remaining welcome layout construction be split into focused panel builders once UI layout coverage is broader?
 

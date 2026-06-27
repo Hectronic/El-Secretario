@@ -10,10 +10,15 @@ from src.ui.welcome.capture_state import (
 )
 
 
+_APP = None
+
+
 def _ensure_app():
+    global _APP
     app = QApplication.instance()
     if app is None:
         app = QApplication([])
+    _APP = app
     return app
 
 

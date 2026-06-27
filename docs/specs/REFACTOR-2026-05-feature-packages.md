@@ -45,6 +45,8 @@ Reduce large flat modules and create expansion points for future product work wi
 - From runtime-heavy queue helpers in `src/ui/summary_task_queue.py` to `src/app/summary_queue/`: worker stop/cleanup/retry-wait runtime helpers and RAG reindex thread now live in app-level modules (`runtime.py`, `threads.py`) while UI keeps signal orchestration.
 - From mixed RAG engine helpers in `src/rag_engine.py` to `src/rag/`: in-memory fallback storage, result parsing/ranking, filter composition, Chroma store initialization/compatibility, and subprocess task handling now live in focused modules while `RAGEngine` remains the public facade.
 - From repeated welcome-screen button construction in `src/ui/welcome_widget.py` to `src/ui/welcome/button_factory.py`: big, round, and squircle button constructors now live in a focused helper while `WelcomeWidget` keeps the same public methods and signals.
+- From welcome-screen capture, microphone test, and landing-list data state in `src/ui/welcome_widget.py` to `src/ui/welcome/`: `capture_state.py` owns saved capture settings and config mapping, `mic_test.py` owns stream lifecycle, RMS, and VU state, and `landing_data.py` owns search/favorites/today list formatting.
+- From active chat context sidebar construction in `src/ui/main_window/__init__.py` to `src/ui/main_window/chat_context_sidebar.py`: the helper creates and registers the non-interactive mirrored context panel while `SidebarSyncCoordinator` keeps synchronization behavior.
 - From queue-management widget logic in `src/ui/queue_management_widget.py` to `src/app/summary_queue/`: action orchestration (`actions.py`) and presentation/snapshot mapping (`presentation.py`) now live in app-level modules while the widget primarily applies mapped view state.
 - From worker startup internals in `src/ui/summary_task_queue.py` to `src/app/summary_queue/`: worker construction (`worker_factory.py`), common signal wiring (`worker_signals.py`), and queue-start lifecycle (`worker_lifecycle.py`) now live in focused modules.
 
@@ -76,7 +78,7 @@ Reduce large flat modules and create expansion points for future product work wi
 
 ## Remaining Hotspots
 
-- `src/ui/main_window/__init__.py` remains a large shell and should keep shrinking through coordinators.
+- `src/ui/main_window/__init__.py` remains a large shell and should keep shrinking through coordinators and focused right-sidebar builders.
 - `src/ui/main_window/bootstrap.py` now isolates the startup sequence, but the shell still owns tab lifecycle and broad app orchestration.
 - `src/ui/main_window/content_tabs.py` now owns note/chat/summary/tools/tasks/collections/calendar tab lifecycle; remaining `MainWindow` shell reduction should focus on cross-feature orchestration and legacy wrappers.
 - `src/ui/main_window/sidebar_actions.py` is now mostly an orchestrator over `tasks_sidebar_actions.py`, `chat_sessions_actions.py`, `calendar_sidebar_actions.py`, and `history_tags_actions.py`; future cuts should target direct wiring from `MainWindow` to those focused coordinators where practical.
@@ -85,7 +87,7 @@ Reduce large flat modules and create expansion points for future product work wi
 - `src/ui/welcome_widget.py` still mixes landing layout, recorder configuration, microphone tests, favorites, today view, search, and settings persistence.
 - `src/ui/summary_task_queue.py` now acts mostly as a Qt adapter; keep moving any remaining business-only helpers into `src/app/summary_queue/`.
 - `src/rag_engine.py` now owns the public RAG facade and Windows runtime-mode selection; fallback store, Chroma initialization/compatibility, result parsing/ranking, filter composition, and subprocess task handling have moved to `src/rag/`.
-- `src/ui/welcome_widget.py` still mixes landing layout, recorder configuration, microphone tests, favorites, today view, search, and settings persistence; `src/ui/welcome/button_factory.py` now owns shared button constructors.
+- `src/ui/welcome_widget.py` still mixes landing layout and navigation signals; `src/ui/welcome/` now owns shared button constructors, capture-setting helpers, microphone-test helpers, and landing-list data formatting.
 
 ## Follow-Ups
 

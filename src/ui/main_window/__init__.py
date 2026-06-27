@@ -34,6 +34,7 @@ from src.ui.main_window.bootstrap import bootstrap_main_window
 from src.ui.main_window.content_tabs import ContentTabCoordinator
 from src.ui.main_window.chat_floating import FloatingChatCoordinator
 from src.ui.main_window.sidebar_sync import SidebarSyncCoordinator
+from src.ui.main_window.chat_context_sidebar import install_chat_context_sidebar_section
 from src.ui.main_window.sidebar_content import SidebarContentCoordinator
 from src.ui.main_window.sidebar_actions import SidebarActionsCoordinator
 from src.ui.main_window.setup_actions import SetupActionsCoordinator
@@ -44,7 +45,6 @@ from src.ui.main_window.history_navigation_actions import HistoryNavigationActio
 from src.ui.main_window.summary_actions import SummaryActionsCoordinator
 from src.ui.recording_in_progress_widget import RecordingInProgressWidget
 from src.ui.chat_widget import ChatWidget
-from src.ui.context_manager_panel import ContextManagerPanel
 from src.ui.calendar_widget import CalendarWidget
 from src.ui.styles import LIST_WIDGET_STYLE, NEW_CHAT_BUTTON_STYLE, apply_theme
 
@@ -828,22 +828,12 @@ class MainWindow(QMainWindow):
         self._right_sidebar_sections["tags"]["index"] = right_layout.indexOf(tags_section)
 
         # 5. Active Chat Context Section
-        self.chat_context_panel = ContextManagerPanel(
-            self.db,
-            self.notebook_db,
-            parent=right_panel,
-            show_header=False,
-            interactive=False,
+        install_chat_context_sidebar_section(
+            self,
+            right_panel=right_panel,
+            right_layout=right_layout,
+            create_section=create_section,
         )
-        self.chat_context_section = create_section(
-            "chat_context",
-            "💬 Active Chat Context",
-            top_widget=self.chat_context_panel,
-        )
-        self._right_sidebar_sections["chat_context"]["context_panel"] = self.chat_context_panel
-        right_layout.addWidget(self.chat_context_section)
-        self._right_sidebar_sections["chat_context"]["index"] = right_layout.indexOf(self.chat_context_section)
-        self._right_sidebar_sections["chat_context"]["container"].setVisible(False)
 
         right_layout.addStretch(1)
         self._right_sidebar_bottom_spacer_index = right_layout.count() - 1

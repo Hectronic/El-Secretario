@@ -8,10 +8,15 @@ from src.ui.welcome.button_factory import (
 )
 
 
+_APP = None
+
+
 def _ensure_app():
+    global _APP
     app = QApplication.instance()
     if app is None:
         app = QApplication([])
+    _APP = app
     return app
 
 

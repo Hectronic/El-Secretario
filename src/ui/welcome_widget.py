@@ -29,11 +29,21 @@ from src.ui.welcome.capture_state import (
     populate_microphones,
     save_capture_settings,
 )
+from src.ui.welcome.mic_test import (
+    calculate_rms,
+    start_mic_test as start_mic_test_session,
+    stop_mic_test as stop_mic_test_session,
+    update_vu_meter,
+)
+from src.ui.welcome.landing_data import (
+    fetch_favorites_page,
+    fetch_today_items,
+    search_result_items,
+)
 from src.transcription_options import (
     DEFAULT_TRANSCRIPTION_MODEL,
     get_transcription_model_options,
 )
-import numpy as np
 import os
 
 Recorder = None
@@ -665,100 +675,33 @@ class WelcomeWidget(QWidget):
     def start_mic_test(self):
         """Start testing the selected microphone."""
         import sounddevice as sd
-        device_index = self.mic_combo.currentData()
-        
-        # Try different sample rates
-        sample_rates = [16000, 44100, 48000, 22050]
-        
-        for rate in sample_rates:
-            try:
-                self.test_stream = sd.InputStream(
-                    samplerate=rate,
-                    channels=1,
-                    callback=self.test_audio_callback,
-                    device=device_index
-                )
-                self.test_stream.start()
-                self.test_vu_meter.show()
-                self.test_status_label.setText(f"Testing at {rate} Hz - Speak into the mic...")
-                self.test_status_label.show()
-                self.test_mic_btn.setText("⏹ Stop")
-                self.test_mic_btn.setStyleSheet("""
-                    QPushButton {
-                        background-color: #f44336;
-                        color: white;
-                        border-radius: 5px;
-                        padding: 5px;
-                    }
-                    QPushButton:hover {
-                        background-color: #d32f2f;
-                    }
-                """)
-                self.test_timer.start(50)  # Update VU meter every 50ms
-                return
-            except Exception as e:
-                continue
-        
-        # All rates failed
-        self.test_status_label.setText("Error: Could not open audio device")
-        self.test_status_label.setStyleSheet("color: #f44336; font-size: 12px;")
-        self.test_status_label.show()
+        self.test_stream = start_mic_test_session(
+            sd_module=sd,
+            device_index=self.mic_combo.currentData(),
+            audio_callback=self.test_audio_callback,
+            vu_meter=self.test_vu_meter,
+            status_label=self.test_status_label,
+            test_button=self.test_mic_btn,
+            test_timer=self.test_timer,
+        )
 
     def stop_mic_test(self):
         """Stop testing the microphone."""
-        self.test_timer.stop()
-        if self.test_stream is not None:
-            try:
-                self.test_stream.stop()
-                self.test_stream.close()
-            except:
-                pass
-            self.test_stream = None
-        
-        self.test_vu_meter.setValue(0)
-        self.test_vu_meter.hide()
-        self.test_status_label.hide()
-        self.test_mic_btn.setText("🎤 Test")
-        self.test_mic_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #2196F3;
-                color: white;
-                border-radius: 5px;
-                padding: 5px;
-            }
-            QPushButton:hover {
-                background-color: #1976D2;
-            }
-        """)
+        self.test_stream = stop_mic_test_session(
+            stream=self.test_stream,
+            vu_meter=self.test_vu_meter,
+            status_label=self.test_status_label,
+            test_button=self.test_mic_btn,
+            test_timer=self.test_timer,
+        )
 
     def test_audio_callback(self, indata, frames, time, status):
         """Callback for test audio stream."""
-        rms = np.sqrt(np.mean(indata**2))
-        self.current_amplitude = rms
+        self.current_amplitude = calculate_rms(indata)
 
     def update_test_vu(self):
         """Update the test VU meter."""
-        value = int(self.current_amplitude * 1000)
-        if value > 100:
-            value = 100
-        self.test_vu_meter.setValue(value)
-        
-        # Change color based on level
-        if value > 70:
-            self.test_vu_meter.setStyleSheet("""
-                QProgressBar { border: 2px solid #555; border-radius: 5px; background-color: #333; }
-                QProgressBar::chunk { background-color: #f44336; }
-            """)
-        elif value > 30:
-            self.test_vu_meter.setStyleSheet("""
-                QProgressBar { border: 2px solid #555; border-radius: 5px; background-color: #333; }
-                QProgressBar::chunk { background-color: #4CAF50; }
-            """)
-        else:
-            self.test_vu_meter.setStyleSheet("""
-                QProgressBar { border: 2px solid #555; border-radius: 5px; background-color: #333; }
-                QProgressBar::chunk { background-color: #2196F3; }
-            """)
+        update_vu_meter(self.test_vu_meter, self.current_amplitude)
 
     def get_recording_config(self):
         """Get the current recording configuration."""
@@ -810,11 +753,9 @@ class WelcomeWidget(QWidget):
             return
         
         self.results_list.show()
-        for res in results:
-            title = res['metadata'].get('title', 'Untitled')
-            item_text = f"{title} (Score: {1 - res['distance']:.2f})\n{res['text'][:100]}..."
-            item = QListWidgetItem(item_text)
-            item.setData(Qt.ItemDataRole.UserRole, res['id'])
+        for result in search_result_items(results):
+            item = QListWidgetItem(result.text)
+            item.setData(Qt.ItemDataRole.UserRole, result.record_id)
             self.results_list.addItem(item)
 
     def on_result_clicked(self, item):
@@ -823,23 +764,16 @@ class WelcomeWidget(QWidget):
         
     def load_favorites(self):
         self.fav_list.clear()
-        favorites = self.db.fetch_favorites(limit=5, offset=self.favorites_page * 5)
-        
-        if not favorites and self.favorites_page > 0:
-            self.favorites_page -= 1
-            self.load_favorites()
-            return
+        page = fetch_favorites_page(self.db, page=self.favorites_page)
+        self.favorites_page = page.page
 
-        for fav in favorites:
-            title = fav['title'] if fav['title'] else fav['created_at']
-            item = QListWidgetItem(f"{title} ({fav['duration']:.1f}s)")
-            item.setData(Qt.ItemDataRole.UserRole, fav['id'])
+        for favorite in page.items:
+            item = QListWidgetItem(favorite.text)
+            item.setData(Qt.ItemDataRole.UserRole, favorite.record_id)
             self.fav_list.addItem(item)
             
-        self.prev_btn.setEnabled(self.favorites_page > 0)
-        # Check if there are more
-        next_batch = self.db.fetch_favorites(limit=1, offset=(self.favorites_page + 1) * 5)
-        self.next_btn.setEnabled(bool(next_batch))
+        self.prev_btn.setEnabled(page.has_previous)
+        self.next_btn.setEnabled(page.has_next)
 
     def prev_page(self):
         if self.favorites_page > 0:
@@ -856,23 +790,10 @@ class WelcomeWidget(QWidget):
 
     def load_today(self):
         """Load today's recordings."""
-        from datetime import date
         self.today_list.clear()
-        
-        today_str = date.today().isoformat()
-        records = self.db.fetch_by_date_range(today_str, today_str)
-        
-        for rec in records:
-            if rec.get('type') == 'note':
-                title = rec['title'] if rec['title'] else "Untitled Note"
-                item_text = f"📝 {title}"
-            else:
-                title = rec['title'] if rec['title'] else rec['created_at']
-                dur = rec.get('duration', 0)
-                item_text = f"🎤 {title} ({dur:.1f}s)"
-            
-            item = QListWidgetItem(item_text)
-            item.setData(Qt.ItemDataRole.UserRole, rec['id'])
+        for record in fetch_today_items(self.db):
+            item = QListWidgetItem(record.text)
+            item.setData(Qt.ItemDataRole.UserRole, record.record_id)
             self.today_list.addItem(item)
 
     def on_today_clicked(self, item):
