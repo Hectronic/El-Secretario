@@ -66,4 +66,3 @@ Users need a fast landing surface to start a recording, import audio, search, an
 
 - Should microphone scanning move from the widget wrapper into a fuller device-discovery helper once audio-device behavior has broader tests?
 - Should the remaining welcome layout construction be split into focused panel builders once UI layout coverage is broader?
-

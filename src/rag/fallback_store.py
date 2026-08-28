@@ -90,4 +90,3 @@ class InMemoryChromaClient:
         if name not in self._collections:
             self._collections[name] = InMemoryCollection()
         return self._collections[name]
-

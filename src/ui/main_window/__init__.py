@@ -16,7 +16,7 @@ import os
 import re
 import logging
 from datetime import date, timedelta
-from PyQt6.QtWidgets import (QMainWindow, QWidget, QVBoxLayout, 
+from PyQt6.QtWidgets import (QMainWindow, QWidget, QVBoxLayout,
                              QHBoxLayout, QListWidget, QPushButton, QToolButton,
                              QLabel, QMessageBox, QComboBox,
                              QTabWidget, QSplitter, QApplication, QStyle, QLineEdit,
@@ -70,9 +70,9 @@ class MainWindow(QMainWindow):
             from src.audio import Recorder as _Recorder
             Recorder = _Recorder
         self.recorder = Recorder()
-        # We can connect global recorder signals here if needed, 
+        # We can connect global recorder signals here if needed,
         # but RecordingWidget handles its own UI updates.
-        
+
         self.search_thread = None
         self.regen_worker = None
         self.summary_task_queue = SummaryTaskQueueManager(self)
@@ -100,9 +100,9 @@ class MainWindow(QMainWindow):
         self._right_sidebar_bottom_spacer_index = None
         self._right_sidebar_last_non_chat_section = "tasks"
         self.floating_chat_hosts = []
-        
+
         apply_theme()
-        
+
         self.init_ui()
         bootstrap_main_window(self)
         logging.info("MainWindow initialized.")
@@ -231,19 +231,19 @@ class MainWindow(QMainWindow):
         self.task_status_label.setStyleSheet("padding-right: 8px;")
         self.task_metrics_label = QLabel("Q r0 p0 f0 e0 s0")
         self.task_metrics_label.setStyleSheet("padding-right: 8px; color: #90A4AE;")
-        
+
         self.open_queue_btn = QPushButton("📋 View Queue")
         self.open_queue_btn.setFlat(True)
         self.open_queue_btn.setStyleSheet("color: #2196F3; text-decoration: underline; font-weight: bold;")
         self.open_queue_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self.open_queue_btn.clicked.connect(self.open_queue_manager_tab)
-        
+
         self.task_queue_progress = QProgressBar()
         self.task_queue_progress.setFixedWidth(180)
         self.task_queue_progress.setTextVisible(False)
         self.task_queue_progress.setRange(0, 1)
         self.task_queue_progress.setValue(0)
-        
+
         status.addPermanentWidget(self.task_status_label, 1)
         status.addPermanentWidget(self.task_metrics_label)
         status.addPermanentWidget(self.open_queue_btn)
@@ -309,7 +309,7 @@ class MainWindow(QMainWindow):
             if scope == "missing":
                 return "RAG Reindex (Missing)"
             return "RAG Reindex (All)"
-        
+
         date = task.get("date", "unknown date")
         tags_filter = task.get("tags_filter")
         if tags_filter:
@@ -333,7 +333,7 @@ class MainWindow(QMainWindow):
         try:
             self.regen_worker = self.summary_task_queue.current_worker
             t_type = task.get("type")
-            
+
             if t_type == "summary":
                 # Update specific recording widget if open
                 record_id = task.get("record_id")
@@ -345,7 +345,7 @@ class MainWindow(QMainWindow):
                     except (RuntimeError, AttributeError):
                         continue # Widget might have been deleted
                 self.request_sidebar_reload(include_history=True)
-                
+
             elif t_type == "task_extraction":
                 # Update specific recording widget if open
                 record_id = task.get("record_id")
@@ -363,14 +363,14 @@ class MainWindow(QMainWindow):
                         widget._load_daily_tasks()
                 # Keep right sidebar tasks in sync when extraction is completed by queue.
                 self.refresh_tasks_sidebar()
-                
+
             elif t_type == "daily_summary":
                 date = task.get("date")
                 tags_filter = task.get("tags_filter")
                 if date:
                     self._refresh_daily_summary_viewers(date, tags_filter)
                     self.request_sidebar_reload(include_history=True)
-                    
+
             elif t_type == "weekly_summary":
                 self.request_sidebar_reload(include_history=True)
                 # Find and update CalendarWidget if open
@@ -480,7 +480,7 @@ class MainWindow(QMainWindow):
         main_layout = QVBoxLayout(central_widget)
         main_layout.setContentsMargins(0, 0, 0, 0)
         main_layout.setSpacing(0)
-        
+
         self.splitter = QSplitter(Qt.Orientation.Horizontal)
         main_layout.addWidget(self.splitter)
 
@@ -489,7 +489,7 @@ class MainWindow(QMainWindow):
         left_widget.setMinimumWidth(300) # Slightly wider for the custom items
         left_layout = QVBoxLayout(left_widget)
         left_layout.setContentsMargins(5, 5, 5, 5)
-        
+
         # Calendar Widget
         self.calendar = QCalendarWidget()
         self.calendar.setGridVisible(True)
@@ -497,7 +497,7 @@ class MainWindow(QMainWindow):
         # Set a fixed height or max height so it doesn't take too much space
         self.calendar.setMaximumHeight(300)
         left_layout.addWidget(self.calendar)
-        
+
         # Week Details Button
         self.open_calendar_btn = QPushButton("Week Details")
         self.open_calendar_btn.clicked.connect(self.open_calendar_tab)
@@ -505,7 +505,7 @@ class MainWindow(QMainWindow):
         self.open_calendar_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self.open_calendar_btn.setMinimumHeight(36)
         left_layout.addWidget(self.open_calendar_btn)
-        
+
         # Calendar Navigation
         nav_layout = QHBoxLayout()
         self.prev_week_btn = QPushButton("<< Prev Week")
@@ -529,7 +529,7 @@ class MainWindow(QMainWindow):
         nav_layout.addWidget(self.reset_date_btn)
         nav_layout.addWidget(self.next_week_btn)
         left_layout.addLayout(nav_layout)
-        
+
         # Initialize date filter state
         self.current_date_filter = None # Single date (string) or None for week/all
         self.current_week_monday = None # QDate of Monday if filtering by week
@@ -544,7 +544,7 @@ class MainWindow(QMainWindow):
         self.search_input.textChanged.connect(self.filter_history_list)
         search_layout.addWidget(self.search_input)
         left_layout.addLayout(search_layout)
-        
+
         # Filter Row (Tags)
         filter_layout = QHBoxLayout()
         filter_layout.addWidget(QLabel("Filter:"))
@@ -552,12 +552,12 @@ class MainWindow(QMainWindow):
         self.tag_filter_combo.addItem("All")
         self.tag_filter_combo.currentTextChanged.connect(self.on_tag_filter_changed)
         filter_layout.addWidget(self.tag_filter_combo)
-        
+
         self.fav_filter_cb = QCheckBox("★")
         self.fav_filter_cb.setToolTip("Show Favorites Only")
         self.fav_filter_cb.stateChanged.connect(self.load_history)
         filter_layout.addWidget(self.fav_filter_cb)
-        
+
         # Refresh Button
         self.refresh_btn = QPushButton()
         self.refresh_btn.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_BrowserReload))
@@ -565,9 +565,9 @@ class MainWindow(QMainWindow):
         self.refresh_btn.setFixedSize(24, 24)
         self.refresh_btn.clicked.connect(self.refresh_sidebar)
         filter_layout.addWidget(self.refresh_btn, alignment=Qt.AlignmentFlag.AlignRight)
-        
+
         left_layout.addLayout(filter_layout)
-        
+
         # History List
         self.history_list = QListWidget()
         # Disable horizontal scrolling - long titles will be clipped
@@ -595,7 +595,7 @@ class MainWindow(QMainWindow):
         right_panel.setMinimumWidth(300)
         right_layout.setContentsMargins(5, 5, 5, 5)
         right_layout.setSpacing(8)
-        
+
         def create_section(section_key, title, list_widget=None, button=None, top_widget=None, header_actions=None):
             container = QWidget()
             container_layout = QVBoxLayout(container)
@@ -655,7 +655,7 @@ class MainWindow(QMainWindow):
                 list_widget.style().unpolish(list_widget)
                 list_widget.style().polish(list_widget)
                 content_layout.addWidget(list_widget)
-            
+
             if button:
                 content_layout.addWidget(button)
 
@@ -754,7 +754,7 @@ class MainWindow(QMainWindow):
         chat_section = create_section("chats", "💬 Chat History", self.sessions_list, header_actions=self.chats_header_actions)
         right_layout.addWidget(chat_section)
         self._right_sidebar_sections["chats"]["index"] = right_layout.indexOf(chat_section)
-        
+
         # 3. Libretas (Notebooks) Section
         self.notebooks_list = QListWidget()
         self.notebooks_list.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
@@ -857,7 +857,7 @@ class MainWindow(QMainWindow):
 
         right_layout.addWidget(right_settings_section)
         self._set_active_right_section("tasks")
-        
+
         self.splitter.addWidget(right_panel)
 
         self.floating_chat_bar = QFrame(central_widget)
@@ -878,16 +878,16 @@ class MainWindow(QMainWindow):
         # Set initial sizes for the three panels
         # Left: 300 (min), Middle: 700 (rest), Right: 300 (min)
         self.splitter.setSizes([300, 700, 300])
-        
+
         # Enforce stretch factors to ensure right panel takes up space
         self.splitter.setStretchFactor(0, 0) # Left panel doesn't stretch
         self.splitter.setStretchFactor(1, 1) # Middle panel stretches
         self.splitter.setStretchFactor(2, 0) # Right panel doesn't stretch
-        
+
         self.splitter.setCollapsible(0, False)
         self.splitter.setCollapsible(1, False)
         self.splitter.setCollapsible(2, False)
-        
+
         # Initialize RAG Engine from settings
         settings = QSettings("Hectronic", "Secretario")
         self._build_rag_engine(
@@ -957,7 +957,7 @@ class MainWindow(QMainWindow):
         self.welcome_widget.settings_requested.connect(self.open_settings_tab)
         self.welcome_widget.generate_daily_summary_requested.connect(self.generate_today_daily_summary)
         self.welcome_widget.status_message_requested.connect(self.handle_status_message)
-        
+
         # Add as first tab, not closable
         self.central_tabs.addTab(self.welcome_widget, "Welcome")
         self._set_tab_action_buttons(self.welcome_widget)
@@ -985,19 +985,19 @@ class MainWindow(QMainWindow):
             if isinstance(widget, RecordingInProgressWidget):
                 self.central_tabs.setCurrentIndex(i)
                 return
-        
+
         # Set device on recorder
         if config.get("device_index") is not None:
             self.recorder.set_device(config["device_index"])
-            
+
         # Set system audio capture flag
         self.recorder.set_capture_machine_audio(config.get("capture_system_audio", False))
-        
+
         # New Recording Flow with config
         rec_widget = RecordingInProgressWidget(recorder=self.recorder, config=config)
         rec_widget.finished.connect(lambda path, cfg, w=rec_widget: self.on_recording_finished(path, cfg, w))
         rec_widget.cancelled.connect(lambda w=rec_widget: self.close_tab(self.central_tabs.indexOf(w)))
-        
+
         index = self.central_tabs.addTab(rec_widget, "Recording...")
         self.central_tabs.setCurrentIndex(index)
 
@@ -1048,7 +1048,7 @@ class MainWindow(QMainWindow):
             logging.info("RecordingInProgress tab closed at index=%s", index)
         else:
             logging.warning("RecordingInProgress widget tab not found during finish flow.")
-        
+
         try:
             filename = os.path.basename(file_path)
             # Use title from config, fallback to filename
@@ -1065,7 +1065,7 @@ class MainWindow(QMainWindow):
             # Create DB entry to get an ID
             record_id = self.db.save(filename, "", 0.0, title=title, recording_notes=recording_notes)
             logging.info("DB save completed with record_id=%s", record_id)
-            
+
             # Update tags if provided
             tags = config.get("tags", "")
             if tags:
@@ -1081,20 +1081,20 @@ class MainWindow(QMainWindow):
                         logging.info("Saved quick task for record_id=%s: %s", record_id, clean_task)
                     except Exception:
                         logging.exception("Failed saving quick task for record_id=%s", record_id)
-            
+
             # Refresh sidebar to show new recording with title
             self.request_sidebar_reload(include_tags=True, include_history=True)
             logging.info("Requested sidebar reload after recording finish for record_id=%s", record_id)
-            
+
             # Open standard recording tab with config
             rec_widget = self.open_recording_tab(record_id, config)
             logging.info("Opened recording tab for record_id=%s widget_created=%s", record_id, bool(rec_widget))
-            
+
             # Trigger transcription with config
             if rec_widget and isinstance(rec_widget, RecordingWidget):
                 logging.info("Starting transcription with config for record_id=%s file=%s", record_id, file_path)
                 rec_widget.start_transcription_with_config(file_path, config)
-                
+
         except Exception as e:
             logging.exception("Failed while handling recording completion flow.")
             QMessageBox.critical(self, "Error", f"Failed to save recording: {e}")
@@ -1331,7 +1331,7 @@ class MainWindow(QMainWindow):
 
     def next_week_sidebar(self):
         self.sidebar_actions.next_week_sidebar()
-        
+
     def update_calendar_visuals(self):
         self.sidebar_actions.update_calendar_visuals()
 
@@ -1344,7 +1344,7 @@ class MainWindow(QMainWindow):
             record = item.data(Qt.ItemDataRole.UserRole)
             title = record.get('title', '') or ''
             date = record.get('created_at', '') or ''
-            
+
             if not text or text.lower() in title.lower() or text.lower() in date.lower():
                 item.setHidden(False)
             else:
@@ -1353,15 +1353,15 @@ class MainWindow(QMainWindow):
     def on_favorite_toggled(self, record_id, is_favorite):
         self.db.toggle_favorite(record_id, is_favorite)
         # No need to reload list, button state is already updated locally
-        
+
     def delete_recording(self, record_id):
-        reply = QMessageBox.question(self, "Delete Recording", 
+        reply = QMessageBox.question(self, "Delete Recording",
                                    "Are you sure you want to delete this recording? This cannot be undone.",
                                    QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
         if reply == QMessageBox.StandardButton.Yes:
             logging.info("delete_recording requested for record_id=%s", record_id)
             filename = self.db.delete(record_id)
-            
+
             # Delete file
             if filename:
                 try:
@@ -1370,7 +1370,7 @@ class MainWindow(QMainWindow):
                         os.remove(file_path)
                 except Exception:
                     logging.exception("Error deleting recording file %s", filename)
-            
+
             # Delete from RAG
             if self.rag:
                 try:
@@ -1378,7 +1378,7 @@ class MainWindow(QMainWindow):
                     self.rag.delete_document(str(record_id))
                 except Exception:
                     logging.exception("Error deleting record_id=%s from RAG", record_id)
-            
+
             self.load_history()
             self._close_recording_tabs(record_id)
 

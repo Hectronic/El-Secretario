@@ -112,4 +112,3 @@ def create_squircle_button(text, color, callback, width=100, height=90, class_na
         )
     btn.clicked.connect(callback)
     return btn
-

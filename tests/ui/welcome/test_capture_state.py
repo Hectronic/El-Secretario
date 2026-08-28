@@ -144,4 +144,3 @@ def test_build_recording_config_maps_language_codes():
         "capture_system_audio": False,
         "auto_summarize_after_transcription": False,
     }
-

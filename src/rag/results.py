@@ -67,4 +67,3 @@ def keyword_rank_raw_results(raw: Dict[str, Any], query: str, n_results: int) ->
         )
     scored.sort(key=lambda r: r["distance"])
     return scored[:n_results]
-

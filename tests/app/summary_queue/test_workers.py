@@ -58,4 +58,3 @@ def test_build_transcription_worker_kwargs_normalizes_auto_compute_and_keeps_run
         "force_cpu": True,
         "backend_preference": "faster-whisper",
     }
-

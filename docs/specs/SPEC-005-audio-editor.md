@@ -54,4 +54,3 @@ Users need to inspect and edit recordings before continuing with transcription, 
 
 - Should the old marker-based trim controls in `RecordingWidget` be deprecated now that the waveform editor exists?
 - Should audio-edit operations become an explicit service with a non-Qt command model for easier testing?
-

@@ -60,4 +60,3 @@ def test_status_trace_can_be_reset_between_workers():
     assert history.append_status_trace_once(task, "Retrying 1") is False
     history.clear_status_dedup()
     assert history.append_status_trace_once(task, "Retrying 1") is True
-

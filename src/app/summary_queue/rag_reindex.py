@@ -105,4 +105,3 @@ def run_rag_reindex(
         on_progress(int((idx / total) * 100))
 
     return {"indexed": indexed, "skipped": skipped, "total": total}
-

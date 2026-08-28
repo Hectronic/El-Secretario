@@ -47,4 +47,3 @@ def test_get_or_create_collection_compatible_reraises_non_conflict_errors():
 
     with pytest.raises(ValueError, match="other configuration"):
         get_or_create_collection_compatible(MockClient(), "test", "some_fn")
-

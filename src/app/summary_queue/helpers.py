@@ -45,4 +45,3 @@ def parse_task_extraction_result(raw_result: Any) -> list[str]:
     if not isinstance(parsed, list):
         return []
     return [item.strip() for item in parsed if isinstance(item, str) and item.strip()]
-

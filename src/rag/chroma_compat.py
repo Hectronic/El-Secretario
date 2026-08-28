@@ -52,4 +52,3 @@ def get_or_create_collection_compatible(client, name: str, embedding_fn):
             )
             return client.get_or_create_collection(name=name)
         raise
-

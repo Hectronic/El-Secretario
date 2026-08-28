@@ -28,4 +28,3 @@ def test_keyword_rank_raw_results_scores_limits_and_skips_deleted_records():
     assert [result["id"] for result in ranked] == ["a", "b"]
     assert ranked[0]["distance"] == -2.0
     assert ranked[1]["distance"] == -2.0
-

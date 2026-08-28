@@ -126,4 +126,3 @@ def test_rag_keyword_search_in_subprocess_ranks_runner_raw_results(monkeypatch):
     )
 
     assert [result["id"] for result in ranked] == ["b", "a"]
-

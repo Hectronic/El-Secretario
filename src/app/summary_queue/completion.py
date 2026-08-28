@@ -104,4 +104,3 @@ def handle_worker_completion(db, task: Dict, result: Any) -> List[Dict]:
     if task_type == "rag_reindex" and isinstance(result, dict):
         return [{"type": "status", "message": build_rag_reindex_status(task, result)}]
     return []
-

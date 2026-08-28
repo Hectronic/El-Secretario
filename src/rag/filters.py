@@ -33,4 +33,3 @@ def build_search_where_clause(
     if final_where:
         return {"$and": [final_where, deleted_filter]}
     return deleted_filter
-

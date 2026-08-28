@@ -144,4 +144,3 @@ def build_recording_config(
         "capture_system_audio": sys_audio_check.isChecked(),
         "auto_summarize_after_transcription": auto_summary_check.isChecked(),
     }
-

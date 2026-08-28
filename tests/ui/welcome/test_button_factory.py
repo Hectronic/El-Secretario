@@ -52,4 +52,3 @@ def test_create_squircle_button_uses_qcolor_shading_for_default_style():
     assert button.height() == 160
     assert "border-top-right-radius: 40px;" in button.styleSheet()
     assert "background-color: #2196F3;" in button.styleSheet()
-

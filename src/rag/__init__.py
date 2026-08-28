@@ -13,4 +13,3 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 """RAG storage, filtering, and result helpers."""
-

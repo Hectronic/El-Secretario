@@ -43,4 +43,3 @@ def test_read_audio_duration_seconds_returns_zero_when_probe_fails(mock_warning)
 
     assert duration == 0.0
     mock_warning.assert_called_once()
-

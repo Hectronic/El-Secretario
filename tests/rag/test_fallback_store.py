@@ -48,4 +48,3 @@ def test_nested_where_and_id_filters(collection):
     )
 
     assert results["ids"][0] == ["2"]
-

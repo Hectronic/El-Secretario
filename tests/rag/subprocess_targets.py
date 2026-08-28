@@ -24,4 +24,3 @@ def crash_process(_payload, _result_path):
 
 def sleep_past_timeout(_payload, _result_path):
     time.sleep(5)
-

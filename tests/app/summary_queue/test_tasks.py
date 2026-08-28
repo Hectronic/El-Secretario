@@ -121,4 +121,3 @@ def test_build_rag_reindex_task_normalizes_scope():
         "source": "settings",
     }
     assert build_rag_reindex_task("invalid")["reindex_scope"] == "all"
-

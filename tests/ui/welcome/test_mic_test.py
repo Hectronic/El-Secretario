@@ -190,4 +190,3 @@ def test_update_vu_meter_applies_level_styles():
 
     assert update_vu_meter(vu_meter, 0.08) == 80
     assert vu_meter.styleSheet() == VU_STYLE_HIGH
-

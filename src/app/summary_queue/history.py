@@ -48,4 +48,3 @@ class QueueHistory:
         self._last_status_message = msg
         self.append("trace", task, msg)
         return True
-

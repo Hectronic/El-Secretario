@@ -246,4 +246,3 @@ def init_subprocess_collection(persist_directory: str):
         name="transcriptions",
         embedding_fn=embedding_fn,
     )
-

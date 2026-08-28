@@ -90,4 +90,3 @@ def create_chroma_store(
         embedding_fn=embedding_fn,
         is_persistent=is_persistent,
     )
-

@@ -18,4 +18,3 @@ def test_build_search_where_clause_always_excludes_soft_deleted_records():
             {"deleted": {"$ne": "1"}},
         ]
     }
-

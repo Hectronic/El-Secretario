@@ -131,4 +131,3 @@ def update_vu_meter(vu_meter, amplitude: float) -> int:
     vu_meter.setValue(value)
     vu_meter.setStyleSheet(vu_style_for_value(value))
     return value
-

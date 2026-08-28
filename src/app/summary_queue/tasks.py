@@ -119,4 +119,3 @@ def build_rag_reindex_task(scope: str = "all", source: str = "manual") -> Dict:
         "reindex_scope": normalized_scope,
         "source": normalize_source(source, "manual"),
     }
-

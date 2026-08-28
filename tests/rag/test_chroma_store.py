@@ -108,4 +108,3 @@ def test_create_chroma_store_falls_back_to_in_memory_client(tmp_path):
     assert isinstance(store.client, InMemoryChromaClient)
     assert store.is_persistent is False
     assert store.collection is store.client.get_or_create_collection("transcriptions")
-

@@ -36,4 +36,3 @@ def build_transcription_worker_kwargs(settings, task: Dict) -> Dict[str, Any]:
         "force_cpu": force_cpu,
         "backend_preference": transcription_backend,
     }
-
