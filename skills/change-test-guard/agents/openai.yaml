@@ -1,4 +1,4 @@
 interface:
   display_name: "Change Test Guard"
   short_description: "Patch code and prove no regressions"
-  default_prompt: "Use $change-test-guard to implement changes, add or update tests, and run targeted plus full regression tests before finishing."
+  default_prompt: "Use $change-test-guard to implement changes, add or update tests including runtime GPU/CPU behavior when relevant, and run targeted plus full regression tests before finishing."

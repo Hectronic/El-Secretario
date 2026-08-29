@@ -173,6 +173,11 @@ DARK_STYLESHEET = """
     QPushButton[class="calendar-primary-btn"]:pressed {
         background-color: #1659aa;
     }
+    QPushButton[class="calendar-primary-btn"]:disabled {
+        background-color: #3a414d;
+        color: #8f98a6;
+        border: 1px solid #4b5563;
+    }
     QPushButton[class="calendar-nav-btn"] {
         background-color: #343a45;
         color: #e8eef7;
@@ -419,6 +424,11 @@ LIGHT_STYLESHEET = """
     QPushButton[class="calendar-primary-btn"]:pressed {
         background-color: #195db6;
     }
+    QPushButton[class="calendar-primary-btn"]:disabled {
+        background-color: #d4dbe5;
+        color: #7b8794;
+        border: 1px solid #c3ccd8;
+    }
     QPushButton[class="calendar-nav-btn"] {
         background-color: #ffffff;
         color: #2b3b52;
@@ -647,6 +657,11 @@ SNES_STYLESHEET = """
     }
     QPushButton[class="calendar-primary-btn"]:hover {
         background-color: #00C864;
+    }
+    QPushButton[class="calendar-primary-btn"]:disabled {
+        background-color: #B8B8B8;
+        color: #6B6B6B;
+        border: 2px solid #8E8E8E;
     }
     QPushButton[class="calendar-nav-btn"] {
         background-color: #F2B807; /* SNES Yellow */

@@ -281,7 +281,7 @@ class TestTabContextMenu(unittest.TestCase):
         self.assertEqual(host.width(), 760)
         self.assertEqual(host.height(), 680)
 
-    def test_floating_chat_shows_corner_resize_handle(self):
+    def test_floating_chat_does_not_show_corner_resize_handle(self):
         self.window.central_tabs.clear()
         chat_widget = ChatWidget(self.mock_rag)
         self.window._connect_chat_widget(chat_widget)
@@ -289,15 +289,10 @@ class TestTabContextMenu(unittest.TestCase):
 
         self.window.float_chat_widget(chat_widget)
         host = self.window.floating_chat_hosts[0]
-
-        self.assertEqual(host.resize_handle.text(), "◤")
-        self.assertFalse(host.resize_handle.isHidden())
-        self.assertEqual(host.resize_handle.cursor().shape(), Qt.CursorShape.SizeFDiagCursor)
-        self.assertLessEqual(host.resize_handle.pos().x(), 3)
-        self.assertLessEqual(host.resize_handle.pos().y(), 3)
+        self.assertIsNone(host.findChild(QWidget, "floatingChatResizeHandle"))
 
         self.window.minimize_floating_chat(chat_widget)
-        self.assertTrue(host.resize_handle.isHidden())
+        self.assertIsNone(host.findChild(QWidget, "floatingChatResizeHandle"))
 
     def test_multiple_floating_chats_align_side_by_side_on_bottom_edge(self):
         self.window.central_tabs.clear()

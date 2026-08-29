@@ -32,6 +32,16 @@ class _FakeQueue(QObject):
     def get_session_history(self):
         return list(self._history)
 
+    def get_runtime_stats(self):
+        return {
+            "running": 1 if self._current else 0,
+            "pending": len(self._pending),
+            "queued": 3,
+            "finished": 2,
+            "failed": 1,
+            "skipped": 1,
+        }
+
     @property
     def pending_count(self):
         return len(self._pending) + (1 if self._current else 0)
@@ -90,3 +100,36 @@ def test_queue_widget_renders_session_history(qtbot):
     assert widget.history_list.count() == 1
     assert "Finished" in widget.history_list.item(0).text()
     assert "Demo" in widget.history_list.item(0).text()
+
+
+def test_queue_widget_renders_skipped_history_entry(qtbot):
+    fake_queue = _FakeQueue()
+    fake_queue._history = [
+        {
+            "time": "12:05:00",
+            "event": "skipped",
+            "task": {"type": "transcription", "title": "Broken recording"},
+            "message": "Transcription subprocess timed out.",
+        }
+    ]
+    widget = QueueManagementWidget(fake_queue)
+    qtbot.addWidget(widget)
+
+    assert widget.history_list.count() == 1
+    assert "Skipped" in widget.history_list.item(0).text()
+    assert "Broken recording" in widget.history_list.item(0).text()
+    assert "timed out" in widget.history_list.item(0).text()
+
+
+def test_queue_widget_shows_runtime_metrics(qtbot):
+    fake_queue = _FakeQueue()
+    widget = QueueManagementWidget(fake_queue)
+    qtbot.addWidget(widget)
+
+    text = widget.metrics_label.text()
+    assert "running=1" in text
+    assert "pending=0" in text
+    assert "queued=3" in text
+    assert "finished=2" in text
+    assert "failed=1" in text
+    assert "skipped=1" in text

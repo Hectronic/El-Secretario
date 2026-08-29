@@ -1,15 +1,18 @@
 import unittest
 import os
+import tempfile
 from unittest.mock import MagicMock, patch
-from PyQt6.QtCore import QTimer, QCoreApplication
-from src.ui.summary_task_queue import SummaryTaskQueueManager
+from src.ui.summary_task_queue import (
+    SummaryTaskQueueManager,
+    _parse_task_extraction_result,
+    _read_audio_duration_seconds,
+)
 from src.database import DBManager
 
 class TestSummaryQueue(unittest.TestCase):
     def setUp(self):
-        self.db_name = "test_queue_db.sqlite"
-        if os.path.exists(self.db_name):
-            os.remove(self.db_name)
+        self.tmp_dir = tempfile.TemporaryDirectory(prefix="summary_queue_test_")
+        self.db_name = os.path.join(self.tmp_dir.name, "queue.sqlite")
         
         self.db = DBManager(self.db_name)
         # Avoid the real DB init by patching before init
@@ -19,8 +22,7 @@ class TestSummaryQueue(unittest.TestCase):
 
     def tearDown(self):
         self.queue_manager.cancel_all()
-        if os.path.exists(self.db_name):
-            os.remove(self.db_name)
+        self.tmp_dir.cleanup()
 
     def test_enqueue_recording_summary(self):
         # Mock AIAssistant to avoid actual AI calls
@@ -103,15 +105,31 @@ class TestSummaryQueue(unittest.TestCase):
             self.assertEqual(tasks[0]['tags'], "tag1, tag2")
             self.assertEqual(tasks[1]['content'], "Task 2")
 
+    def test_task_extraction_result_parser_accepts_wrapped_json(self):
+        result = _parse_task_extraction_result("Here are the tasks:\n[\"Task 1\", \"\", \"Task 2\"]")
+
+        self.assertEqual(result, ["Task 1", "Task 2"])
+
+    def test_task_extraction_result_parser_returns_empty_for_invalid_payload(self):
+        self.assertEqual(_parse_task_extraction_result("not json"), [])
+
+    @patch("src.ui.summary_task_queue.logging.warning")
+    def test_read_audio_duration_seconds_returns_zero_when_probe_fails(self, mock_warning):
+        duration = _read_audio_duration_seconds("/tmp/does-not-exist.wav")
+
+        self.assertEqual(duration, 0.0)
+        mock_warning.assert_called_once()
+
     def test_task_extraction_queue_has_title(self):
         record_id = self.db.save("test.wav", "Transcription", 10.0, "My Recording")
-        self.queue_manager.enqueue_task_extraction(record_id, "Transcription", "tag1")
+        with patch('src.ui.summary_task_queue.AIAssistant'):
+            self.queue_manager.enqueue_task_extraction(record_id, "Transcription", "tag1")
         queued = self.queue_manager.get_current_task() or {}
         self.assertEqual(queued.get("type"), "task_extraction")
         self.assertEqual(queued.get("title"), "My Recording")
 
     def test_daily_summary_only_enqueues_daily_summary_task(self):
-        with patch('src.ui.summary_task_queue.AIAssistant'):
+        with patch.object(self.queue_manager, "_start_next_if_idle"):
             self.queue_manager.enqueue_daily_summary({"date": "2026-02-27", "tags_filter": ""})
             queued = self.queue_manager.get_queue_list()
             current = self.queue_manager.get_current_task() or {}
@@ -173,6 +191,23 @@ class TestSummaryQueue(unittest.TestCase):
             self.assertIn("queued", events)
             self.assertIn("started", events)
 
+    def test_runtime_stats_counts_history_and_live_state(self):
+        self.queue_manager._queue.append({"type": "summary"})
+        self.queue_manager._current_task = {"type": "transcription", "record_id": 10}
+        self.queue_manager._append_history("queued", {"type": "summary"})
+        self.queue_manager._append_history("finished", {"type": "summary"})
+        self.queue_manager._append_history("failed", {"type": "summary"}, "boom")
+        self.queue_manager._append_history("skipped", {"type": "transcription"}, "dup")
+
+        stats = self.queue_manager.get_runtime_stats()
+
+        self.assertEqual(stats["running"], 1)
+        self.assertEqual(stats["pending"], 1)
+        self.assertEqual(stats["queued"], 1)
+        self.assertEqual(stats["finished"], 1)
+        self.assertEqual(stats["failed"], 1)
+        self.assertEqual(stats["skipped"], 1)
+
     def test_external_trace_is_added_to_session_history(self):
         self.queue_manager.add_external_trace(
             "Retrying transcription with safer profile",
@@ -195,6 +230,45 @@ class TestSummaryQueue(unittest.TestCase):
         messages = [h.get("message") for h in traces]
         self.assertEqual(messages.count("Retrying 1"), 1)
         self.assertEqual(messages.count("Retrying 2"), 1)
+
+    def test_transcription_fatal_error_is_marked_skipped(self):
+        self.queue_manager._current_task = {
+            "type": "transcription",
+            "record_id": 77,
+            "title": "Recording 77",
+        }
+        skipped = []
+        failed = []
+        self.queue_manager.task_skipped.connect(lambda task, reason: skipped.append((task, reason)))
+        self.queue_manager.task_failed.connect(lambda task, reason: failed.append((task, reason)))
+
+        self.queue_manager._on_worker_error("Transcription subprocess timed out.")
+
+        self.assertEqual(len(skipped), 1)
+        self.assertEqual(len(failed), 0)
+        self.assertEqual(skipped[0][0]["type"], "transcription")
+        self.assertIn("timed out", skipped[0][1].lower())
+        history = self.queue_manager.get_session_history()
+        self.assertEqual(history[0]["event"], "skipped")
+
+    def test_non_fatal_error_still_emits_failed(self):
+        self.queue_manager._current_task = {
+            "type": "transcription",
+            "record_id": 77,
+            "title": "Recording 77",
+        }
+        skipped = []
+        failed = []
+        self.queue_manager.task_skipped.connect(lambda task, reason: skipped.append((task, reason)))
+        self.queue_manager.task_failed.connect(lambda task, reason: failed.append((task, reason)))
+
+        self.queue_manager._on_worker_error("Some other error")
+
+        self.assertEqual(len(skipped), 0)
+        self.assertEqual(len(failed), 1)
+        self.assertEqual(failed[0][0]["type"], "transcription")
+        history = self.queue_manager.get_session_history()
+        self.assertEqual(history[0]["event"], "failed")
 
     def test_enqueue_rag_reindex_deduplicates_by_scope(self):
         with patch.object(self.queue_manager, "_start_next_if_idle"):
@@ -228,6 +302,75 @@ class TestSummaryQueue(unittest.TestCase):
         self.assertEqual(record["transcription"], "recognized text")
         self.assertEqual(record["transcription_model"], "sherpa-onnx")
         enqueue_summary.assert_called_once()
+
+    def test_transcription_completion_batch_process_does_not_chain_summary(self):
+        record_id = self.db.save("test.wav", "", 10.0, "Title")
+        self.queue_manager._current_task = {
+            "type": "transcription",
+            "record_id": record_id,
+            "title": "Title",
+            "source": "batch_process",
+        }
+
+        with patch.object(self.queue_manager, "enqueue_recording_summary") as enqueue_summary:
+            self.queue_manager._on_worker_completed(
+                {
+                    "text": "recognized text",
+                    "model_name": "base",
+                    "is_diarized": True,
+                }
+            )
+
+        record = self.db.fetch_record(record_id)
+        self.assertEqual(record["transcription"], "recognized text")
+        self.assertEqual(record["transcription_model"], "base")
+        enqueue_summary.assert_not_called()
+
+    def test_remove_task_at_and_move_task_cover_valid_and_invalid_indices(self):
+        with patch.object(self.queue_manager, "_start_next_if_idle"):
+            self.queue_manager.enqueue_recording_summary(1, "a", "t1")
+            self.queue_manager.enqueue_recording_summary(2, "b", "t2")
+
+        self.assertFalse(self.queue_manager.remove_task_at(99))
+        self.assertTrue(self.queue_manager.move_task(0, 0))
+        self.assertFalse(self.queue_manager.move_task(0, 99))
+        self.assertTrue(self.queue_manager.remove_task_at(0))
+
+    def test_cancel_current_returns_false_when_idle(self):
+        self.assertFalse(self.queue_manager.cancel_current())
+
+    def test_start_next_if_idle_returns_early_when_busy_or_empty(self):
+        fake_worker = MagicMock()
+        self.queue_manager._current_worker = fake_worker
+        self.queue_manager._start_next_if_idle()
+        self.assertIs(self.queue_manager._current_worker, fake_worker)
+
+        self.queue_manager._current_worker = None
+        self.queue_manager._queue.clear()
+        self.queue_manager._start_next_if_idle()
+        self.assertIsNone(self.queue_manager.get_current_task())
+
+    def test_on_worker_completed_ignores_none_result(self):
+        self.queue_manager._current_task = {"type": "summary", "record_id": 1}
+        with patch("src.ui.summary_task_queue.handle_worker_completion") as completion:
+            self.queue_manager._on_worker_completed(None)
+        completion.assert_not_called()
+
+    def test_apply_completion_action_ignores_unknown_action(self):
+        self.queue_manager._apply_completion_action({"type": "unknown"})
+
+    def test_generator_recording_summary_completed_ignores_missing_or_non_dict_record(self):
+        with patch.object(self.queue_manager.db, "fetch_record", return_value=None), \
+             patch.object(self.queue_manager, "enqueue_task_extraction") as enqueue_mock:
+            self.queue_manager._on_generator_recording_summary_completed(999, "Title")
+        enqueue_mock.assert_not_called()
+
+    def test_generator_recording_summary_completed_ignores_empty_ai_text(self):
+        record_id = self.db.save("test.wav", "", 10.0, "Title")
+        with patch.object(self.queue_manager.db, "get_record_ai_text", return_value=""), \
+             patch.object(self.queue_manager, "enqueue_task_extraction") as enqueue_mock:
+            self.queue_manager._on_generator_recording_summary_completed(record_id, "Title")
+        enqueue_mock.assert_not_called()
 
 if __name__ == '__main__':
     unittest.main()

@@ -3,11 +3,13 @@ import sys
 import unittest
 from unittest.mock import MagicMock, patch
 
+from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import QApplication, QDialog
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from src.ui.chat_widget import ChatWidget
+from src.ui.context_manager_panel import ContextManagerPanel
 from src.ui.styles import apply_theme
 
 
@@ -157,6 +159,29 @@ class TestChatWidgetContext(unittest.TestCase):
             widget.deleteLater()
             apply_theme("Light")
 
+    def test_context_panel_state_roundtrip_after_forced_records(self):
+        db = self.mock_db
+        notebook_db = self.mock_nb_db
+        notebook_db.get_notebooks.return_value = [{"id": 1, "name": "Notebook 1"}]
+        panel = ContextManagerPanel(db, notebook_db)
+        try:
+            panel.set_forced_records([{"id": 7, "title": "Pinned", "created_at": "2026-03-10"}])
+            panel.nb_list.item(0).setCheckState(Qt.CheckState.Checked)
+
+            restored = ContextManagerPanel(db, notebook_db, show_header=False, interactive=False)
+            try:
+                restored.apply_state(panel.serialize_state())
+
+                self.assertTrue(restored.nb_list.item(0).checkState() == Qt.CheckState.Checked)
+                self.assertEqual(restored.entries_list.count(), panel.entries_list.count())
+                self.assertIn("Pinned", restored.entries_list.item(0).text())
+            finally:
+                restored.deleteLater()
+                self.app.processEvents()
+        finally:
+            panel.deleteLater()
+            self.app.processEvents()
+
     def test_context_panel_toggle_button_collapses_and_restores(self):
         widget = ChatWidget(self.rag)
         try:
@@ -228,5 +253,20 @@ class TestChatWidgetContext(unittest.TestCase):
 
             widget.expand_context_panel()
             self.assertFalse(widget.context_panel.is_collapsed())
+        finally:
+            widget.deleteLater()
+
+    def test_display_mode_updates_header_visibility_without_touching_context_panel_state(self):
+        widget = ChatWidget(self.rag)
+        try:
+            widget.set_display_mode("floating")
+            self.assertFalse(widget.header.isHidden())
+            self.assertEqual(widget.mode_btn.text(), "⇱")
+            self.assertFalse(widget.minimize_btn.isHidden())
+
+            widget.set_display_mode("tab")
+            self.assertTrue(widget.header.isHidden())
+            self.assertEqual(widget.mode_btn.text(), "↗")
+            self.assertTrue(widget.minimize_btn.isHidden())
         finally:
             widget.deleteLater()

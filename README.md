@@ -12,7 +12,7 @@ Read this in [Español](README_ES.md) | [Asturianu](README_AST.md)
 
 - **Audio Recording & Import**: Record audio directly within the app or import existing files.
 - **Recording Editing**: Open a recording in a second editor tab, trim audio segments, and automatically retranscribe the edited clip. The first trim keeps a `.orig` backup of the original file.
-- **Transcription & Diarization**: Automatically transcribe audio and identify different speakers (diarization) using local Whisper backends, `sherpa-onnx`, and pyannote.audio.
+- **Transcription & Diarization**: Automatically transcribe audio, copy the full transcription with one click, and identify different speakers (diarization) using local Whisper backends, `sherpa-onnx`, and pyannote.audio.
 - **Intelligent Search (RAG)**: Use Retrieval-Augmented Generation (RAG) to chat with your recordings and find specific information. Supports Google Gemini and **Ollama** for local execution.
 - **Flexible Chat Windows**: Chats can stay as regular tabs, move to the floating bar, and be minimized into compact chips for quick restore.
 - **Active Chat Context Sidebar**: When a chat tab is active, the app's right sidebar shows a collapsible, auto-opened mirror of the chat context and hides it again when you switch tabs or close the chat.
@@ -20,6 +20,11 @@ Read this in [Español](README_ES.md) | [Asturianu](README_AST.md)
 - **Calendar View**: Browse your recordings by date.
 - **Unified Tools**: Storage cleanup, batch processing, and data export/import in one convenient tab.
 - **Customizable Theme**: Support for Light, Dark, and System themes.
+
+## Architecture And Specs
+
+- Architecture notes: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
+- Spec-driven feature registry: [docs/specs/README.md](docs/specs/README.md)
 
 ## Installation
 
@@ -102,6 +107,8 @@ You can also use:
 ```bash
 ./run_with_test.sh
 ```
+
+GitHub Actions runs this full test suite automatically on Ubuntu, Windows, and macOS for every pull request.
 
 ## Windows Transcription Stability
 

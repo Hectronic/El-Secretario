@@ -10,7 +10,7 @@ El Secretario es una herramienta inteligente de transcripción y organización d
 
 - **Grabación e Importación de Audio**: Graba audio directamente en la aplicación o importa archivos existentes.
 - **Edición de grabaciones**: Abre una grabación en una segunda pestaña de edición, recorta segmentos de audio y vuelve a transcribir automáticamente el clip editado. El primer recorte conserva una copia `.orig` del archivo original.
-- **Transcripción y Diarización**: Transcribe audio automáticamente e identifica diferentes hablantes (diarización) utilizando backends locales de Whisper, `sherpa-onnx` y pyannote.audio.
+- **Transcripción y Diarización**: Transcribe audio automáticamente, copia la transcripción completa con un clic e identifica diferentes hablantes (diarización) utilizando backends locales de Whisper, `sherpa-onnx` y pyannote.audio.
 - **Búsqueda Inteligente (RAG)**: Utiliza Generación Aumentada por Recuperación (RAG) para chatear con tus grabaciones y encontrar información específica. Soporta Google Gemini y **Ollama** para ejecución local.
 - **Ventanas de Chat Flexibles**: Los chats pueden quedarse como pestañas normales, moverse a la barra flotante y minimizarse en fichas compactas para restaurarlos rápido.
 - **Contexto Activo del Chat en la Barra Lateral**: Cuando una pestaña de chat está activa, la barra lateral derecha de la app muestra una copia desplegable y abierta por defecto del contexto del chat, y la oculta al cambiar de pestaña o cerrar el chat.
@@ -18,6 +18,11 @@ El Secretario es una herramienta inteligente de transcripción y organización d
 - **Vista de Calendario**: Explora tus grabaciones por fecha.
 - **Herramientas Unificadas**: Limpieza de almacenamiento, procesamiento por lotes y exportación/importación de datos en una sola pestaña.
 - **Tema Personalizable**: Soporte para temas Claro, Oscuro y del Sistema.
+
+## Arquitectura y Specs
+
+- Notas de arquitectura: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
+- Registro de funcionalidades orientado a spec-driven development: [docs/specs/README.md](docs/specs/README.md)
 
 ## Instalación
 
@@ -85,6 +90,23 @@ Para utilizar plenamente las funciones de El Secretario, deberás configurar los
 **Nota:** el editor actual usa marcadores de tiempo (`inicio`/`fin`) y botones para fijar el punto de reproducción. Todavía no incluye una forma de selección por waveform ni una línea de tiempo arrastrable.
 
 **Nota:** esta barra lateral es una copia de solo lectura del contexto del chat activo. No permanece visible para chats inactivos ni para ventanas flotantes/minimizadas.
+
+## Ejecutar Pruebas
+
+Ejecuta las pruebas con el entorno virtual del proyecto para evitar diferencias con el Python global:
+
+```bash
+./venv/bin/pip install -r requirements.txt
+./venv/bin/python -m pytest -q
+```
+
+También puedes usar:
+
+```bash
+./run_with_test.sh
+```
+
+GitHub Actions ejecuta automáticamente esta suite completa en Ubuntu, Windows y macOS en cada pull request.
 
 ## Estabilidad de transcripción en Windows
 

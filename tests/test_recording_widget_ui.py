@@ -98,6 +98,95 @@ class TestRecordingWidgetUI(unittest.TestCase):
         options = [self.widget.model_combo.itemText(i) for i in range(self.widget.model_combo.count())]
         self.assertIn("Sherpa-ONNX (Local)", options)
 
+    def test_retranscribe_button_is_integrated_with_transcription_controls(self):
+        self.assertIsNotNone(self.widget.retranscribe_btn)
+        self.assertEqual(self.widget.retranscribe_btn.text(), "Retranscribe")
+        self.assertEqual(self.widget.retranscribe_btn.minimumHeight(), 34)
+        self.assertEqual(self.widget.retranscribe_btn.property("class"), "calendar-primary-btn")
+        self.assertFalse(self.widget.retranscribe_btn.isEnabled())
+
+    def test_bottom_actions_keep_ai_buttons_without_retranscribe_duplication(self):
+        self.assertEqual(self.widget.summarize_btn.text(), "Summarize (AI)")
+        self.assertEqual(self.widget.extract_tasks_btn.text(), "Extract Tasks (AI)")
+        self.assertNotEqual(self.widget.summarize_btn, self.widget.retranscribe_btn)
+        self.assertNotEqual(self.widget.extract_tasks_btn, self.widget.retranscribe_btn)
+
+    def test_recording_action_buttons_use_consistent_style_classes(self):
+        expected = {
+            self.widget.retranscribe_btn: ("calendar-primary-btn", 34),
+            self.widget.edit_audio_btn: ("calendar-primary-btn", 38),
+            self.widget.summarize_btn: ("calendar-nav-btn", 36),
+            self.widget.extract_tasks_btn: ("calendar-nav-btn", 36),
+            self.widget.save_all_btn: ("calendar-primary-btn", 36),
+            self.widget.ask_meeting_btn: ("calendar-primary-btn", 38),
+            self.widget.delete_btn: ("record-del-btn", 38),
+            self.widget.copy_transcription_btn: ("calendar-nav-btn", None),
+        }
+
+        for button, (style_class, min_height) in expected.items():
+            with self.subTest(button=button.text()):
+                self.assertEqual(button.property("class"), style_class)
+                if min_height is not None:
+                    self.assertEqual(button.minimumHeight(), min_height)
+
+    def test_save_button_is_bottom_primary_action_and_tracks_dirty_state(self):
+        self.assertEqual(self.widget.save_all_btn.text(), "Save All Changes")
+        self.assertEqual(self.widget.save_all_btn.property("class"), "calendar-primary-btn")
+        self.assertFalse(self.widget.save_all_btn.isEnabled())
+
+        bottom_layout = self.widget.layout().itemAt(self.widget.layout().count() - 1).layout()
+        bottom_widgets = [
+            bottom_layout.itemAt(i).widget()
+            for i in range(bottom_layout.count())
+            if bottom_layout.itemAt(i).widget() is not None
+        ]
+        self.assertIn(self.widget.save_all_btn, bottom_widgets)
+
+        self.widget.title_input.setText("Changed title")
+        self.assertTrue(self.widget.save_all_btn.isEnabled())
+
+        self.widget._set_dirty(False)
+        self.assertFalse(self.widget.save_all_btn.isEnabled())
+
+    def test_copy_transcription_button_copies_full_text_without_selection(self):
+        self.assertEqual(self.widget.copy_transcription_btn.text(), "Copy Transcription")
+        self.assertFalse(self.widget.copy_transcription_btn.isEnabled())
+
+        clipboard = QApplication.clipboard()
+        clipboard.clear()
+        emitted_statuses = []
+        self.widget.status_changed.connect(emitted_statuses.append)
+        transcription = "First paragraph.\n\nSecond paragraph."
+
+        self.widget.text_display.setPlainText(transcription)
+        self.assertTrue(self.widget.copy_transcription_btn.isEnabled())
+        self.widget.copy_transcription_btn.click()
+
+        self.assertEqual(clipboard.text(), transcription)
+        self.assertEqual(emitted_statuses[-1], "Transcription copied.")
+
+    def test_copy_transcription_button_ignores_notes_only_records(self):
+        record = {
+            'id': 1,
+            'filename': 'test.wav',
+            'transcription': '',
+            'is_diarized': 0,
+            'transcription_model': 'base',
+            'title': 'Test',
+            'tags': '',
+            'recording_notes': 'Only notes',
+            'summary': '',
+            'created_at': '2023-01-01',
+            'duration': 10.0,
+        }
+        self.mock_db.fetch_record.return_value = record
+        self.mock_db.get_tasks_by_record.return_value = []
+
+        self.widget.load_record(1)
+
+        self.assertFalse(self.widget.copy_transcription_btn.isEnabled())
+        self.assertTrue(self.widget.summarize_btn.isEnabled())
+
     def test_start_transcription_shows_error_without_starting_thread_when_sherpa_model_missing(self):
         self.widget.model_combo.setCurrentText("Sherpa-ONNX (Local)")
         fake_settings = MagicMock(spec=QSettings)
@@ -144,6 +233,7 @@ class TestRecordingWidgetUI(unittest.TestCase):
         
         # Check that loaded text is correct
         self.assertEqual(self.widget.text_display.toPlainText(), 'test')
+        self.assertFalse(self.widget.save_all_btn.isEnabled())
         self.assertEqual(self.widget.notes_display.toPlainText(), 'Important context')
         self.assertEqual(self.widget.summary_display.toPlainText(), 'Summary')
         

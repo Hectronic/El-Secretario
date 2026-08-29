@@ -5,11 +5,13 @@ from PyQt6.QtWidgets import QComboBox, QListWidget
 
 from src.ui.main_window import MainWindow
 from src.ui.components import SidebarTaskCompactWidget
+from src.ui.main_window.sidebar_actions import SidebarActionsCoordinator
 
 
 def test_refresh_tasks_sidebar_uses_calendar_range_filters(qtbot):
     window = MainWindow.__new__(MainWindow)
     window.db = MagicMock()
+    window.sidebar_actions = SidebarActionsCoordinator(window)
     window.tasks_sidebar_list = QListWidget()
     qtbot.addWidget(window.tasks_sidebar_list)
     window.tasks_sidebar_limit = 20

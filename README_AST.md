@@ -10,7 +10,7 @@ El Secretario ye una ferramienta intelixente de trescripción y organización d'
 
 - **Grabación ya Importación d'Audio**: Graba audio direutamente na aplicación o importa archivos esistentes.
 - **Edición de grabaciones**: Abre una grabación nuna segunda pestaña d'edición, recorta segmentos d'audio y torna a trescribir automáticamente'l clip editáu. El primer recorte caltién una copia `.orig` del archivu orixinal.
-- **Trescripción y Diarización**: Trescribe audio automáticamente ya identifica distintos falantes (diarización) usando backends llocales de Whisper, `sherpa-onnx` y pyannote.audio.
+- **Trescripción y Diarización**: Trescribe audio automáticamente, copia la trescripción completa con un clic ya identifica distintos falantes (diarización) usando backends llocales de Whisper, `sherpa-onnx` y pyannote.audio.
 - **Gueta Intelixente (RAG)**: Usa Xeneración Aumentada por Recuperación (RAG) pa charrar coles tos grabaciones y alcontrar información específica. Soporta Google Gemini y **Ollama** pa execución llocal.
 - **Ventanes de Chat Flexibles**: Los chats pueden quedar como pestañes normales, movese a la barra flotante y minimizase en fiches compactes pa restauralos rápido.
 - **Contéutu Activo del Chat na Barra Llateral**: Cuando una pestaña de chat ta activa, la barra llateral derecha de la app amuesa una copia desplegable y abierta por defeutu del contéutu del chat, y anúlase al cambiar de pestaña o zarrar el chat.
@@ -18,6 +18,11 @@ El Secretario ye una ferramienta intelixente de trescripción y organización d'
 - **Vista de Calendariu**: Esplora les tos grabaciones per fecha.
 - **Ferramientes Unificaes**: Llimpieza d'almacenamientu, procesamientu per llotes y esportación/importación de datos nuna sola pestaña.
 - **Tema Personalizable**: Sofitu pa temes Claru, Escuru y del Sistema.
+
+## Arquitectura y Specs
+
+- Notes d'arquitectura: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
+- Rexistru de funcionalidaes orientáu a spec-driven development: [docs/specs/README.md](docs/specs/README.md)
 
 ## Instalación
 
@@ -85,6 +90,23 @@ Pa utilizar dafechu les funciones d'El Secretario, deberás configurar los token
 **Nota:** l'editor actual usa marcadores de tiempu (`entamu`/`fin`) y botones pa fixar el puntu de reproducción. Entá nun ufierta una selección por waveform nin una llinia de tiempu arrastrable.
 
 **Nota:** esta barra llateral ye una copia de solo llectura del contéutu del chat activu. Nun queda visible pa chats inactivos nin pa ventanes flotantes/minimizaes.
+
+## Executar Pruebes
+
+Executa les pruebes col entornu virtual del proyectu pa evitar diferencies col Python global:
+
+```bash
+./venv/bin/pip install -r requirements.txt
+./venv/bin/python -m pytest -q
+```
+
+Tamién puedes usar:
+
+```bash
+./run_with_test.sh
+```
+
+GitHub Actions executa automáticamente esta suite completa en Ubuntu, Windows y macOS en cada pull request.
 
 ## Estabilidá de trescripción en Windows
 

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Refactor and Specs Steward"
+  short_description: "Refactor hotspots and keep specs aligned"
+  default_prompt: "Use this skill when changing El Secretario code that is under-refactored, listed as a hotspot, or missing a matching docs/specs contract; update or create specs/refactor records and validate with focused tests."

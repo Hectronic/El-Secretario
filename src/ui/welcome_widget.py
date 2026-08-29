@@ -18,13 +18,32 @@ from PyQt6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLab
 from PyQt6.QtCore import Qt, pyqtSignal, QTimer, QSettings, QTime, QPointF
 from PyQt6.QtGui import QPixmap, QPainter, QColor, QPen
 from src.ui.styles import LIST_WIDGET_STYLE
+from src.ui.welcome.button_factory import (
+    create_big_button,
+    create_round_button,
+    create_squircle_button,
+)
+from src.ui.welcome.capture_state import (
+    build_recording_config,
+    load_capture_settings,
+    populate_microphones,
+    save_capture_settings,
+)
+from src.ui.welcome.mic_test import (
+    calculate_rms,
+    start_mic_test as start_mic_test_session,
+    stop_mic_test as stop_mic_test_session,
+    update_vu_meter,
+)
+from src.ui.welcome.landing_data import (
+    fetch_favorites_page,
+    fetch_today_items,
+    search_result_items,
+)
 from src.transcription_options import (
     DEFAULT_TRANSCRIPTION_MODEL,
-    DEFAULT_WELCOME_TRANSCRIPTION_MODEL,
-    get_saved_transcription_model,
     get_transcription_model_options,
 )
-import numpy as np
 import os
 
 Recorder = None
@@ -120,52 +139,15 @@ class WelcomeWidget(QWidget):
         self._connect_config_signals()
 
     def _load_saved_config(self):
-        saved_mic = self.settings.value("rec_config/mic", None)
-        prefer_index = self.settings.value("audio_prefer_device_index", False, type=bool)
-        if saved_mic is None:
-            # Try global default from settings.
-            if prefer_index:
-                saved_mic_index = self.settings.value("default_mic_index", None)
-                try:
-                    index = self.mic_combo.findData(int(saved_mic_index)) if saved_mic_index is not None else -1
-                except (TypeError, ValueError):
-                    index = -1
-                if index >= 0:
-                    self.mic_combo.setCurrentIndex(index)
-            if self.mic_combo.currentIndex() <= 0:
-                saved_mic_name = self.settings.value("default_mic_name", "")
-                if saved_mic_name:
-                    index = self.mic_combo.findText(saved_mic_name)
-                    if index >= 0:
-                        self.mic_combo.setCurrentIndex(index)
-        elif saved_mic:
-            index = self.mic_combo.findData(saved_mic)
-            if index >= 0:
-                self.mic_combo.setCurrentIndex(index)
-        
-        saved_model = get_saved_transcription_model(
+        load_capture_settings(
             self.settings,
-            default=DEFAULT_WELCOME_TRANSCRIPTION_MODEL,
+            mic_combo=self.mic_combo,
+            model_combo=self.model_combo,
+            lang_combo=self.lang_combo,
+            diarization_check=self.diarization_check,
+            sys_audio_check=self.sys_audio_check,
+            auto_summary_check=self.auto_summary_check,
         )
-        self.model_combo.setCurrentText(saved_model)
-        
-        saved_lang = self.settings.value("rec_config/language", "Auto")
-        self.lang_combo.setCurrentText(saved_lang)
-        
-        saved_diar = self.settings.value("rec_config/diarization", False, type=bool)
-        self.diarization_check.setChecked(saved_diar)
-        
-        saved_sys_audio = self.settings.value("rec_config/capture_system_audio", None)
-        if saved_sys_audio is None:
-            # Try global default from settings
-            saved_sys_audio = self.settings.value("capture_system_audio", False, type=bool)
-        else:
-            saved_sys_audio = self.settings.value("rec_config/capture_system_audio", False, type=bool)
-            
-        self.sys_audio_check.setChecked(saved_sys_audio)
-
-        saved_auto_summary = self.settings.value("rec_config/auto_summarize_after_transcription", False, type=bool)
-        self.auto_summary_check.setChecked(saved_auto_summary)
         
     def _connect_config_signals(self):
         self.mic_combo.currentIndexChanged.connect(self._save_config)
@@ -176,12 +158,15 @@ class WelcomeWidget(QWidget):
         self.auto_summary_check.toggled.connect(self._save_config)
 
     def _save_config(self):
-        self.settings.setValue("rec_config/mic", self.mic_combo.currentData())
-        self.settings.setValue("rec_config/model", self.model_combo.currentText())
-        self.settings.setValue("rec_config/language", self.lang_combo.currentText())
-        self.settings.setValue("rec_config/diarization", self.diarization_check.isChecked())
-        self.settings.setValue("rec_config/capture_system_audio", self.sys_audio_check.isChecked())
-        self.settings.setValue("rec_config/auto_summarize_after_transcription", self.auto_summary_check.isChecked())
+        save_capture_settings(
+            self.settings,
+            mic_combo=self.mic_combo,
+            model_combo=self.model_combo,
+            lang_combo=self.lang_combo,
+            diarization_check=self.diarization_check,
+            sys_audio_check=self.sys_audio_check,
+            auto_summary_check=self.auto_summary_check,
+        )
         self.status_message_requested.emit("Recording configuration saved.")
 
     def _update_digital_clock(self):
@@ -661,32 +646,16 @@ class WelcomeWidget(QWidget):
 
     def populate_mics(self, keep_current=False):
         """Populate the microphone combo box with available devices."""
-        previous_data = self.mic_combo.currentData() if keep_current else None
-        previous_text = self.mic_combo.currentText() if keep_current else ""
-        if os.environ.get("EL_SECRETARIO_SKIP_AUDIO_ENUM", "").strip().lower() in {"1", "true", "yes"}:
-            self.mic_combo.clear()
-            self.mic_combo.addItem("Default (Auto)", None)
-            return
         global Recorder
         if Recorder is None:
             from src.audio import Recorder as _Recorder
             Recorder = _Recorder
-        devices = Recorder.get_input_devices()
-        self.mic_combo.clear()
-        # Add default option first
-        self.mic_combo.addItem("Default (Auto)", None)
-        for idx, name in devices:
-            self.mic_combo.addItem(name, idx)
-        if keep_current:
-            if previous_data is not None:
-                idx_by_data = self.mic_combo.findData(previous_data)
-                if idx_by_data >= 0:
-                    self.mic_combo.setCurrentIndex(idx_by_data)
-                    return
-            if previous_text:
-                idx_by_text = self.mic_combo.findText(previous_text)
-                if idx_by_text >= 0:
-                    self.mic_combo.setCurrentIndex(idx_by_text)
+        populate_microphones(
+            self.mic_combo,
+            recorder_getter=lambda: Recorder,
+            skip_audio_enum=os.environ.get("EL_SECRETARIO_SKIP_AUDIO_ENUM", "").strip().lower() in {"1", "true", "yes"},
+            keep_current=keep_current,
+        )
 
     def on_rescan_mics_clicked(self):
         self.populate_mics(keep_current=True)
@@ -706,100 +675,33 @@ class WelcomeWidget(QWidget):
     def start_mic_test(self):
         """Start testing the selected microphone."""
         import sounddevice as sd
-        device_index = self.mic_combo.currentData()
-        
-        # Try different sample rates
-        sample_rates = [16000, 44100, 48000, 22050]
-        
-        for rate in sample_rates:
-            try:
-                self.test_stream = sd.InputStream(
-                    samplerate=rate,
-                    channels=1,
-                    callback=self.test_audio_callback,
-                    device=device_index
-                )
-                self.test_stream.start()
-                self.test_vu_meter.show()
-                self.test_status_label.setText(f"Testing at {rate} Hz - Speak into the mic...")
-                self.test_status_label.show()
-                self.test_mic_btn.setText("⏹ Stop")
-                self.test_mic_btn.setStyleSheet("""
-                    QPushButton {
-                        background-color: #f44336;
-                        color: white;
-                        border-radius: 5px;
-                        padding: 5px;
-                    }
-                    QPushButton:hover {
-                        background-color: #d32f2f;
-                    }
-                """)
-                self.test_timer.start(50)  # Update VU meter every 50ms
-                return
-            except Exception as e:
-                continue
-        
-        # All rates failed
-        self.test_status_label.setText("Error: Could not open audio device")
-        self.test_status_label.setStyleSheet("color: #f44336; font-size: 12px;")
-        self.test_status_label.show()
+        self.test_stream = start_mic_test_session(
+            sd_module=sd,
+            device_index=self.mic_combo.currentData(),
+            audio_callback=self.test_audio_callback,
+            vu_meter=self.test_vu_meter,
+            status_label=self.test_status_label,
+            test_button=self.test_mic_btn,
+            test_timer=self.test_timer,
+        )
 
     def stop_mic_test(self):
         """Stop testing the microphone."""
-        self.test_timer.stop()
-        if self.test_stream is not None:
-            try:
-                self.test_stream.stop()
-                self.test_stream.close()
-            except:
-                pass
-            self.test_stream = None
-        
-        self.test_vu_meter.setValue(0)
-        self.test_vu_meter.hide()
-        self.test_status_label.hide()
-        self.test_mic_btn.setText("🎤 Test")
-        self.test_mic_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #2196F3;
-                color: white;
-                border-radius: 5px;
-                padding: 5px;
-            }
-            QPushButton:hover {
-                background-color: #1976D2;
-            }
-        """)
+        self.test_stream = stop_mic_test_session(
+            stream=self.test_stream,
+            vu_meter=self.test_vu_meter,
+            status_label=self.test_status_label,
+            test_button=self.test_mic_btn,
+            test_timer=self.test_timer,
+        )
 
     def test_audio_callback(self, indata, frames, time, status):
         """Callback for test audio stream."""
-        rms = np.sqrt(np.mean(indata**2))
-        self.current_amplitude = rms
+        self.current_amplitude = calculate_rms(indata)
 
     def update_test_vu(self):
         """Update the test VU meter."""
-        value = int(self.current_amplitude * 1000)
-        if value > 100:
-            value = 100
-        self.test_vu_meter.setValue(value)
-        
-        # Change color based on level
-        if value > 70:
-            self.test_vu_meter.setStyleSheet("""
-                QProgressBar { border: 2px solid #555; border-radius: 5px; background-color: #333; }
-                QProgressBar::chunk { background-color: #f44336; }
-            """)
-        elif value > 30:
-            self.test_vu_meter.setStyleSheet("""
-                QProgressBar { border: 2px solid #555; border-radius: 5px; background-color: #333; }
-                QProgressBar::chunk { background-color: #4CAF50; }
-            """)
-        else:
-            self.test_vu_meter.setStyleSheet("""
-                QProgressBar { border: 2px solid #555; border-radius: 5px; background-color: #333; }
-                QProgressBar::chunk { background-color: #2196F3; }
-            """)
+        update_vu_meter(self.test_vu_meter, self.current_amplitude)
 
     def get_recording_config(self):
         """Get the current recording configuration."""
@@ -807,15 +709,14 @@ class WelcomeWidget(QWidget):
         if self.test_stream is not None:
             self.stop_mic_test()
             
-        lang_map = {"Auto": None, "Spanish": "es", "English": "en"}
-        return {
-            "device_index": self.mic_combo.currentData(),
-            "model": self.model_combo.currentText(),
-            "language": lang_map.get(self.lang_combo.currentText()),
-            "diarization": self.diarization_check.isChecked(),
-            "capture_system_audio": self.sys_audio_check.isChecked(),
-            "auto_summarize_after_transcription": self.auto_summary_check.isChecked(),
-        }
+        return build_recording_config(
+            mic_combo=self.mic_combo,
+            model_combo=self.model_combo,
+            lang_combo=self.lang_combo,
+            diarization_check=self.diarization_check,
+            sys_audio_check=self.sys_audio_check,
+            auto_summary_check=self.auto_summary_check,
+        )
 
     def on_new_recording(self):
         """Emit new recording signal with configuration."""
@@ -832,95 +733,13 @@ class WelcomeWidget(QWidget):
         self.import_audio_requested.emit(config)
 
     def create_big_button(self, text, color, callback, width=200, height=150, class_name=None):
-        btn = QPushButton(text)
-        if class_name:
-            btn.setProperty("class", class_name)
-        btn.setFixedSize(width, height)
-        
-        # Only apply hardcoded style if NO class is provided
-        if not class_name:
-            btn.setStyleSheet(f"""
-                QPushButton {{
-                    background-color: {color};
-                    color: white;
-                    font-size: 16px;
-                    font-weight: bold;
-                    border-radius: 10px;
-                }}
-                QPushButton:hover {{
-                    background-color: {color}cc;
-                }}
-            """)
-        btn.clicked.connect(callback)
-        return btn
+        return create_big_button(text, color, callback, width=width, height=height, class_name=class_name)
 
     def create_round_button(self, text, color, callback, size=120, class_name=None):
-        btn = QPushButton(text)
-        if class_name:
-            btn.setProperty("class", class_name)
-        btn.setFixedSize(size, size)
-        
-        if not class_name:
-            btn.setStyleSheet(f"""
-                QPushButton {{
-                    background-color: {color};
-                    color: white;
-                    font-size: 20px;
-                    font-weight: bold;
-                    border-radius: {size // 2}px;
-                    border: 5px solid #fff;
-                }}
-                QPushButton:hover {{
-                    background-color: {color}cc;
-                    border-color: #eee;
-                }}
-                QPushButton:pressed {{
-                    background-color: {color}aa;
-                    border-color: #ccc;
-                }}
-            """)
-        btn.clicked.connect(callback)
-        return btn
+        return create_round_button(text, color, callback, size=size, class_name=class_name)
 
     def create_squircle_button(self, text, color, callback, width=100, height=90, class_name=None):
-        from PyQt6.QtGui import QColor
-        btn = QPushButton(text)
-        if class_name:
-            btn.setProperty("class", class_name)
-        btn.setFixedSize(width, height)
-        border_radius = int(height * 0.25)
-        
-        if not class_name:
-            bg = QColor(color)
-            hover_bg = bg.lighter(115).name()
-            pressed_bg = bg.darker(110).name()
-
-            btn.setStyleSheet(f"""
-                QPushButton {{
-                    background-color: {color};
-                    color: white;
-                    font-size: 20px;
-                    font-weight: bold;
-                    border-top-right-radius: {border_radius}px;
-                    border-bottom-right-radius: {border_radius}px;
-                    border-top-left-radius: 0px;
-                    border-bottom-left-radius: 0px;
-                    border: 2px solid #555;
-                    border-left: none;
-                }}
-                QPushButton:hover {{
-                    background-color: {hover_bg};
-                    border: 2px solid #777;
-                    border-left: none;
-                }}
-                QPushButton:pressed {{
-                    background-color: {pressed_bg};
-                    border: 2px solid #999;
-                    border-left: none;
-                }}
-            """)
-        btn.clicked.connect(callback)
-        return btn
+        return create_squircle_button(text, color, callback, width=width, height=height, class_name=class_name)
 
     def on_search_triggered(self):
         text = self.search_input.text().strip()
@@ -934,11 +753,9 @@ class WelcomeWidget(QWidget):
             return
         
         self.results_list.show()
-        for res in results:
-            title = res['metadata'].get('title', 'Untitled')
-            item_text = f"{title} (Score: {1 - res['distance']:.2f})\n{res['text'][:100]}..."
-            item = QListWidgetItem(item_text)
-            item.setData(Qt.ItemDataRole.UserRole, res['id'])
+        for result in search_result_items(results):
+            item = QListWidgetItem(result.text)
+            item.setData(Qt.ItemDataRole.UserRole, result.record_id)
             self.results_list.addItem(item)
 
     def on_result_clicked(self, item):
@@ -947,23 +764,16 @@ class WelcomeWidget(QWidget):
         
     def load_favorites(self):
         self.fav_list.clear()
-        favorites = self.db.fetch_favorites(limit=5, offset=self.favorites_page * 5)
-        
-        if not favorites and self.favorites_page > 0:
-            self.favorites_page -= 1
-            self.load_favorites()
-            return
+        page = fetch_favorites_page(self.db, page=self.favorites_page)
+        self.favorites_page = page.page
 
-        for fav in favorites:
-            title = fav['title'] if fav['title'] else fav['created_at']
-            item = QListWidgetItem(f"{title} ({fav['duration']:.1f}s)")
-            item.setData(Qt.ItemDataRole.UserRole, fav['id'])
+        for favorite in page.items:
+            item = QListWidgetItem(favorite.text)
+            item.setData(Qt.ItemDataRole.UserRole, favorite.record_id)
             self.fav_list.addItem(item)
             
-        self.prev_btn.setEnabled(self.favorites_page > 0)
-        # Check if there are more
-        next_batch = self.db.fetch_favorites(limit=1, offset=(self.favorites_page + 1) * 5)
-        self.next_btn.setEnabled(bool(next_batch))
+        self.prev_btn.setEnabled(page.has_previous)
+        self.next_btn.setEnabled(page.has_next)
 
     def prev_page(self):
         if self.favorites_page > 0:
@@ -980,23 +790,10 @@ class WelcomeWidget(QWidget):
 
     def load_today(self):
         """Load today's recordings."""
-        from datetime import date
         self.today_list.clear()
-        
-        today_str = date.today().isoformat()
-        records = self.db.fetch_by_date_range(today_str, today_str)
-        
-        for rec in records:
-            if rec.get('type') == 'note':
-                title = rec['title'] if rec['title'] else "Untitled Note"
-                item_text = f"📝 {title}"
-            else:
-                title = rec['title'] if rec['title'] else rec['created_at']
-                dur = rec.get('duration', 0)
-                item_text = f"🎤 {title} ({dur:.1f}s)"
-            
-            item = QListWidgetItem(item_text)
-            item.setData(Qt.ItemDataRole.UserRole, rec['id'])
+        for record in fetch_today_items(self.db):
+            item = QListWidgetItem(record.text)
+            item.setData(Qt.ItemDataRole.UserRole, record.record_id)
             self.today_list.addItem(item)
 
     def on_today_clicked(self, item):

@@ -1,6 +1,6 @@
 ---
 name: agents-workflow-guard
-description: "Enforce this repository workflow from agents.md. Use when implementing or modifying code: run tests with the project virtual environment, add or update tests for behavior changes, keep Windows/Ubuntu compatibility, and update documentation (all available languages) when features change."
+description: "Enforce this repository workflow from AGENTS.md. Use when implementing or modifying code: run tests with the project virtual environment, add or update tests for behavior changes, preserve configured GPU/CPU transcription behavior, keep Windows/Ubuntu compatibility, and update documentation (all available languages) when features change."
 ---
 
 # Agents Workflow Guard
@@ -14,7 +14,7 @@ Apply this guardrail to any code change in this repository.
 - Prefer targeted tests during iteration, then run the full suite before finishing.
 
 2. Use the project virtual environment for tests.
-- Always run tests with `./venv/bin/python -m pytest` (or `./run_with_test.sh`).
+- Always run tests with `./.venv/bin/python -m pytest`, falling back to `./venv/bin/python -m pytest` (or `./run_with_test.sh`).
 - Do not use global/system Python for test execution.
 
 3. Add or update tests when behavior changes.
@@ -29,14 +29,25 @@ Apply this guardrail to any code change in this repository.
 5. Keep docs aligned with feature changes.
 - Update relevant docs after significant changes.
 - If a document exists in multiple languages, update all language variants.
+- Keep the refactored UI architecture documented in this repo:
+  - `src/ui/main_window/` is the home for `MainWindow` coordinators.
+  - `src/ui/chat/` is the home for chat-specific dialogs and helpers.
+  - Shared chat UI should live in `src/ui/context_manager_panel.py`.
+  - Tests should follow the package structure under `tests/ui/`.
+
+6. Preserve transcription runtime preferences.
+- Respect configured STT backend, device, compute type, and `force_cpu`.
+- Prefer GPU/CUDA when available and `force_cpu` is false.
+- Do not force CPU unless explicitly configured, CUDA is unavailable, or a safe fallback path is handling a real runtime failure.
+- Keep transcription and diarization aligned with this runtime policy where supported.
 
 ## Execution Order
 
 1. Understand the requested change and impacted files.
 2. Implement minimal production changes.
 3. Create or update tests for the changed behavior.
-4. Run focused tests with `./venv/bin/python -m pytest ...`.
-5. Run full suite with `./venv/bin/python -m pytest -q`.
+4. Run focused tests with `./.venv/bin/python -m pytest ...` or `./venv/bin/python -m pytest ...`.
+5. Run full suite with `./.venv/bin/python -m pytest -q` or `./venv/bin/python -m pytest -q`.
 6. Report test evidence and remaining risks (if any).
 
 ## Reporting Checklist
