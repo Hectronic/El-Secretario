@@ -49,6 +49,7 @@ Reduce large flat modules and create expansion points for future product work wi
 - From active chat context sidebar construction in `src/ui/main_window/__init__.py` to `src/ui/main_window/chat_context_sidebar.py`: the helper creates and registers the non-interactive mirrored context panel while `SidebarSyncCoordinator` keeps synchronization behavior.
 - From queue-management widget logic in `src/ui/queue_management_widget.py` to `src/app/summary_queue/`: action orchestration (`actions.py`) and presentation/snapshot mapping (`presentation.py`) now live in app-level modules while the widget primarily applies mapped view state.
 - From worker startup internals in `src/ui/summary_task_queue.py` to `src/app/summary_queue/`: worker construction (`worker_factory.py`), common signal wiring (`worker_signals.py`), and queue-start lifecycle (`worker_lifecycle.py`) now live in focused modules.
+- From the monolithic `src/database.py` to `src/persistence/`: schema/migrations, records/imports, chat sessions/imports, transcription logs, summaries, and tasks now have aggregate-specific repository modules. `DBManager` remains the public compatibility facade so existing callers retain their API.
 
 ## Specs Affected
 
@@ -82,7 +83,7 @@ Reduce large flat modules and create expansion points for future product work wi
 - `src/ui/main_window/bootstrap.py` now isolates the startup sequence, but the shell still owns tab lifecycle and broad app orchestration.
 - `src/ui/main_window/content_tabs.py` now owns note/chat/summary/tools/tasks/collections/calendar tab lifecycle; remaining `MainWindow` shell reduction should focus on cross-feature orchestration and legacy wrappers.
 - `src/ui/main_window/sidebar_actions.py` is now mostly an orchestrator over `tasks_sidebar_actions.py`, `chat_sessions_actions.py`, `calendar_sidebar_actions.py`, and `history_tags_actions.py`; future cuts should target direct wiring from `MainWindow` to those focused coordinators where practical.
-- `src/database.py` remains a broad persistence gateway and should be split by aggregate once contract tests are explicit.
+- `src/database.py` is now a thin compatibility facade over `src/persistence/`. Future persistence work should extend the aggregate-specific repository that owns it and retain facade compatibility unless an intentional API migration is planned.
 - `src/ui/recording_widget.py` is now mostly a Qt orchestration shell for the recording detail/audio-edit tab. UI panel construction, controls, state helpers, RAG indexing, record loading, direct transcription flow, AI actions, speaker mapping, and legacy trim helpers have been extracted under `src/ui/recording/`; remaining reductions should target deletion/open-chat/playback adapters and any broad persistence coupling.
 - `src/ui/welcome_widget.py` still mixes landing layout, recorder configuration, microphone tests, favorites, today view, search, and settings persistence.
 - `src/ui/summary_task_queue.py` now acts mostly as a Qt adapter; keep moving any remaining business-only helpers into `src/app/summary_queue/`.
