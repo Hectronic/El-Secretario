@@ -20,12 +20,13 @@ This document contains useful information and strict rules for AI agents working
 - This project uses a logging system in `log/app.log`; use it for debugging.
 - Source code lives in `src/` and tests live in `tests/`.
 - New unit tests should mirror the source folder structure.
-- Large UI areas are now split by feature packages instead of flat modules:
+- Large UI areas are split by feature packages instead of flat modules:
   - `src/ui/main_window/` contains `MainWindow` plus focused coordinators such as `chat_floating.py`, `recording_tabs.py`, `sidebar_actions.py`, `sidebar_content.py`, `sidebar_sync.py`, and `setup_actions.py`.
   - `src/ui/chat/` contains chat-specific helpers such as `add_context_dialog.py`, `context_builder.py`, and `session_state.py`.
   - `src/ui/context_manager_panel.py` is a reusable context sidebar component shared by chat widgets.
+- SQLite persistence is split by aggregate under `src/persistence/`; `src/database.py` keeps the backwards-compatible `DBManager` facade.
 - Prefer adding new behavior to the smallest feature package that owns it.
-- Keep compatibility shims only when needed during incremental migrations, and move tests to mirror the new package layout under `tests/ui/<feature>/`.
+- Keep compatibility shims only when needed during incremental migrations, and move tests to mirror the new package layout under `tests/ui/<feature>/` or `tests/persistence/`.
 
 4. **Platforms**:
 - This project is used on Ubuntu and Windows. Preserve existing platform guards and do not break either platform.
@@ -44,14 +45,12 @@ This document contains useful information and strict rules for AI agents working
 3. Implement the change.
 4. Create or update tests.
 5. Run focused tests first.
-6. Run the full suite before finishing when shared UI, worker, STT, or threading code is touched.
+6. Run the full suite before finishing when shared UI, worker, STT, threading, or persistence code is touched.
 7. Update documentation when behavior changes.
 
-## Subagents
+## Refactor and Specs Steward
 
-### Refactor and Specs Steward
-
-Trigger this subagent whenever a task modifies code that is not yet well refactored, is listed as a hotspot, or lacks a matching product spec in `docs/specs/`.
+Use the spec-driven refactor workflow whenever a task modifies code that is not yet well refactored, is listed as a hotspot, or lacks a matching product spec in `docs/specs/`.
 
 Activation checks:
 - The changed file is listed in `docs/specs/REFACTOR-2026-05-feature-packages.md` under `Remaining Hotspots`.
@@ -65,7 +64,7 @@ Responsibilities:
 - Update the relevant spec in `docs/specs/`, or create a new `SPEC-XXX` when the behavior has no product contract.
 - Update `docs/specs/README.md` feature registry, refactor records, hotspots, or Definition of Done when the change alters ownership or follow-up work.
 - Keep refactors incremental and behavior-preserving unless the user explicitly requested a behavior change.
-- Run focused tests for the touched area and the broader suite when shared UI, worker, STT, threading, provider, or persistence contracts are affected.
+- Run focused tests for the touched area and the broader suite when shared UI, worker, STT, threading, provider, persistence, or migration contracts are affected.
 
 Expected output:
 - A short note naming the spec or refactor record updated.
