@@ -91,6 +91,23 @@ Para utilizar plenamente las funciones de El Secretario, deberás configurar los
 
 **Nota:** esta barra lateral es una copia de solo lectura del contexto del chat activo. No permanece visible para chats inactivos ni para ventanas flotantes/minimizadas.
 
+## Ejecutar Pruebas
+
+Ejecuta las pruebas con el entorno virtual del proyecto para evitar diferencias con el Python global:
+
+```bash
+./venv/bin/pip install -r requirements.txt
+./venv/bin/python -m pytest -q
+```
+
+También puedes usar:
+
+```bash
+./run_with_test.sh
+```
+
+GitHub Actions ejecuta automáticamente esta suite completa en cada pull request.
+
 ## Estabilidad de transcripción en Windows
 
 - En Windows, la transcripción ahora reintenta automáticamente con perfiles de backend más seguros cuando el subproceso aislado de Whisper se cae (por ejemplo, código de salida `3221225477`).

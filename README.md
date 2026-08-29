@@ -108,6 +108,8 @@ You can also use:
 ./run_with_test.sh
 ```
 
+GitHub Actions runs this full test suite automatically for every pull request.
+
 ## Windows Transcription Stability
 
 - On Windows, transcription now retries automatically with safer backend profiles when the isolated Whisper subprocess crashes (for example exit code `3221225477`).

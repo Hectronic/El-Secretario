@@ -91,6 +91,23 @@ Pa utilizar dafechu les funciones d'El Secretario, deberás configurar los token
 
 **Nota:** esta barra llateral ye una copia de solo llectura del contéutu del chat activu. Nun queda visible pa chats inactivos nin pa ventanes flotantes/minimizaes.
 
+## Executar Pruebes
+
+Executa les pruebes col entornu virtual del proyectu pa evitar diferencies col Python global:
+
+```bash
+./venv/bin/pip install -r requirements.txt
+./venv/bin/python -m pytest -q
+```
+
+Tamién puedes usar:
+
+```bash
+./run_with_test.sh
+```
+
+GitHub Actions executa automáticamente esta suite completa en cada pull request.
+
 ## Estabilidá de trescripción en Windows
 
 - En Windows, la trescripción agora reintenta automáticamente con perfiles de backend más seguros cuando'l subprocesu aisláu de Whisper se cai (por exemplu, códigu de salida `3221225477`).
