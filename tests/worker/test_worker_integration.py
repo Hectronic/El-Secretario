@@ -80,6 +80,9 @@ def test_transcriber_thread_interrupts_cleanly_without_finished(qtbot, monkeypat
     qtbot.wait(20)
     thread.requestInterruption()
     qtbot.waitUntil(lambda: not thread.isRunning(), timeout=3000)
+    # Cross-thread Qt signals can be delivered after QThread reports stopped,
+    # notably on macOS runners. Wait for the queued cancellation notification.
+    qtbot.waitUntil(lambda: "Cancelled." in statuses, timeout=1000)
 
     assert "Cancelled." in statuses
     assert finished_payloads == []
