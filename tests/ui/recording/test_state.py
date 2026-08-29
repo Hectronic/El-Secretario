@@ -12,6 +12,8 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  See <https://www.gnu.org/licenses/>.
 
+import os
+
 from src.ui.recording.state import (
     fallback_record_title,
     record_has_ai_text,
@@ -21,7 +23,9 @@ from src.ui.recording.state import (
 
 
 def test_recording_audio_path_uses_recordings_directory():
-    assert recording_audio_path({"filename": "call.wav"}, "/tmp/app") == "/tmp/app/recordings/call.wav"
+    assert recording_audio_path({"filename": "call.wav"}, "/tmp/app") == os.path.join(
+        "/tmp/app", "recordings", "call.wav"
+    )
 
 
 def test_record_has_ai_text_checks_transcription_and_notes():

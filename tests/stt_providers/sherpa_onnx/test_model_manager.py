@@ -12,6 +12,8 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
+import os
+
 from src.stt_providers.sherpa_onnx import (
     default_sherpa_model_dir,
     default_sherpa_model_url,
@@ -22,7 +24,9 @@ from src.stt_providers.sherpa_onnx import (
 
 
 def test_default_model_paths_are_stable():
-    assert default_sherpa_model_dir().endswith("models/sherpa-onnx")
+    model_dir = default_sherpa_model_dir()
+    assert os.path.basename(model_dir) == "sherpa-onnx"
+    assert os.path.basename(os.path.dirname(model_dir)) == "models"
     assert default_sherpa_model_url().endswith("sherpa-onnx-whisper-tiny.tar.bz2")
 
 
