@@ -20,7 +20,7 @@ from PyQt6.QtWidgets import (QMainWindow, QWidget, QVBoxLayout,
                              QHBoxLayout, QListWidget, QPushButton, QToolButton,
                              QLabel, QMessageBox, QComboBox,
                              QTabWidget, QSplitter, QApplication, QStyle, QLineEdit,
-                             QCalendarWidget, QCheckBox, QProgressBar,
+                             QCalendarWidget, QCheckBox,
                              QFrame)
 from PyQt6.QtCore import Qt, QSettings, QTimer, QEvent
 from PyQt6.QtGui import QIcon
@@ -43,14 +43,13 @@ from src.ui.main_window.search_actions import SearchActionsCoordinator
 from src.ui.main_window.selection_sync_actions import SelectionSyncActionsCoordinator
 from src.ui.main_window.history_navigation_actions import HistoryNavigationActionsCoordinator
 from src.ui.main_window.summary_actions import SummaryActionsCoordinator
+from src.ui.main_window.summary_queue_status import SummaryQueueStatusCoordinator
 from src.ui.recording_in_progress_widget import RecordingInProgressWidget
 from src.ui.chat_widget import ChatWidget
 from src.ui.calendar_widget import CalendarWidget
 from src.ui.styles import LIST_WIDGET_STYLE, NEW_CHAT_BUTTON_STYLE, apply_theme
 
-from src.ui.summary_viewer import SummaryViewerWidget
 from src.ui.summary_task_queue import SummaryTaskQueueManager
-from src.ui.queue_management_widget import QueueManagementWidget
 
 Recorder = None
 
@@ -88,6 +87,7 @@ class MainWindow(QMainWindow):
         self.selection_sync_actions = SelectionSyncActionsCoordinator(self)
         self.history_navigation_actions = HistoryNavigationActionsCoordinator(self)
         self.summary_actions = SummaryActionsCoordinator(self)
+        self.summary_queue_status = SummaryQueueStatusCoordinator(self)
         self.tasks_sidebar_limit = 20
         self._pending_history_reload = False
         self._pending_tag_reload = False
@@ -225,254 +225,55 @@ class MainWindow(QMainWindow):
             }
         )
 
+    def _get_summary_queue_status(self):
+        """Return the queue-status coordinator, including during early startup."""
+        coordinator = self.__dict__.get("summary_queue_status")
+        if coordinator is None:
+            coordinator = SummaryQueueStatusCoordinator(self)
+            self.__dict__["summary_queue_status"] = coordinator
+        return coordinator
+
     def _setup_task_status_bar(self):
-        status = self.statusBar()
-        self.task_status_label = QLabel("Summary queue idle.")
-        self.task_status_label.setStyleSheet("padding-right: 8px;")
-        self.task_metrics_label = QLabel("Q r0 p0 f0 e0 s0")
-        self.task_metrics_label.setStyleSheet("padding-right: 8px; color: #90A4AE;")
-
-        self.open_queue_btn = QPushButton("📋 View Queue")
-        self.open_queue_btn.setFlat(True)
-        self.open_queue_btn.setStyleSheet("color: #2196F3; text-decoration: underline; font-weight: bold;")
-        self.open_queue_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.open_queue_btn.clicked.connect(self.open_queue_manager_tab)
-
-        self.task_queue_progress = QProgressBar()
-        self.task_queue_progress.setFixedWidth(180)
-        self.task_queue_progress.setTextVisible(False)
-        self.task_queue_progress.setRange(0, 1)
-        self.task_queue_progress.setValue(0)
-
-        status.addPermanentWidget(self.task_status_label, 1)
-        status.addPermanentWidget(self.task_metrics_label)
-        status.addPermanentWidget(self.open_queue_btn)
-        status.addPermanentWidget(self.task_queue_progress)
-        self._refresh_task_metrics()
+        self._get_summary_queue_status().setup_status_bar()
 
     def open_queue_manager_tab(self):
-        """Open the task queue management tab."""
-        # Check if already open
-        for i in range(self.central_tabs.count()):
-            widget = self.central_tabs.widget(i)
-            if isinstance(widget, QueueManagementWidget):
-                self.central_tabs.setCurrentIndex(i)
-                return
-
-        queue_widget = QueueManagementWidget(self.summary_task_queue)
-        index = self.central_tabs.addTab(queue_widget, "📋 Task Queue")
-        self.central_tabs.setCurrentIndex(index)
+        self._get_summary_queue_status().open_queue_manager_tab()
 
     def _connect_task_queue_signals(self):
-        self.summary_task_queue.task_enqueued.connect(self._on_summary_task_enqueued)
-        self.summary_task_queue.task_started.connect(self._on_summary_task_started)
-        self.summary_task_queue.task_finished.connect(self._on_summary_task_finished)
-        self.summary_task_queue.task_failed.connect(self._on_summary_task_failed)
-        self.summary_task_queue.task_skipped.connect(self._on_summary_task_skipped)
-        self.summary_task_queue.queue_changed.connect(self._on_summary_queue_changed)
-        self.summary_task_queue.task_progress.connect(self.handle_progress)
-        self.summary_task_queue.task_status_update.connect(self.handle_status_message)
-        if hasattr(self.summary_task_queue, "history_changed"):
-            self.summary_task_queue.history_changed.connect(lambda *_: self._refresh_task_metrics())
+        self._get_summary_queue_status().connect_task_queue_signals()
 
     def _refresh_task_metrics(self):
-        try:
-            stats = self.summary_task_queue.get_runtime_stats()
-        except Exception:
-            stats = None
-        if not isinstance(stats, dict):
-            pending = int(getattr(self.summary_task_queue, "pending_count", 0) or 0)
-            running = 1 if getattr(self.summary_task_queue, "is_running", False) else 0
-            self.task_metrics_label.setText(f"Q r{running} p{pending} f0 e0 s0")
-            return
-        self.task_metrics_label.setText(
-            "Q "
-            f"r{int(stats.get('running', 0))} "
-            f"p{int(stats.get('pending', 0))} "
-            f"f{int(stats.get('finished', 0))} "
-            f"e{int(stats.get('failed', 0))} "
-            f"s{int(stats.get('skipped', 0))}"
-        )
+        self._get_summary_queue_status().refresh_task_metrics()
 
     def _format_task_name(self, task):
-        t_type = task.get("type")
-        if t_type == "summary":
-            return f"Recording: {task.get('title', 'Unknown')}"
-        if t_type == "task_extraction":
-            return f"Tasks: {task.get('title', 'Unknown')}"
-        if t_type == "transcription":
-            return f"Transcribing: {task.get('title', 'Unknown')}"
-        if t_type == "weekly_summary":
-            return f"Week: {task.get('date', 'Unknown')}"
-        if t_type == "rag_reindex":
-            scope = task.get("reindex_scope", "all")
-            if scope == "missing":
-                return "RAG Reindex (Missing)"
-            return "RAG Reindex (All)"
-
-        date = task.get("date", "unknown date")
-        tags_filter = task.get("tags_filter")
-        if tags_filter:
-            return f"Day: {date} [{tags_filter}]"
-        return f"Day: {date}"
+        return self._get_summary_queue_status().format_task_name(task)
 
     def _on_summary_task_enqueued(self, task, position):
-        self.task_status_label.setText(
-            f"Queued task: {self._format_task_name(task)} (#{position} in queue)"
-        )
-        self._refresh_task_metrics()
+        self._get_summary_queue_status().on_summary_task_enqueued(task, position)
 
     def _on_summary_task_started(self, task, remaining_pending):
-        self.regen_worker = self.summary_task_queue.current_worker
-        self.task_status_label.setText(
-            f"Running: {self._format_task_name(task)} ({self.summary_task_queue.pending_count} pending)"
-        )
-        self._refresh_task_metrics()
+        self._get_summary_queue_status().on_summary_task_started(task, remaining_pending)
 
     def _on_summary_task_finished(self, task):
-        try:
-            self.regen_worker = self.summary_task_queue.current_worker
-            t_type = task.get("type")
-
-            if t_type == "summary":
-                # Update specific recording widget if open
-                record_id = task.get("record_id")
-                for i in range(self.central_tabs.count()):
-                    widget = self.central_tabs.widget(i)
-                    try:
-                        if isinstance(widget, RecordingWidget) and widget.current_record_id == record_id:
-                            widget.refresh_from_background_queue(include_summary=True)
-                    except (RuntimeError, AttributeError):
-                        continue # Widget might have been deleted
-                self.request_sidebar_reload(include_history=True)
-
-            elif t_type == "task_extraction":
-                # Update specific recording widget if open
-                record_id = task.get("record_id")
-                for i in range(self.central_tabs.count()):
-                    widget = self.central_tabs.widget(i)
-                    try:
-                        if isinstance(widget, RecordingWidget) and widget.current_record_id == record_id:
-                            widget.refresh_from_background_queue(include_tasks=True)
-                    except (RuntimeError, AttributeError):
-                        continue
-                # Also update CalendarWidget if open to show new tasks in daily view
-                for i in range(self.central_tabs.count()):
-                    widget = self.central_tabs.widget(i)
-                    if isinstance(widget, SummaryViewerWidget):
-                        widget._load_daily_tasks()
-                # Keep right sidebar tasks in sync when extraction is completed by queue.
-                self.refresh_tasks_sidebar()
-
-            elif t_type == "daily_summary":
-                date = task.get("date")
-                tags_filter = task.get("tags_filter")
-                if date:
-                    self._refresh_daily_summary_viewers(date, tags_filter)
-                    self.request_sidebar_reload(include_history=True)
-
-            elif t_type == "weekly_summary":
-                self.request_sidebar_reload(include_history=True)
-                # Find and update CalendarWidget if open
-                for i in range(self.central_tabs.count()):
-                    widget = self.central_tabs.widget(i)
-                    try:
-                        if isinstance(widget, CalendarWidget):
-                            widget.update_summary_view()
-                    except (RuntimeError, AttributeError):
-                        continue
-            elif t_type == "rag_reindex":
-                self.request_sidebar_reload(include_history=True)
-
-            self.task_status_label.setText(
-                f"Finished: {self._format_task_name(task)}"
-            )
-            self._refresh_task_metrics()
-        except Exception as e:
-            import logging
-            logging.error(f"Error in _on_summary_task_finished: {e}", exc_info=True)
+        self._get_summary_queue_status().on_summary_task_finished(task)
 
     def _on_summary_task_failed(self, task, error_msg):
-        try:
-            self.regen_worker = self.summary_task_queue.current_worker
-            self.task_status_label.setText(
-                f"Regeneration failed for {self._format_task_name(task)}: {error_msg}"
-            )
-            self._refresh_task_metrics()
-        except Exception:
-            pass
+        self._get_summary_queue_status().on_summary_task_failed(task, error_msg)
 
     def _on_summary_task_skipped(self, task, reason):
-        self.task_status_label.setText(
-            f"Skipped regeneration for {self._format_task_name(task)}: {reason}"
-        )
-        self._refresh_task_metrics()
+        self._get_summary_queue_status().on_summary_task_skipped(task, reason)
 
     def _on_summary_queue_changed(self, pending_count, is_running):
-        self.refresh_tasks_sidebar()
-        self._refresh_task_metrics()
-        if is_running:
-            self.task_queue_progress.setRange(0, 0)
-            self.task_queue_progress.setVisible(True)
-        else:
-            self.task_queue_progress.setRange(0, 1)
-            self.task_queue_progress.setValue(0 if pending_count == 0 else 1)
-            if pending_count == 0:
-                self.task_status_label.setText("Summary queue idle.")
+        self._get_summary_queue_status().on_summary_queue_changed(pending_count, is_running)
 
     def handle_status_message(self, message):
-        # During early startup, status widgets may not be created yet.
-        try:
-            label = self.task_status_label
-        except Exception:
-            label = None
-
-        if label is None:
-            try:
-                self.statusBar().showMessage(str(message or ""), 5000)
-            except Exception:
-                pass
-            return
-
-        # If the queue is running, don't overwrite its status with generic messages
-        if not self.summary_task_queue.is_running:
-            label.setText(message)
+        self._get_summary_queue_status().handle_status_message(message)
 
     def handle_progress(self, value):
-        # When the queue is running, its own state drives the global progress bar.
-        if self.summary_task_queue.is_running:
-            return
-
-        if value == -1: # Indeterminate
-            self.task_queue_progress.setRange(0, 0)
-            self.task_queue_progress.setVisible(True)
-            return
-        elif value == -2: # Hide
-            self.task_queue_progress.setRange(0, 1)
-            self.task_queue_progress.setValue(0)
-            self.task_queue_progress.setVisible(True)
-            return
-        else:
-            self.task_queue_progress.setRange(0, 100)
-            self.task_queue_progress.setValue(value)
-            self.task_queue_progress.setVisible(True)
+        self._get_summary_queue_status().handle_progress(value)
 
     def _refresh_daily_summary_viewers(self, date, tags_filter):
-        for i in range(self.central_tabs.count()):
-            widget = self.central_tabs.widget(i)
-            if not isinstance(widget, SummaryViewerWidget):
-                continue
-            w_data = widget.summary_data
-            if w_data.get("type") != "daily":
-                continue
-            same_date = w_data.get("date") == date
-            same_tags = (w_data.get("tags_filter") or "") == (tags_filter or "")
-            if not (same_date and same_tags):
-                continue
-            new_summary_data = self.db.get_daily_summary_details(date, tags_filter or None)
-            if new_summary_data:
-                new_summary_data["type"] = "daily"
-                widget.update_content(new_summary_data)
+        self._get_summary_queue_status().refresh_daily_summary_viewers(date, tags_filter)
 
     def init_ui(self):
         central_widget = QWidget()

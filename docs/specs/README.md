@@ -90,7 +90,7 @@ What user or product problem is being solved?
 | [SPEC-008](SPEC-008-active-chat-context-sidebar.md) | Active chat context sidebar | Implemented | `src/ui/context_manager_panel.py`, `src/ui/main_window/sidebar_sync.py`, `src/ui/main_window/sidebar_content.py` | `tests/test_chat_context_sync.py`, `tests/ui/main_window/test_sidebar_sync.py` |
 | SPEC-009 | Calendar navigation and date-filtered context | Implemented | `src/ui/calendar_widget.py`, `src/ui/main_window/sidebar_sync.py`, `src/database.py` | `tests/test_calendar_logic.py`, `tests/test_calendar_ui.py`, `tests/test_calendar_multiselection.py` |
 | SPEC-010 | Collections/tags and notebooks | Implemented | `src/ui/collection_widget.py`, `src/ui/notebook_widget.py`, `src/notebook_database.py`, `src/ui/main_window/sidebar_content.py` | `tests/test_notebooks.py`, `tests/test_tasks_sidebar_calendar_sync.py` |
-| SPEC-011 | Summaries: recording, daily, weekly, queueing | Implemented | `src/summary_generator.py`, `src/persistence/summaries.py`, `src/ui/summary_task_queue.py`, `src/app/summary_queue/`, `src/ui/summary_viewer.py`, `src/ui/summary_batch_widget.py` | `tests/test_summary_generator_logic.py`, `tests/test_summary_queue.py`, `tests/test_summary_task_queue_integration.py`, `tests/app/summary_queue/` |
+| SPEC-011 | Summaries: recording, daily, weekly, queueing | Implemented | `src/summary_generator.py`, `src/persistence/summaries.py`, `src/ui/summary_task_queue.py`, `src/app/summary_queue/`, `src/ui/main_window/summary_queue_status.py`, `src/ui/summary_viewer.py`, `src/ui/summary_batch_widget.py` | `tests/test_summary_generator_logic.py`, `tests/test_summary_queue.py`, `tests/test_summary_task_queue_integration.py`, `tests/ui/main_window/test_summary_queue_status.py`, `tests/app/summary_queue/` |
 | SPEC-012 | Task extraction and task board/sidebar | Implemented | `src/ui/tasks_list_widget.py`, `src/ui/task_batch_widget.py`, `src/ui/summary_task_queue.py`, `src/persistence/tasks.py` | `tests/test_tasks_list_widget.py`, `tests/test_pending_summary_counts.py`, `tests/test_tasks_sidebar_calendar_sync.py`, `tests/persistence/` |
 | SPEC-013 | Settings, secrets, prompts, theme, RAG config | Implemented | `src/ui/settings/`, `src/ui/secret_field_widget.py`, `src/ui/styles.py` | `tests/test_settings.py`, `tests/ui/settings/`, `tests/test_theme.py` |
 | SPEC-014 | Export/import and maintenance tools | Implemented | `src/data_export.py`, `src/ui/tools_widget.py`, `src/ui/maintenance_widget.py` | `tests/test_data_export.py`, `tests/test_export_transcription_logs.py`, `tests/test_maintenance.py` |
@@ -100,6 +100,7 @@ What user or product problem is being solved?
 | ID | Status | Scope | Specs Affected |
 | --- | --- | --- | --- |
 | REFACTOR-2026-05 | Implemented | Feature-package split for main window, chat, settings, audio editor, workers, provider adapters, RAG helpers, welcome screen helpers, and mirrored tests | SPEC-001, SPEC-002, SPEC-005, SPEC-006, SPEC-007, SPEC-008, SPEC-013 |
+| REFACTOR-2026-08 | Implemented | Main-window summary queue status coordinator extraction | SPEC-011 |
 
 ## Spec Granularity Rules
 
