@@ -106,7 +106,7 @@ Tamién puedes usar:
 ./run_with_test.sh
 ```
 
-GitHub Actions executa automáticamente esta suite completa en cada pull request.
+GitHub Actions executa automáticamente esta suite completa en Ubuntu, Windows y macOS en cada pull request.
 
 ## Estabilidá de trescripción en Windows
 

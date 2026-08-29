@@ -108,7 +108,7 @@ You can also use:
 ./run_with_test.sh
 ```
 
-GitHub Actions runs this full test suite automatically for every pull request.
+GitHub Actions runs this full test suite automatically on Ubuntu, Windows, and macOS for every pull request.
 
 ## Windows Transcription Stability
 
