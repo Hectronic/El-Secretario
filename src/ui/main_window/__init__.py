@@ -15,14 +15,13 @@
 import os
 import re
 import logging
-from datetime import date, timedelta
 from PyQt6.QtWidgets import (QMainWindow, QWidget, QVBoxLayout,
                              QHBoxLayout, QListWidget, QPushButton, QToolButton,
                              QLabel, QMessageBox, QComboBox,
                              QTabWidget, QSplitter, QApplication, QStyle, QLineEdit,
                              QCalendarWidget, QCheckBox,
                              QFrame)
-from PyQt6.QtCore import Qt, QSettings, QTimer, QEvent
+from PyQt6.QtCore import Qt, QTimer, QEvent
 from PyQt6.QtGui import QIcon
 
 from src.database import DBManager
@@ -44,6 +43,7 @@ from src.ui.main_window.selection_sync_actions import SelectionSyncActionsCoordi
 from src.ui.main_window.history_navigation_actions import HistoryNavigationActionsCoordinator
 from src.ui.main_window.summary_actions import SummaryActionsCoordinator
 from src.ui.main_window.summary_queue_status import SummaryQueueStatusCoordinator
+from src.ui.main_window.runtime_startup import RuntimeStartupCoordinator
 from src.ui.recording_in_progress_widget import RecordingInProgressWidget
 from src.ui.chat_widget import ChatWidget
 from src.ui.calendar_widget import CalendarWidget
@@ -88,6 +88,7 @@ class MainWindow(QMainWindow):
         self.history_navigation_actions = HistoryNavigationActionsCoordinator(self)
         self.summary_actions = SummaryActionsCoordinator(self)
         self.summary_queue_status = SummaryQueueStatusCoordinator(self)
+        self.runtime_startup = RuntimeStartupCoordinator(self)
         self.tasks_sidebar_limit = 20
         self._pending_history_reload = False
         self._pending_tag_reload = False
@@ -107,123 +108,23 @@ class MainWindow(QMainWindow):
         bootstrap_main_window(self)
         logging.info("MainWindow initialized.")
 
-    @staticmethod
-    def _to_env_bool(value) -> str:
-        return "1" if bool(value) else "0"
-
     def _apply_rag_runtime_env(self, rag_config):
-        os.environ["EL_SECRETARIO_CHROMA_SAFE_DELETE"] = self._to_env_bool(
-            rag_config.get("safe_delete_mode", True)
-        )
-        os.environ["EL_SECRETARIO_RAG_SUBPROCESS_UPSERT"] = self._to_env_bool(
-            rag_config.get("subprocess_upsert_mode", True)
-        )
-        os.environ["EL_SECRETARIO_RAG_SUBPROCESS_QUERY"] = self._to_env_bool(
-            rag_config.get("subprocess_query_mode", True)
-        )
+        self.runtime_startup.apply_rag_runtime_env(rag_config)
 
     def _propagate_rag_engine_to_open_tabs(self):
-        for i in range(self.central_tabs.count()):
-            widget = self.central_tabs.widget(i)
-            if hasattr(widget, "rag"):
-                try:
-                    widget.rag = self.rag
-                except Exception:
-                    logging.exception("Failed to propagate RAG engine to tab %s", type(widget).__name__)
+        self.runtime_startup.propagate_rag_engine_to_open_tabs()
 
     def _build_rag_engine(self, rag_config, reason="runtime"):
-        self._apply_rag_runtime_env(rag_config)
-        if not rag_config.get("enabled", True):
-            self.rag = None
-            self.summary_task_queue.set_rag_engine(None)
-            self._propagate_rag_engine_to_open_tabs()
-            self.handle_status_message("RAG disabled from settings.")
-            logging.info("RAG disabled (%s).", reason)
-            return
-
-        persist_dir = rag_config.get("persist_directory") or "chroma_db"
-        try:
-            from src.rag_engine import RAGEngine
-            self.rag = RAGEngine(persist_directory=persist_dir)
-            self.summary_task_queue.set_rag_engine(self.rag)
-            self._propagate_rag_engine_to_open_tabs()
-            self.handle_status_message(f"RAG ready ({reason}).")
-            logging.info("RAG initialized (%s) with persist_directory=%s", reason, persist_dir)
-        except Exception as e:
-            self.rag = None
-            self.summary_task_queue.set_rag_engine(None)
-            self._propagate_rag_engine_to_open_tabs()
-            logging.exception("Failed to initialize RAG (%s).", reason)
-            if str(reason).lower() == "startup":
-                self.handle_status_message(f"RAG unavailable on startup: {e}")
-            else:
-                QMessageBox.warning(self, "RAG Error", f"Failed to initialize RAG: {e}")
+        self.runtime_startup.build_rag_engine(rag_config, reason)
 
     def _log_user_settings_snapshot(self, context: str):
-        settings = QSettings("Hectronic", "Secretario")
-        snapshot = {}
-        for key in sorted(settings.allKeys()):
-            value = settings.value(key)
-            key_l = str(key).lower()
-            if any(token in key_l for token in ("token", "password", "secret", "apikey", "api_key")):
-                snapshot[key] = "***"
-            else:
-                snapshot[key] = value
-        logging.info("User settings snapshot [%s]: %s", context, snapshot)
+        self.runtime_startup.log_user_settings_snapshot(context)
 
     def _enqueue_missing_previous_week_summary_if_enabled(self):
-        settings = QSettings("Hectronic", "Secretario")
-        if not settings.value("startup_enqueue_last_weekly_summary", False, type=bool):
-            return
-
-        today = date.today()
-        current_week_monday = today - timedelta(days=today.weekday())
-        previous_week_monday = current_week_monday - timedelta(days=7)
-        previous_week_sunday = previous_week_monday + timedelta(days=6)
-        week_sunday_str = previous_week_sunday.isoformat()
-
-        existing = self.db.get_weekly_summary(week_sunday_str, tags_filter=None)
-        if existing:
-            return
-
-        start_str = previous_week_monday.isoformat()
-        end_str = previous_week_sunday.isoformat()
-        records = self.db.fetch_by_date_range(start_str, end_str, tags=None, favorites_only=False)
-        if not records:
-            return
-
-        full_text = ""
-        for rec in records:
-            title = rec.get("title") or "Untitled"
-            created_at = rec.get("created_at") or ""
-            composed = self.db.compose_ai_text(rec.get("transcription"), rec.get("recording_notes"))
-            if not composed.strip():
-                continue
-            full_text += f"\n\n--- Recording: {title} ({created_at}) ---\n"
-            full_text += composed
-
-        if not full_text.strip():
-            return
-
-        self.summary_task_queue.enqueue_weekly_summary(week_sunday_str, full_text, "", source="startup")
+        self.runtime_startup.enqueue_missing_previous_week_summary_if_enabled()
 
     def _enqueue_missing_previous_daily_summary_if_enabled(self):
-        settings = QSettings("Hectronic", "Secretario")
-        if not settings.value("startup_enqueue_previous_daily_summary", False, type=bool):
-            return
-
-        today_str = date.today().isoformat()
-        target_day = self.db.get_latest_recording_day_without_daily_summary(today_str, tags_filter=None)
-        if not target_day:
-            return
-
-        self.summary_task_queue.enqueue_daily_summary(
-            {
-                "date": target_day,
-                "tags_filter": "",
-                "source": "startup",
-            }
-        )
+        self.runtime_startup.enqueue_missing_previous_daily_summary_if_enabled()
 
     def _get_summary_queue_status(self):
         """Return the queue-status coordinator, including during early startup."""
@@ -689,18 +590,7 @@ class MainWindow(QMainWindow):
         self.splitter.setCollapsible(1, False)
         self.splitter.setCollapsible(2, False)
 
-        # Initialize RAG Engine from settings
-        settings = QSettings("Hectronic", "Secretario")
-        self._build_rag_engine(
-            {
-                "enabled": settings.value("rag_enabled", True, type=bool),
-                "persist_directory": settings.value("rag_persist_directory", "chroma_db"),
-                "safe_delete_mode": settings.value("rag_safe_delete_mode", True, type=bool),
-                "subprocess_upsert_mode": settings.value("rag_subprocess_upsert_mode", True, type=bool),
-                "subprocess_query_mode": settings.value("rag_subprocess_query_mode", True, type=bool),
-            },
-            reason="startup",
-        )
+        self.runtime_startup.initialize_rag_from_settings()
 
     def _on_right_section_header_clicked(self, section_key):
         if self._active_right_section == section_key:

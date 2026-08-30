@@ -66,7 +66,7 @@ Use these boundaries when adding new features:
 
 ## Current Architecture Risks
 
-- `src/ui/main_window/__init__.py` remains the main orchestration hotspot. It still mixes app composition, tab lifecycle, chat lifecycle, sidebar state, notebook actions, search, settings, RAG runtime, and startup summary scheduling. Summary queue status/UI synchronization now lives in `summary_queue_status.py`.
+- `src/ui/main_window/__init__.py` remains the main orchestration hotspot. It still mixes app composition, tab lifecycle, chat lifecycle, sidebar state, notebook actions, search, and settings. Summary queue status/UI synchronization and RAG runtime/startup summary scheduling now live in focused coordinators.
 - `src/ui/main_window/bootstrap.py` now owns the deterministic startup sequence, but the remaining shell still owns a lot of application wiring.
 - `src/ui/main_window/content_tabs.py` has started pulling tab-opening behavior out of the shell, but `MainWindow` still has legacy wrappers for some content actions.
 - `src/database.py` is now a thin compatibility facade over `src/persistence/`; preserve this public import path while callers are migrated incrementally to aggregate-specific repositories where appropriate.

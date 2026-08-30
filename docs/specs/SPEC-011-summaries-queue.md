@@ -2,7 +2,7 @@
 
 Status: Implemented
 Owner: TBD
-Last updated: 2026-08-29
+Last updated: 2026-08-30
 
 ## Problem
 
@@ -51,6 +51,7 @@ Users need long-running AI and transcription work to run sequentially, visibly, 
 - Worker start lifecycle: `src/app/summary_queue/worker_lifecycle.py` owns the queue-start lifecycle for current-worker set, started events, history append, queue-state emit, and start.
 - Queue widget presentation/actions: `src/app/summary_queue/presentation.py` and `src/app/summary_queue/actions.py` own UI-facing formatting/snapshots and queue action orchestration extracted from `QueueManagementWidget`.
 - Main-window queue presentation: `src/ui/main_window/summary_queue_status.py` owns the status bar, queue-tab opening, queue-signal subscriptions, progress/status rendering, and refresh of affected open views. `MainWindow` keeps compatibility delegates for existing callers.
+- Startup scheduling: `src/ui/main_window/runtime_startup.py` owns opt-in scheduling of the prior weekly or latest missing daily summary. `MainWindow` keeps compatibility delegates used by bootstrap.
 - Persistence: `src/database.py` owns summary, transcription, and task persistence.
 - Workers/integrations: `src/summary_generator.py`, `src/ai_assistant.py`, `src/ai_provider.py`, `src/worker_components/transcriber_thread.py`, and RAG engine integrations provide the actual work.
 - AI provider retry policy: `src/ai_provider.py` retries cloud-provider transient failures conservatively and treats Gemini quota/rate-limit errors as terminal for the current operation.
@@ -89,6 +90,7 @@ Users need long-running AI and transcription work to run sequentially, visibly, 
 - 2026-05-14: extracted queue worker start lifecycle from `SummaryTaskQueueManager._start_next_if_idle` to `src/app/summary_queue/worker_lifecycle.py`.
 - 2026-05-27: reduced cloud AI retry attempts and made Gemini quota/rate-limit errors terminal so exhausted API keys fail fast instead of retrying repeatedly.
 - 2026-08-29: moved summary queue status and completion-view synchronization from `src/ui/main_window/__init__.py` to `src/ui/main_window/summary_queue_status.py`, preserving the `MainWindow` API used by startup and existing UI integrations.
+- 2026-08-30: moved startup summary scheduling from `src/ui/main_window/__init__.py` to `src/ui/main_window/runtime_startup.py`, preserving its opt-in settings and bootstrap order.
 
 ## Open Questions
 
