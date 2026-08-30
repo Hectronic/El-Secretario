@@ -158,3 +158,8 @@ class RuntimeStartupCoordinator:
             window.summary_task_queue.enqueue_daily_summary(
                 {"date": target_day, "tags_filter": "", "source": "startup"}
             )
+
+    def enqueue_today_daily_summary(self):
+        self.window.summary_task_queue.enqueue_daily_summary(
+            {"date": date.today().isoformat(), "tags_filter": "", "source": "startup"}
+        )

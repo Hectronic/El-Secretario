@@ -80,7 +80,7 @@ What user or product problem is being solved?
 
 | ID | Capability | Status | Main Code Areas | Representative Tests |
 | --- | --- | --- | --- | --- |
-| [SPEC-001](SPEC-001-audio-capture-and-import.md) | Audio capture and import | Implemented | `src/audio.py`, `src/ui/welcome_widget.py`, `src/ui/welcome/`, `src/ui/recording_in_progress_widget.py`, `src/ui/main_window/recording_tabs.py` | `tests/test_recording_flow.py`, `tests/test_welcome_daily_summary_button.py`, `tests/ui/main_window/test_recording_tabs.py`, `tests/test_notes.py`, `tests/ui/welcome/`, `tests/test_z_audio.py` |
+| [SPEC-001](SPEC-001-audio-capture-and-import.md) | Audio capture and import | Implemented | `src/audio.py`, `src/ui/welcome_widget.py`, `src/ui/welcome/`, `src/ui/recording_in_progress_widget.py`, `src/ui/main_window/shell_actions.py`, `src/ui/main_window/recording_tabs.py` | `tests/test_recording_flow.py`, `tests/test_welcome_daily_summary_button.py`, `tests/ui/main_window/test_recording_tabs.py`, `tests/ui/main_window/test_shell_actions.py`, `tests/test_notes.py`, `tests/ui/welcome/`, `tests/test_z_audio.py` |
 | [SPEC-002](SPEC-002-transcription-runtime-and-stt-provider-selection.md) | Transcription runtime and STT provider selection | Implemented | `src/transcription_options.py`, `src/worker_components/`, `src/stt_providers/` | `tests/test_transcription_options.py`, `tests/worker/`, `tests/worker_components/`, `tests/stt_providers/` |
 | SPEC-003 | Diarization and speaker management | Implemented | `src/worker_components/transcriber_thread.py`, `src/ui/speaker_dialog.py`, `src/ui/recording/speaker_actions.py`, `src/ui/recording_widget.py` | `tests/test_diarization_toggle.py`, `tests/ui/test_speaker_dialog.py`, `tests/ui/recording/test_speaker_actions.py` |
 | [SPEC-004](SPEC-004-recording-metadata-notes-favorites-deletion.md) | Recording metadata, notes, favorites, deletion | Implemented | `src/database.py`, `src/persistence/records.py`, `src/ui/recording_widget.py`, `src/ui/recording/`, `src/ui/main_window/recording_tabs.py`, `src/ui/note_widget.py`, `src/ui/components.py` | `tests/test_database.py`, `tests/persistence/`, `tests/test_notes.py`, `tests/test_deletion.py`, `tests/test_recording_widget_ui.py`, `tests/ui/recording/`, `tests/ui/main_window/test_recording_tabs.py` |
@@ -103,6 +103,7 @@ What user or product problem is being solved?
 | REFACTOR-2026-08 | Implemented | Main-window summary queue status coordinator extraction | SPEC-011 |
 | REFACTOR-2026-08-RUNTIME | Implemented | Main-window RAG runtime and startup summary scheduling coordinator extraction | SPEC-006, SPEC-011 |
 | REFACTOR-2026-08-RECORDING-TABS | Implemented | Main-window recording tab lifecycle consolidation | SPEC-001, SPEC-004 |
+| REFACTOR-2026-08-SHELL | Implemented | Main-window shell action and sidebar-content delegation extraction | SPEC-001, SPEC-004, SPEC-011 |
 
 ## Spec Granularity Rules
 

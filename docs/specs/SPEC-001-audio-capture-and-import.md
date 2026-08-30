@@ -37,7 +37,7 @@ Users need a fast landing surface to start a recording, import audio, search, an
 - Capture helpers: `src/ui/welcome/capture_state.py` owns capture-setting persistence, microphone list hydration, and recording config mapping.
 - Mic test helpers: `src/ui/welcome/mic_test.py` owns stream startup/cleanup, RMS calculation, and VU meter state updates.
 - Landing data helpers: `src/ui/welcome/landing_data.py` owns search-result, favorites, and today-list query formatting for the welcome screen.
-- Main window: `src/ui/main_window/recording_tabs.py` owns the capture-tab lifecycle from welcome-screen signal through completed-capture persistence and transcription handoff; `MainWindow` keeps compatibility delegates.
+- Main window: `src/ui/main_window/shell_actions.py` wires welcome-screen signals; `src/ui/main_window/recording_tabs.py` owns the capture-tab lifecycle from that signal through completed-capture persistence and transcription handoff. `MainWindow` keeps compatibility delegates.
 - Persistence: `QSettings` stores capture preferences and the welcome widget reads them back on startup.
 - Workers/integrations: recorder startup, import flow, and search all route into downstream capture/search services rather than implementing heavy logic inside the widget.
 - Platform constraints: preserve Ubuntu and Windows behavior, including resource-path lookup and mic/test handling.
@@ -62,6 +62,7 @@ Users need a fast landing surface to start a recording, import audio, search, an
 - 2026-06-10: extracted microphone-test lifecycle helpers into `src/ui/welcome/mic_test.py`.
 - 2026-06-27: extracted welcome search-result, favorites, and today-list data formatting into `src/ui/welcome/landing_data.py`.
 - 2026-08-30: consolidated the in-progress recording tab, completed-capture persistence, and transcription handoff in `src/ui/main_window/recording_tabs.py`.
+- 2026-08-31: moved welcome-screen signal wiring from `MainWindow` to `src/ui/main_window/shell_actions.py`.
 
 ## Open Questions
 

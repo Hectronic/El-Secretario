@@ -2,7 +2,7 @@
 
 Status: Implemented
 Owner: TBD
-Last updated: 2026-08-30
+Last updated: 2026-08-31
 
 ## Problem
 
@@ -37,6 +37,7 @@ Users need a recording detail view that lets them review and maintain the saved 
 - Persistence: `src/database.py` persists recording metadata, transcription, notes, tags, and deletion.
 - Workers/integrations: `src/ui/recording/transcription_flow.py` owns direct transcription startup, preflight, runtime worker kwargs, thread wiring, queue traces, and persistence of direct transcription results before the recording detail view refreshes.
 - Main-window tabs: `src/ui/main_window/recording_tabs.py` owns opening, title synchronization, save/delete refresh, audio-editor tabs, completed-capture persistence, and transcription handoff.
+- Sidebar content: `src/ui/main_window/sidebar_content.py` owns favorite persistence, recording deletion confirmation, audio/RAG cleanup, and history refresh.
 - Platform constraints: Clipboard behavior uses Qt application clipboard APIs and must work on Ubuntu and Windows.
 
 ## Test Plan

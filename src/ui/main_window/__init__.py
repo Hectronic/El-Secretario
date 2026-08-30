@@ -12,7 +12,6 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-import os
 import re
 import logging
 from PyQt6.QtWidgets import (QMainWindow, QWidget, QVBoxLayout,
@@ -26,7 +25,6 @@ from PyQt6.QtGui import QIcon
 
 from src.database import DBManager
 from src.notebook_database import NotebookDBManager
-from src.ui.welcome_widget import WelcomeWidget
 from src.ui.recording_widget import RecordingWidget
 from src.ui.main_window.recording_tabs import RecordingTabCoordinator
 from src.ui.main_window.bootstrap import bootstrap_main_window
@@ -44,6 +42,7 @@ from src.ui.main_window.history_navigation_actions import HistoryNavigationActio
 from src.ui.main_window.summary_actions import SummaryActionsCoordinator
 from src.ui.main_window.summary_queue_status import SummaryQueueStatusCoordinator
 from src.ui.main_window.runtime_startup import RuntimeStartupCoordinator
+from src.ui.main_window.shell_actions import MainWindowShellCoordinator
 from src.ui.chat_widget import ChatWidget
 from src.ui.calendar_widget import CalendarWidget
 from src.ui.styles import LIST_WIDGET_STYLE, NEW_CHAT_BUTTON_STYLE, apply_theme
@@ -88,6 +87,7 @@ class MainWindow(QMainWindow):
         self.summary_actions = SummaryActionsCoordinator(self)
         self.summary_queue_status = SummaryQueueStatusCoordinator(self)
         self.runtime_startup = RuntimeStartupCoordinator(self)
+        self.shell_actions = MainWindowShellCoordinator(self)
         self.tasks_sidebar_limit = 20
         self._pending_history_reload = False
         self._pending_tag_reload = False
@@ -592,78 +592,25 @@ class MainWindow(QMainWindow):
         self.runtime_startup.initialize_rag_from_settings()
 
     def _on_right_section_header_clicked(self, section_key):
-        if self._active_right_section == section_key:
-            self._set_active_right_section(None)
-        else:
-            self._set_active_right_section(section_key)
+        self.shell_actions.on_right_section_header_clicked(section_key)
 
     def _set_active_right_section(self, section_key):
-        if section_key is not None and section_key not in self._right_sidebar_sections:
-            return
-
-        self._active_right_section = section_key
-        if section_key not in (None, "chat_context"):
-            self._right_sidebar_last_non_chat_section = section_key
-        for key, section in self._right_sidebar_sections.items():
-            is_active = section_key is not None and key == section_key
-            section["header"].blockSignals(True)
-            section["header"].setChecked(is_active)
-            prefix = "▾ " if is_active else "▸ "
-            section["header"].setText(f"{prefix}{section['title']}")
-            section["header"].blockSignals(False)
-            header_shell = section.get("header_shell")
-            if header_shell is not None:
-                header_shell.setProperty("active", "true" if is_active else "false")
-                header_shell.style().unpolish(header_shell)
-                header_shell.style().polish(header_shell)
-            section["content"].setVisible(is_active)
-            idx = section.get("index")
-            if self._right_sidebar_layout is not None and idx is not None:
-                self._right_sidebar_layout.setStretch(idx, 1 if (section_key is not None and is_active) else 0)
-        if self._right_sidebar_layout is not None and self._right_sidebar_bottom_spacer_index is not None:
-            self._right_sidebar_layout.setStretch(
-                self._right_sidebar_bottom_spacer_index,
-                0 if section_key is not None else 1,
-            )
+        self.shell_actions.set_active_right_section(section_key)
 
     def _on_central_tab_changed(self, _index):
-        self.refresh_tasks_sidebar()
-        self._sync_chat_context_section()
+        self.shell_actions.on_central_tab_changed(_index)
 
     def _sync_chat_context_section(self, chat_widget=None):
         self.sidebar_sync.sync_chat_context_section(chat_widget)
 
     def show_welcome_screen(self):
-        self.welcome_widget = WelcomeWidget(self.db)
-        self.welcome_widget.new_recording_requested.connect(self.start_new_recording)
-        self.welcome_widget.new_note_requested.connect(lambda: self.open_note_tab(None))
-        self.welcome_widget.search_triggered.connect(self.perform_welcome_search)
-        self.welcome_widget.result_clicked.connect(self.open_item_tab)
-        self.welcome_widget.new_chat_requested.connect(lambda: self.open_chat_tab(None))
-        self.welcome_widget.ask_chat_with_context_requested.connect(self.open_chat_tab_from_current_context)
-        self.welcome_widget.import_audio_requested.connect(self.import_audio_file)
-        self.welcome_widget.notebooks_requested.connect(self.open_notebooks_list)
-        self.welcome_widget.tools_requested.connect(lambda: self.open_tools_tab())
-        self.welcome_widget.settings_requested.connect(self.open_settings_tab)
-        self.welcome_widget.generate_daily_summary_requested.connect(self.generate_today_daily_summary)
-        self.welcome_widget.status_message_requested.connect(self.handle_status_message)
-
-        # Add as first tab, not closable
-        self.central_tabs.addTab(self.welcome_widget, "Welcome")
-        self._set_tab_action_buttons(self.welcome_widget)
+        self.shell_actions.show_welcome_screen()
 
     def open_item_tab(self, record_id):
         return self.content_tabs.open_item_tab(record_id)
 
     def generate_today_daily_summary(self):
-        """Queue generation/update of today's daily summary."""
-        from datetime import date
-        today_str = date.today().isoformat()
-        self.summary_task_queue.enqueue_daily_summary({
-            "date": today_str,
-            "tags_filter": "",
-            "source": "startup",
-        })
+        self.runtime_startup.enqueue_today_daily_summary()
 
     def start_new_recording(self, config):
         self.recording_tabs.start_new_recording(config)
@@ -934,48 +881,13 @@ class MainWindow(QMainWindow):
         self.sidebar_actions.reset_date_filter()
 
     def filter_history_list(self, text):
-        for i in range(self.history_list.count()):
-            item = self.history_list.item(i)
-            record = item.data(Qt.ItemDataRole.UserRole)
-            title = record.get('title', '') or ''
-            date = record.get('created_at', '') or ''
-
-            if not text or text.lower() in title.lower() or text.lower() in date.lower():
-                item.setHidden(False)
-            else:
-                item.setHidden(True)
+        self.sidebar_content.filter_history_list(text)
 
     def on_favorite_toggled(self, record_id, is_favorite):
-        self.db.toggle_favorite(record_id, is_favorite)
-        # No need to reload list, button state is already updated locally
+        self.sidebar_content.on_favorite_toggled(record_id, is_favorite)
 
     def delete_recording(self, record_id):
-        reply = QMessageBox.question(self, "Delete Recording",
-                                   "Are you sure you want to delete this recording? This cannot be undone.",
-                                   QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
-        if reply == QMessageBox.StandardButton.Yes:
-            logging.info("delete_recording requested for record_id=%s", record_id)
-            filename = self.db.delete(record_id)
-
-            # Delete file
-            if filename:
-                try:
-                    file_path = os.path.join(os.getcwd(), "recordings", filename)
-                    if os.path.exists(file_path):
-                        os.remove(file_path)
-                except Exception:
-                    logging.exception("Error deleting recording file %s", filename)
-
-            # Delete from RAG
-            if self.rag:
-                try:
-                    logging.info("delete_recording: deleting record_id=%s from RAG", record_id)
-                    self.rag.delete_document(str(record_id))
-                except Exception:
-                    logging.exception("Error deleting record_id=%s from RAG", record_id)
-
-            self.load_history()
-            self._close_recording_tabs(record_id)
+        self.sidebar_content.delete_recording(record_id)
 
     def open_settings_tab(self):
         self.setup_actions.open_settings_tab()

@@ -10,7 +10,7 @@ Main runtime areas:
 
 - `main.py`: application bootstrap, environment guards, Qt application setup, and `MainWindow` launch.
 - `src/ui/`: PyQt widgets and UI coordinators.
-- `src/ui/main_window/`: main shell and coordinators for tabs, recording-tab lifecycle, sidebar actions, sidebar content, sidebar sync, setup actions, floating chat, summary queue status, and runtime startup.
+- `src/ui/main_window/`: main shell and coordinators for tabs, recording-tab lifecycle, shell actions, sidebar actions, sidebar content, sidebar sync, setup actions, floating chat, summary queue status, and runtime startup.
   - `content_tabs.py` now owns note/chat/summary tab lifecycle and context-driven tab openers.
 - `src/ui/chat/`: pure-ish chat state/rendering/context helpers used by `ChatWidget`.
 - `src/ui/settings/`: settings panels grouped by product area.
@@ -66,7 +66,7 @@ Use these boundaries when adding new features:
 
 ## Current Architecture Risks
 
-- `src/ui/main_window/__init__.py` remains the main orchestration hotspot. It still mixes app composition, tab lifecycle, chat lifecycle, sidebar state, notebook actions, search, and settings. Summary queue status/UI synchronization and RAG runtime/startup summary scheduling now live in focused coordinators.
+- `src/ui/main_window/__init__.py` is now principally the application shell and layout composition. Tab lifecycle, chat lifecycle, sidebar content/actions, welcome wiring, recording lifecycle, queue status, and RAG runtime/startup scheduling live in focused coordinators; the remaining primary extraction candidate is `init_ui` layout composition.
 - `src/ui/main_window/bootstrap.py` now owns the deterministic startup sequence, but the remaining shell still owns a lot of application wiring.
 - `src/ui/main_window/content_tabs.py` has started pulling tab-opening behavior out of the shell, but `MainWindow` still has legacy wrappers for some content actions.
 - `src/database.py` is now a thin compatibility facade over `src/persistence/`; preserve this public import path while callers are migrated incrementally to aggregate-specific repositories where appropriate.
