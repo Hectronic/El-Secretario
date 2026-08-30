@@ -26,6 +26,7 @@ from src.audio import trim_audio_segment
 from src.transcription_options import get_whisper_model_name, is_sherpa_onnx_model
 from src.worker_components import device_selection as worker_device_selection
 from src.worker_components import engine as worker_engine
+from src.worker_components.error_messages import transcription_error_message
 from src.worker_components import sherpa as worker_sherpa
 from src.worker_components import runtime as worker_runtime
 from src.worker_components import settings as worker_settings
@@ -420,7 +421,7 @@ class TranscriberThread(QThread):
 
         except Exception as e:
             logging.error(f"Transcription failed: {e}", exc_info=True)
-            self.error.emit(str(e))
+            self.error.emit(transcription_error_message(e))
         finally:
             if "pipeline" in locals():
                 del pipeline

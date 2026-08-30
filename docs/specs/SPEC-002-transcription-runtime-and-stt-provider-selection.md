@@ -2,7 +2,7 @@
 
 Status: Implemented
 Owner: TBD
-Last updated: 2026-06-27
+Last updated: 2026-08-30
 
 ## Problem
 
@@ -36,6 +36,7 @@ Users need transcription to choose a reliable speech-to-text backend and runtime
 - Given transcription emits segments and total duration is known, when progress is computed, then progress is capped at 100 and diarization reserves the final progress range.
 - Given transcription completes, when the result is emitted, then it includes text, model name, backend, device, compute type, transcription time, audio duration, audio size, and diarization flag.
 - Given transcription exits after success or failure, when CUDA is available, then CUDA cache cleanup is attempted.
+- Given a transcription backend fails, when the error is shown in the UI, then the user receives an actionable message without raw backend exception details, while the full error remains in `log/app.log`.
 
 ## Architecture Notes
 
@@ -43,6 +44,7 @@ Users need transcription to choose a reliable speech-to-text backend and runtime
 - Worker orchestration: `src/worker_components/transcriber_thread.py` owns the Qt worker lifecycle, backend selection, progress/status signals, diarization handoff, result shaping, settings persistence, cancellation checks, and final cleanup.
 - Device policy: `src/worker_components/device_selection.py` owns runtime device and compute-type selection for CUDA/CPU, Ubuntu, Windows, VRAM-sensitive profiles, and `force_cpu`.
 - Runtime diagnostics: `src/worker_components/runtime.py` owns transcription runtime logging, optional pyannote import caching, log flushing before subprocess boundaries, and diarization GPU eligibility checks.
+- User-facing failures: `src/worker_components/error_messages.py` maps backend errors to actionable UI messages; `TranscriberThread` retains the original exception in the application log.
 - Fallback policy: `src/worker_components/engine.py` owns faster-whisper retry profiles, Windows model fallback ordering, native-crash/timeout classification, and openai-whisper compatibility fallback.
 - Subprocess isolation: `src/worker_components/subprocess_runner.py` owns spawned backend process execution, cancellation, timeout handling, crash detection, result-queue validation, and queue/process cleanup.
 - Provider dispatch: `src/stt_providers/dispatcher.py` maps backend identifiers to provider adapters and returns structured success/error payloads.
@@ -68,6 +70,7 @@ Users need transcription to choose a reliable speech-to-text backend and runtime
 
 - 2026-06-27: created the dedicated transcription runtime spec for the existing `src/worker_components/` and `src/stt_providers/` split.
 - 2026-06-27: recorded `TranscriberThread` as the public Qt orchestration boundary and `src/worker_components/` plus `src/stt_providers/` as the smaller runtime/provider owners.
+- 2026-08-30: transcription failures now expose actionable UI messages instead of raw backend exceptions while retaining detailed diagnostics in `log/app.log`.
 
 ## Open Questions
 
