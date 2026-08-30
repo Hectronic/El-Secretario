@@ -32,4 +32,4 @@ Move the remaining outer-shell interactions out of `MainWindow` and remove dupli
 
 ## Follow-Ups
 
-- Move the remaining `init_ui` layout composition into a dedicated layout builder/coordinator when visual layout tests are expanded.
+- Remove legacy `MainWindow` compatibility wrappers only after their callers are migrated to the focused coordinators.

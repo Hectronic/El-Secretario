@@ -104,6 +104,7 @@ What user or product problem is being solved?
 | REFACTOR-2026-08-RUNTIME | Implemented | Main-window RAG runtime and startup summary scheduling coordinator extraction | SPEC-006, SPEC-011 |
 | REFACTOR-2026-08-RECORDING-TABS | Implemented | Main-window recording tab lifecycle consolidation | SPEC-001, SPEC-004 |
 | REFACTOR-2026-08-SHELL | Implemented | Main-window shell action and sidebar-content delegation extraction | SPEC-001, SPEC-004, SPEC-011 |
+| REFACTOR-2026-08-LAYOUT | Implemented | Main-window visual layout composition extraction | SPEC-001, SPEC-004, SPEC-007, SPEC-008, SPEC-009, SPEC-010, SPEC-011, SPEC-012, SPEC-013 |
 
 ## Spec Granularity Rules
 
