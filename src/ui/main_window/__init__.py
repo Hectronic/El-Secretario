@@ -44,7 +44,6 @@ from src.ui.main_window.history_navigation_actions import HistoryNavigationActio
 from src.ui.main_window.summary_actions import SummaryActionsCoordinator
 from src.ui.main_window.summary_queue_status import SummaryQueueStatusCoordinator
 from src.ui.main_window.runtime_startup import RuntimeStartupCoordinator
-from src.ui.recording_in_progress_widget import RecordingInProgressWidget
 from src.ui.chat_widget import ChatWidget
 from src.ui.calendar_widget import CalendarWidget
 from src.ui.styles import LIST_WIDGET_STYLE, NEW_CHAT_BUTTON_STYLE, apply_theme
@@ -667,46 +666,16 @@ class MainWindow(QMainWindow):
         })
 
     def start_new_recording(self, config):
-        """Start a new recording with the given configuration."""
-        logging.info(f"Starting new recording with config: {config}")
-        self._log_user_settings_snapshot("start_new_recording")
-        # Check if we have a recording in progress already
-        for i in range(self.central_tabs.count()):
-            widget = self.central_tabs.widget(i)
-            if isinstance(widget, RecordingInProgressWidget):
-                self.central_tabs.setCurrentIndex(i)
-                return
-
-        # Set device on recorder
-        if config.get("device_index") is not None:
-            self.recorder.set_device(config["device_index"])
-
-        # Set system audio capture flag
-        self.recorder.set_capture_machine_audio(config.get("capture_system_audio", False))
-
-        # New Recording Flow with config
-        rec_widget = RecordingInProgressWidget(recorder=self.recorder, config=config)
-        rec_widget.finished.connect(lambda path, cfg, w=rec_widget: self.on_recording_finished(path, cfg, w))
-        rec_widget.cancelled.connect(lambda w=rec_widget: self.close_tab(self.central_tabs.indexOf(w)))
-
-        index = self.central_tabs.addTab(rec_widget, "Recording...")
-        self.central_tabs.setCurrentIndex(index)
+        self.recording_tabs.start_new_recording(config)
 
     def _sync_recording_tab_titles(self, record_id):
         self.recording_tabs.sync_recording_tab_titles(record_id)
 
     def _handle_recording_widget_saved(self, rec_widget):
-        record_id = getattr(rec_widget, "current_record_id", None)
-        if record_id is None:
-            return
-        self.load_history()
-        self.request_sidebar_reload(include_tags=True, include_history=True)
-        self._sync_recording_tab_titles(record_id)
+        self.recording_tabs.handle_recording_widget_saved(rec_widget)
 
     def _handle_recording_widget_deleted(self, record_id):
-        self._close_recording_tabs(record_id)
-        self.load_history()
-        self.request_sidebar_reload(include_tags=True, include_history=True)
+        self.recording_tabs.handle_recording_widget_deleted(record_id)
 
     def _close_recording_tabs(self, record_id):
         self.recording_tabs.close_recording_tabs(record_id)
@@ -723,72 +692,7 @@ class MainWindow(QMainWindow):
         return self.content_tabs.open_note_tab(record_id)
 
     def on_recording_finished(self, file_path, config, widget):
-        """Handle recording finished - save to DB and start transcription with config."""
-        self._log_user_settings_snapshot("on_recording_finished")
-        logging.info(
-            "on_recording_finished called with file_path=%s widget=%s config_keys=%s",
-            file_path,
-            type(widget).__name__ if widget else None,
-            sorted(list((config or {}).keys())),
-        )
-        # Close the recording widget
-        index = self.central_tabs.indexOf(widget)
-        if index != -1:
-            self.central_tabs.removeTab(index)
-            widget.deleteLater()
-            logging.info("RecordingInProgress tab closed at index=%s", index)
-        else:
-            logging.warning("RecordingInProgress widget tab not found during finish flow.")
-
-        try:
-            filename = os.path.basename(file_path)
-            # Use title from config, fallback to filename
-            title = config.get("title") or filename
-            recording_notes = config.get("recording_notes", "")
-            pending_tasks = config.get("pending_tasks") or []
-            logging.info(
-                "Persisting new recording filename=%s title=%s notes_len=%d pending_tasks=%d",
-                filename,
-                title,
-                len(recording_notes),
-                len(pending_tasks),
-            )
-            # Create DB entry to get an ID
-            record_id = self.db.save(filename, "", 0.0, title=title, recording_notes=recording_notes)
-            logging.info("DB save completed with record_id=%s", record_id)
-
-            # Update tags if provided
-            tags = config.get("tags", "")
-            if tags:
-                self.db.update_tags(record_id, tags)
-                logging.info("Tags saved for record_id=%s tags=%s", record_id, tags)
-
-            # Persist quick tasks captured during recording.
-            for task_content in pending_tasks:
-                clean_task = str(task_content or "").strip()
-                if clean_task:
-                    try:
-                        self.db.save_task(record_id=record_id, content=clean_task, tags=tags or None)
-                        logging.info("Saved quick task for record_id=%s: %s", record_id, clean_task)
-                    except Exception:
-                        logging.exception("Failed saving quick task for record_id=%s", record_id)
-
-            # Refresh sidebar to show new recording with title
-            self.request_sidebar_reload(include_tags=True, include_history=True)
-            logging.info("Requested sidebar reload after recording finish for record_id=%s", record_id)
-
-            # Open standard recording tab with config
-            rec_widget = self.open_recording_tab(record_id, config)
-            logging.info("Opened recording tab for record_id=%s widget_created=%s", record_id, bool(rec_widget))
-
-            # Trigger transcription with config
-            if rec_widget and isinstance(rec_widget, RecordingWidget):
-                logging.info("Starting transcription with config for record_id=%s file=%s", record_id, file_path)
-                rec_widget.start_transcription_with_config(file_path, config)
-
-        except Exception as e:
-            logging.exception("Failed while handling recording completion flow.")
-            QMessageBox.critical(self, "Error", f"Failed to save recording: {e}")
+        self.recording_tabs.on_recording_finished(file_path, config, widget)
 
 
 

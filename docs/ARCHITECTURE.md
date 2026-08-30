@@ -10,7 +10,7 @@ Main runtime areas:
 
 - `main.py`: application bootstrap, environment guards, Qt application setup, and `MainWindow` launch.
 - `src/ui/`: PyQt widgets and UI coordinators.
-- `src/ui/main_window/`: main shell and coordinators for tabs, sidebar actions, sidebar content, sidebar sync, setup actions, floating chat, and summary queue status.
+- `src/ui/main_window/`: main shell and coordinators for tabs, recording-tab lifecycle, sidebar actions, sidebar content, sidebar sync, setup actions, floating chat, summary queue status, and runtime startup.
   - `content_tabs.py` now owns note/chat/summary tab lifecycle and context-driven tab openers.
 - `src/ui/chat/`: pure-ish chat state/rendering/context helpers used by `ChatWidget`.
 - `src/ui/settings/`: settings panels grouped by product area.
