@@ -10,7 +10,7 @@ Main runtime areas:
 
 - `main.py`: application bootstrap, environment guards, Qt application setup, and `MainWindow` launch.
 - `src/ui/`: PyQt widgets and UI coordinators.
-- `src/ui/main_window/`: main shell and coordinators for tabs, sidebar actions, sidebar content, sidebar sync, setup actions, and floating chat.
+- `src/ui/main_window/`: main shell, dedicated layout builder, and coordinators for tabs, recording-tab lifecycle, window lifecycle/navigation, shell actions, sidebar actions, sidebar content, sidebar sync, setup actions, floating chat, summary queue status, and runtime startup.
   - `content_tabs.py` now owns note/chat/summary tab lifecycle and context-driven tab openers.
 - `src/ui/chat/`: pure-ish chat state/rendering/context helpers used by `ChatWidget`.
 - `src/ui/settings/`: settings panels grouped by product area.
@@ -27,7 +27,7 @@ Main runtime areas:
 
 The repository has already moved several high-growth areas away from older flat modules:
 
-- `src/ui/main_window.py` has been split into the `src/ui/main_window/` package. `MainWindow` remains in `src/ui/main_window/__init__.py`, while tab handling, floating chat, sidebar actions, sidebar content, sidebar sync, and setup actions live in focused coordinators.
+- `src/ui/main_window.py` has been split into the `src/ui/main_window/` package. `MainWindow` remains in `src/ui/main_window/__init__.py` as a compatibility shell, visual composition lives in `layout.py`, and tab handling, floating chat, sidebar actions, sidebar content, sidebar sync, and setup actions live in focused coordinators.
 - Chat-specific helpers have been extracted from `src/ui/chat_widget.py` into `src/ui/chat/`, including context building, session state, session loading/applying, rendering, theme styles, header state, busy state, and the add-context dialog.
 - Settings UI has been split into `src/ui/settings/` panels for audio, general, prompts, and RAG configuration.
 - The audio editor has moved from a flat widget into `src/ui/audio_editor/`, with separate widget and waveform modules.
@@ -66,9 +66,8 @@ Use these boundaries when adding new features:
 
 ## Current Architecture Risks
 
-- `src/ui/main_window/__init__.py` remains the main orchestration hotspot. It still mixes app composition, tab lifecycle, chat lifecycle, sidebar state, notebook actions, search, settings, RAG runtime, task queue status, and startup summary scheduling.
-- `src/ui/main_window/bootstrap.py` now owns the deterministic startup sequence, but the remaining shell still owns a lot of application wiring.
-- `src/ui/main_window/content_tabs.py` has started pulling tab-opening behavior out of the shell, but `MainWindow` still has legacy wrappers for some content actions.
+- `src/ui/main_window/__init__.py` is a closed compatibility shell, not a feature owner: visual composition, tab/chat/sidebar/welcome/recording/queue/RAG behavior, navigation decisions, and shutdown cleanup live in focused modules. It intentionally retains dependency composition, minimal Qt event adapters, and legacy delegates while callers migrate.
+- `src/ui/main_window/window_lifecycle.py` owns cancellation of background work, tab cleanup, recorder stop, floating-chat disposal, and palette/resize reactions. Its callers must preserve the early-Qt-event guards in `MainWindow` and the shutdown ordering covered by stress tests.
 - `src/database.py` is now a thin compatibility facade over `src/persistence/`; preserve this public import path while callers are migrated incrementally to aggregate-specific repositories where appropriate.
 - `src/ui/recording_widget.py` is now mostly a Qt orchestration shell for recording detail and legacy audio-edit tabs. Focused recording-tab UI builders, controls, small state helpers, direct transcription flow helpers, AI action helpers, speaker mapping, audio trim helpers, and RAG indexing helpers live under `src/ui/recording/`; remaining risk is broad widget-level orchestration and persistence coupling.
 - `src/ui/welcome_widget.py` mixes landing page layout, recorder configuration, microphone testing, favorites, search, today view, and settings persistence.
@@ -96,10 +95,9 @@ Do not move everything at once. Move code when a spec or change touches that are
 Recommended next cuts:
 
 1. Move RAG subprocess/keyword/vector-store adapter logic out of `RAGEngine` into smaller adapter modules.
-2. Continue shrinking `MainWindow` by moving notebook, search, settings, collections/calendar, and the remaining content wrappers into focused coordinators.
-3. Continue shrinking `RecordingWidget` by moving deletion, open-chat, playback adapters, and persistence-facing orchestration into focused modules/services; UI builders, shared controls, direct transcription flow helpers, AI action helpers, speaker mapping, audio trim helpers, and RAG indexing helpers already live under `src/ui/recording/`.
-4. Move `WelcomeWidget` recorder configuration and microphone test behavior into a separate component/service.
-5. Migrate selected application services to the repositories in `src/persistence/` only when doing so reduces coupling; retain `DBManager` as the compatibility boundary for existing UI code.
+2. Continue shrinking `RecordingWidget` by moving deletion, open-chat, playback adapters, and persistence-facing orchestration into focused modules/services; UI builders, shared controls, direct transcription flow helpers, AI action helpers, speaker mapping, audio trim helpers, and RAG indexing helpers already live under `src/ui/recording/`.
+3. Move `WelcomeWidget` recorder configuration and microphone test behavior into a separate component/service.
+4. Migrate selected application services to the repositories in `src/persistence/` only when doing so reduces coupling; retain `DBManager` as the compatibility boundary for existing UI code.
 
 ## Testing Expectations
 

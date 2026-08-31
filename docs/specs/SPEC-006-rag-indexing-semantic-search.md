@@ -2,7 +2,7 @@
 
 Status: Implemented
 Owner: TBD
-Last updated: 2026-06-10
+Last updated: 2026-08-30
 
 ## Problem
 
@@ -46,6 +46,7 @@ Users need recordings, notes, summaries, and generated AI text to be searchable 
 - Subprocess safety: `src/rag/subprocess_tasks.py` owns Windows-safe subprocess entrypoints, timeout/crash/missing-result handling, and keyword fallback subprocess queries.
 - Queue integration: `src/app/summary_queue/rag_reindex.py` selects records and calls the public RAG engine to index them.
 - UI/search: `src/ui/main_window/search_actions.py` and `src/ui/search_results_widget.py` consume search results.
+- Main-window runtime: `src/ui/main_window/runtime_startup.py` applies RAG safety flags, initializes or disables the engine from settings, and propagates the active engine to open tabs. `MainWindow` keeps compatibility delegates.
 - Platform constraints: preserve Windows subprocess guards for upsert/query and safe-delete behavior; preserve Ubuntu persistent Chroma behavior.
 
 ## Test Plan
@@ -66,6 +67,7 @@ Users need recordings, notes, summaries, and generated AI text to be searchable 
 - 2026-06-10: extracted RAG subprocess entrypoints and JSON subprocess runner from `src/rag_engine.py` to `src/rag/subprocess_tasks.py`, with direct tests for success, operation error, missing result, crash, timeout, query, upsert, and keyword fallback wrappers.
 - 2026-06-10: extracted Chroma client, embedding, fallback, and collection initialization from `RAGEngine.__init__` to `src/rag/chroma_store.py`, leaving `RAGEngine` as the public search/index/delete facade.
 - 2026-06-10: removed private helper compatibility aliases from `src/rag_engine.py` after migrating legacy fallback tests to import helpers from their owning `src/rag/` modules.
+- 2026-08-30: moved RAG runtime initialization and configuration propagation from `src/ui/main_window/__init__.py` to `src/ui/main_window/runtime_startup.py` without changing settings or platform safety flags.
 
 ## Open Questions
 

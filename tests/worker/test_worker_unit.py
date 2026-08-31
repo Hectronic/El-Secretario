@@ -214,7 +214,11 @@ class TestTranscriberThreadRunBranches(unittest.TestCase):
         thread = self._build_thread(model_size="base", device="cpu", compute_type="int8")
         thread.run()
         thread.error.emit.assert_called_once()
-        self.assertIn("boom", thread.error.emit.call_args.args[0])
+        self.assertEqual(
+            thread.error.emit.call_args.args[0],
+            "No se pudo completar la transcripción. Vuelve a intentarlo. "
+            "Si el problema continúa, consulta el registro de la aplicación.",
+        )
 
     @patch("src.worker_components.transcriber_thread.platform.system", return_value="Windows")
     @patch("src.worker_components.transcriber_thread.torch.cuda.empty_cache")
@@ -246,7 +250,11 @@ class TestTranscriberThreadRunBranches(unittest.TestCase):
         thread.run()
 
         thread.error.emit.assert_called_once()
-        self.assertIn("fallback exploded", thread.error.emit.call_args.args[0])
+        self.assertEqual(
+            thread.error.emit.call_args.args[0],
+            "No se pudo completar la transcripción. Vuelve a intentarlo. "
+            "Si el problema continúa, consulta el registro de la aplicación.",
+        )
         mock_cuda_empty_cache.assert_called_once()
 
     @patch("src.worker_components.transcriber_thread.platform.system", return_value="Linux")

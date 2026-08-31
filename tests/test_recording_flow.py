@@ -114,7 +114,7 @@ class TestRecordingFlow(unittest.TestCase):
         )
         self.mock_start_transcription = self.start_transcription_patcher.start()
 
-        self.msgbox_patcher = patch('src.ui.main_window.QMessageBox.critical')
+        self.msgbox_patcher = patch('src.ui.main_window.recording_tabs.QMessageBox.critical')
         self.mock_msgbox = self.msgbox_patcher.start()
 
         self.window = MainWindow()

@@ -73,8 +73,9 @@ def _make_window():
     window.db = MagicMock()
     window.open_chat_tab = MagicMock()
     window.close_tab = MagicMock()
-    window._handle_recording_widget_saved = MagicMock()
-    window._handle_recording_widget_deleted = MagicMock()
+    window._log_user_settings_snapshot = MagicMock()
+    window.load_history = MagicMock()
+    window.request_sidebar_reload = MagicMock()
     window.handle_status_message = MagicMock()
     window.handle_progress = MagicMock()
     window._sync_chat_context_section = MagicMock()
@@ -153,3 +154,19 @@ def test_open_recording_editor_tab_sets_editor_title(monkeypatch):
     assert isinstance(editor, QWidget)
     assert window.central_tabs.count() == 1
     assert "Sprint review - Editor" == window.central_tabs.tabText(0)
+
+
+def test_handle_recording_widget_saved_refreshes_sidebar_and_tab_title(monkeypatch):
+    _app()
+    monkeypatch.setattr(recording_tabs_module, "RecordingWidget", _DummyRecordingWidget)
+    window = _make_window()
+    window.db.fetch_record.return_value = {"id": 5, "title": "Updated"}
+    coordinator = RecordingTabCoordinator(window)
+    widget = _DummyRecordingWidget(record_id=5)
+    window.central_tabs.addTab(widget, "Old title")
+
+    coordinator.handle_recording_widget_saved(widget)
+
+    window.load_history.assert_called_once()
+    window.request_sidebar_reload.assert_called_once_with(include_tags=True, include_history=True)
+    assert window.central_tabs.tabText(0) == "Updated"

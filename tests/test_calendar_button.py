@@ -53,8 +53,7 @@ class TestCalendarButton(unittest.TestCase):
         self.db_patcher.stop()
         self.recorder_patcher.stop()
 
-    @patch('src.ui.main_window.QMessageBox')
-    def test_open_calendar_tab(self, mock_msg):
+    def test_open_calendar_tab(self):
         # 1. Click the button
         self.window.open_calendar_btn.click()
         

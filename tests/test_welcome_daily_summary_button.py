@@ -565,7 +565,7 @@ class TestMainWindowDailySummaryIntegration(unittest.TestCase):
         self.assertNotEqual(chip_a.styleSheet(), chip_c.styleSheet())
 
     def test_startup_option_enqueues_missing_previous_weekly_summary(self):
-        with patch("src.ui.main_window.QSettings") as mock_settings_cls:
+        with patch("src.ui.main_window.runtime_startup.QSettings") as mock_settings_cls:
             mock_settings = mock_settings_cls.return_value
             mock_settings.value.side_effect = lambda key, default=None, type=None: (
                 True if key == "startup_enqueue_last_weekly_summary" else default
@@ -596,7 +596,7 @@ class TestMainWindowDailySummaryIntegration(unittest.TestCase):
             self.assertEqual(call_args[2], "")
 
     def test_startup_option_enqueues_latest_missing_previous_daily_summary(self):
-        with patch("src.ui.main_window.QSettings") as mock_settings_cls:
+        with patch("src.ui.main_window.runtime_startup.QSettings") as mock_settings_cls:
             mock_settings = mock_settings_cls.return_value
             mock_settings.value.side_effect = lambda key, default=None, type=None: (
                 True if key == "startup_enqueue_previous_daily_summary" else default
