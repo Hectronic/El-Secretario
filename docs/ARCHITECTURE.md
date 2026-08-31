@@ -10,7 +10,7 @@ Main runtime areas:
 
 - `main.py`: application bootstrap, environment guards, Qt application setup, and `MainWindow` launch.
 - `src/ui/`: PyQt widgets and UI coordinators.
-- `src/ui/main_window/`: main shell, dedicated layout builder, and coordinators for tabs, recording-tab lifecycle, shell actions, sidebar actions, sidebar content, sidebar sync, setup actions, floating chat, summary queue status, and runtime startup.
+- `src/ui/main_window/`: main shell, dedicated layout builder, and coordinators for tabs, recording-tab lifecycle, window lifecycle/navigation, shell actions, sidebar actions, sidebar content, sidebar sync, setup actions, floating chat, summary queue status, and runtime startup.
   - `content_tabs.py` now owns note/chat/summary tab lifecycle and context-driven tab openers.
 - `src/ui/chat/`: pure-ish chat state/rendering/context helpers used by `ChatWidget`.
 - `src/ui/settings/`: settings panels grouped by product area.
@@ -66,8 +66,8 @@ Use these boundaries when adding new features:
 
 ## Current Architecture Risks
 
-- `src/ui/main_window/__init__.py` is a compatibility shell, not a feature owner: visual composition is in `layout.py`; tab, chat, sidebar, welcome, recording, queue-status, and RAG-startup behavior live in focused coordinators. It intentionally retains construction/wiring, Qt event hooks, small navigation adapters, and legacy delegates while callers migrate.
-- The remaining substantive `MainWindow` concern is safe shutdown: cancellation of background work, tab cleanup, recorder stop, and floating-chat disposal are still together in `closeEvent` and should move behind a lifecycle coordinator while keeping Qt's event method as a small adapter.
+- `src/ui/main_window/__init__.py` is a closed compatibility shell, not a feature owner: visual composition, tab/chat/sidebar/welcome/recording/queue/RAG behavior, navigation decisions, and shutdown cleanup live in focused modules. It intentionally retains dependency composition, minimal Qt event adapters, and legacy delegates while callers migrate.
+- `src/ui/main_window/window_lifecycle.py` owns cancellation of background work, tab cleanup, recorder stop, floating-chat disposal, and palette/resize reactions. Its callers must preserve the early-Qt-event guards in `MainWindow` and the shutdown ordering covered by stress tests.
 - `src/database.py` is now a thin compatibility facade over `src/persistence/`; preserve this public import path while callers are migrated incrementally to aggregate-specific repositories where appropriate.
 - `src/ui/recording_widget.py` is now mostly a Qt orchestration shell for recording detail and legacy audio-edit tabs. Focused recording-tab UI builders, controls, small state helpers, direct transcription flow helpers, AI action helpers, speaker mapping, audio trim helpers, and RAG indexing helpers live under `src/ui/recording/`; remaining risk is broad widget-level orchestration and persistence coupling.
 - `src/ui/welcome_widget.py` mixes landing page layout, recorder configuration, microphone testing, favorites, search, today view, and settings persistence.
@@ -95,11 +95,9 @@ Do not move everything at once. Move code when a spec or change touches that are
 Recommended next cuts:
 
 1. Move RAG subprocess/keyword/vector-store adapter logic out of `RAGEngine` into smaller adapter modules.
-2. Extract `MainWindow` shutdown cleanup into a lifecycle coordinator, retaining `closeEvent` as its Qt adapter; preserve the existing cancellation order and stress coverage.
-3. Continue shrinking `RecordingWidget` by moving deletion, open-chat, playback adapters, and persistence-facing orchestration into focused modules/services; UI builders, shared controls, direct transcription flow helpers, AI action helpers, speaker mapping, audio trim helpers, and RAG indexing helpers already live under `src/ui/recording/`.
-4. Move `WelcomeWidget` recorder configuration and microphone test behavior into a separate component/service.
-5. Remove `MainWindow` compatibility wrappers only as callers migrate to their focused coordinators.
-6. Migrate selected application services to the repositories in `src/persistence/` only when doing so reduces coupling; retain `DBManager` as the compatibility boundary for existing UI code.
+2. Continue shrinking `RecordingWidget` by moving deletion, open-chat, playback adapters, and persistence-facing orchestration into focused modules/services; UI builders, shared controls, direct transcription flow helpers, AI action helpers, speaker mapping, audio trim helpers, and RAG indexing helpers already live under `src/ui/recording/`.
+3. Move `WelcomeWidget` recorder configuration and microphone test behavior into a separate component/service.
+4. Migrate selected application services to the repositories in `src/persistence/` only when doing so reduces coupling; retain `DBManager` as the compatibility boundary for existing UI code.
 
 ## Testing Expectations
 

@@ -14,7 +14,7 @@
 
 import logging
 from PyQt6.QtWidgets import QMainWindow
-from PyQt6.QtCore import Qt, QTimer, QEvent
+from PyQt6.QtCore import QTimer
 from PyQt6.QtGui import QIcon
 
 from src.database import DBManager
@@ -36,6 +36,8 @@ from src.ui.main_window.summary_queue_status import SummaryQueueStatusCoordinato
 from src.ui.main_window.runtime_startup import RuntimeStartupCoordinator
 from src.ui.main_window.shell_actions import MainWindowShellCoordinator
 from src.ui.main_window.layout import build_main_window_layout
+from src.ui.main_window.window_lifecycle import MainWindowLifecycleCoordinator
+from src.ui.main_window.window_navigation import MainWindowNavigationCoordinator
 from src.ui.styles import apply_theme
 
 from src.ui.summary_task_queue import SummaryTaskQueueManager
@@ -79,6 +81,8 @@ class MainWindow(QMainWindow):
         self.summary_queue_status = SummaryQueueStatusCoordinator(self)
         self.runtime_startup = RuntimeStartupCoordinator(self)
         self.shell_actions = MainWindowShellCoordinator(self)
+        self.window_lifecycle = MainWindowLifecycleCoordinator(self)
+        self.window_navigation = MainWindowNavigationCoordinator(self)
         self.tasks_sidebar_limit = 20
         self._pending_history_reload = False
         self._pending_tag_reload = False
@@ -221,12 +225,9 @@ class MainWindow(QMainWindow):
 
 
     def changeEvent(self, event):
-        if event.type() in (
-            QEvent.Type.PaletteChange,
-            QEvent.Type.ApplicationPaletteChange,
-            QEvent.Type.StyleChange,
-        ) and hasattr(self, "floating_chat_bar"):
-            self.chat_floating.refresh_floating_chat_bar()
+        lifecycle = getattr(self, "window_lifecycle", None)
+        if lifecycle is not None:
+            lifecycle.handle_change_event(event)
         super().changeEvent(event)
 
     def _connect_chat_widget(self, chat_widget):
@@ -333,16 +334,10 @@ class MainWindow(QMainWindow):
         self.sidebar_content.load_notebooks()
 
     def on_notebook_clicked(self, item):
-        """Handle notebook click in sidebar."""
-        notebook_id = item.data(Qt.ItemDataRole.UserRole)
-        notebook_name = item.text().replace("📓 ", "")
-        self.open_notebook(notebook_id, notebook_name)
+        self.window_navigation.on_notebook_clicked(item)
 
     def on_collection_clicked(self, item):
-        tag = item.data(Qt.ItemDataRole.UserRole) or item.text()
-        if not tag or tag == "No tags.":
-            return
-        self.open_collection_tab(tag)
+        self.window_navigation.on_collection_clicked(item)
 
     def create_notebook(self):
         self.sidebar_content.create_notebook()
@@ -357,16 +352,7 @@ class MainWindow(QMainWindow):
         self.sidebar_content.show_notebooks_sidebar_context_menu(point)
 
     def open_selected_tag_chat(self):
-        item = self.collections_list.currentItem()
-        if item is None:
-            self.open_chat_tab(None)
-            return
-
-        tag = item.data(Qt.ItemDataRole.UserRole) or item.text()
-        if not tag or tag == "No tags.":
-            self.open_chat_tab(None)
-            return
-        self.open_collection_chat(tag)
+        self.window_navigation.open_selected_tag_chat()
 
     def show_tags_sidebar_context_menu(self, point):
         return self.sidebar_actions.show_tags_sidebar_context_menu(point)
@@ -375,14 +361,13 @@ class MainWindow(QMainWindow):
         return self.content_tabs.open_collection_tab(tag)
 
     def open_collection_chat(self, tag):
-        self.open_chat_tab(initial_contexts=[{"type": "tag", "value": tag, "label": tag}])
+        self.window_navigation.open_collection_chat(tag)
 
     def open_calendar_tab(self):
         return self.content_tabs.open_calendar_tab()
 
     def on_tag_filter_changed(self, tag):
-        self.request_sidebar_reload(include_history=True)
-        self.sync_active_tabs()
+        self.window_navigation.on_tag_filter_changed(tag)
 
     def on_tab_selection_sync(self, monday, date_str, tag=None):
         return self.selection_sync_actions.on_tab_selection_sync(monday, date_str, tag=tag)
@@ -487,67 +472,13 @@ class MainWindow(QMainWindow):
     # open_maintenance_tab removed - now handled by open_tools_tab
 
     def closeEvent(self, event):
-        logging.warning(
-            "MainWindow.closeEvent triggered. tabs=%d queue_running=%s recorder_recording=%s",
-            self.central_tabs.count(),
-            self.summary_task_queue.is_running if self.summary_task_queue else None,
-            self.recorder.is_recording if self.recorder else None,
-        )
-        self._sidebar_refresh_timer.stop()
-        self._pending_history_reload = False
-        self._pending_tag_reload = False
-
-        # Stop background workers before Qt starts tearing down widgets.
-        if self.search_thread and self.search_thread.isRunning():
-            try:
-                self.search_thread.requestInterruption()
-                self.search_thread.quit()
-                self.search_thread.wait(3000)
-            except Exception:
-                pass
-        self.search_thread = None
-
-        if self.summary_task_queue:
-            self.summary_task_queue.cancel_all()
-            logging.info("Summary task queue cancelled during closeEvent.")
-        self.regen_worker = None
-
-        # Close tabs from right to left and allow each widget to cleanup resources.
-        for i in range(self.central_tabs.count() - 1, -1, -1):
-            widget = self.central_tabs.widget(i)
-            if widget and hasattr(widget, "cleanup"):
-                try:
-                    widget.cleanup()
-                except Exception:
-                    pass
-        for host in list(self.floating_chat_hosts):
-            widget = host.property("chat_widget")
-            if widget and hasattr(widget, "cleanup"):
-                try:
-                    widget.cleanup()
-                except Exception:
-                    pass
-            self.chat_floating.remove_floating_host(host)
-
-        if self.recorder and self.recorder.is_recording:
-            try:
-                self.recorder.stop()
-                logging.info("Active recorder stopped during closeEvent.")
-            except Exception:
-                logging.exception("Failed stopping recorder during closeEvent.")
-
-        try:
-            import gc
-            gc.collect()
-            import torch
-            if torch.cuda.is_available():
-                torch.cuda.empty_cache()
-        except Exception:
-            pass
-
+        lifecycle = getattr(self, "window_lifecycle", None)
+        if lifecycle is not None:
+            lifecycle.cleanup_before_close()
         super().closeEvent(event)
 
     def resizeEvent(self, event):
         super().resizeEvent(event)
-        self.chat_floating.reposition_floating_chat_bar()
-        logging.warning("MainWindow.closeEvent completed.")
+        lifecycle = getattr(self, "window_lifecycle", None)
+        if lifecycle is not None:
+            lifecycle.handle_resize()
