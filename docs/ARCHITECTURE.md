@@ -66,9 +66,8 @@ Use these boundaries when adding new features:
 
 ## Current Architecture Risks
 
-- `src/ui/main_window/__init__.py` is now principally a compatibility shell. Its visual composition is in `layout.py`; tab lifecycle, chat lifecycle, sidebar content/actions, welcome wiring, recording lifecycle, queue status, and RAG runtime/startup scheduling live in focused coordinators. Legacy wrappers remain the primary cleanup candidate.
-- `src/ui/main_window/bootstrap.py` now owns the deterministic startup sequence, but the remaining shell still owns a lot of application wiring.
-- `src/ui/main_window/content_tabs.py` has started pulling tab-opening behavior out of the shell, but `MainWindow` still has legacy wrappers for some content actions.
+- `src/ui/main_window/__init__.py` is a compatibility shell, not a feature owner: visual composition is in `layout.py`; tab, chat, sidebar, welcome, recording, queue-status, and RAG-startup behavior live in focused coordinators. It intentionally retains construction/wiring, Qt event hooks, small navigation adapters, and legacy delegates while callers migrate.
+- The remaining substantive `MainWindow` concern is safe shutdown: cancellation of background work, tab cleanup, recorder stop, and floating-chat disposal are still together in `closeEvent` and should move behind a lifecycle coordinator while keeping Qt's event method as a small adapter.
 - `src/database.py` is now a thin compatibility facade over `src/persistence/`; preserve this public import path while callers are migrated incrementally to aggregate-specific repositories where appropriate.
 - `src/ui/recording_widget.py` is now mostly a Qt orchestration shell for recording detail and legacy audio-edit tabs. Focused recording-tab UI builders, controls, small state helpers, direct transcription flow helpers, AI action helpers, speaker mapping, audio trim helpers, and RAG indexing helpers live under `src/ui/recording/`; remaining risk is broad widget-level orchestration and persistence coupling.
 - `src/ui/welcome_widget.py` mixes landing page layout, recorder configuration, microphone testing, favorites, search, today view, and settings persistence.
@@ -96,10 +95,11 @@ Do not move everything at once. Move code when a spec or change touches that are
 Recommended next cuts:
 
 1. Move RAG subprocess/keyword/vector-store adapter logic out of `RAGEngine` into smaller adapter modules.
-2. Continue shrinking `MainWindow` by removing compatibility wrappers once their callers migrate to the focused coordinators.
+2. Extract `MainWindow` shutdown cleanup into a lifecycle coordinator, retaining `closeEvent` as its Qt adapter; preserve the existing cancellation order and stress coverage.
 3. Continue shrinking `RecordingWidget` by moving deletion, open-chat, playback adapters, and persistence-facing orchestration into focused modules/services; UI builders, shared controls, direct transcription flow helpers, AI action helpers, speaker mapping, audio trim helpers, and RAG indexing helpers already live under `src/ui/recording/`.
 4. Move `WelcomeWidget` recorder configuration and microphone test behavior into a separate component/service.
-5. Migrate selected application services to the repositories in `src/persistence/` only when doing so reduces coupling; retain `DBManager` as the compatibility boundary for existing UI code.
+5. Remove `MainWindow` compatibility wrappers only as callers migrate to their focused coordinators.
+6. Migrate selected application services to the repositories in `src/persistence/` only when doing so reduces coupling; retain `DBManager` as the compatibility boundary for existing UI code.
 
 ## Testing Expectations
 

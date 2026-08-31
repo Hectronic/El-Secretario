@@ -12,21 +12,18 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-import re
 import logging
-from PyQt6.QtWidgets import QMainWindow, QMessageBox
+from PyQt6.QtWidgets import QMainWindow
 from PyQt6.QtCore import Qt, QTimer, QEvent
 from PyQt6.QtGui import QIcon
 
 from src.database import DBManager
 from src.notebook_database import NotebookDBManager
-from src.ui.recording_widget import RecordingWidget
 from src.ui.main_window.recording_tabs import RecordingTabCoordinator
 from src.ui.main_window.bootstrap import bootstrap_main_window
 from src.ui.main_window.content_tabs import ContentTabCoordinator
 from src.ui.main_window.chat_floating import FloatingChatCoordinator
 from src.ui.main_window.sidebar_sync import SidebarSyncCoordinator
-from src.ui.main_window.chat_context_sidebar import install_chat_context_sidebar_section
 from src.ui.main_window.sidebar_content import SidebarContentCoordinator
 from src.ui.main_window.sidebar_actions import SidebarActionsCoordinator
 from src.ui.main_window.setup_actions import SetupActionsCoordinator

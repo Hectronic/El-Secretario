@@ -38,4 +38,11 @@ Move the visual construction of the main application window out of the `MainWind
 
 ## Follow-Ups
 
+- Extract `closeEvent` cleanup (background work, tabs, floating chats, recorder, and optional GPU cache) into a lifecycle coordinator, preserving its shutdown order and `tests/test_shutdown_cleanup_stress.py` coverage.
 - Replace `MainWindow` legacy wrappers with direct coordinator calls only when all external callers have migrated.
+
+## Closure Audit
+
+- `MainWindow` no longer contains visual construction or feature-specific tab, sidebar, chat, recording, queue-status, RAG-startup, search, setup, or selection-sync logic.
+- It retains only window construction/wiring, Qt event adapters (`changeEvent`, `closeEvent`, `resizeEvent`), small navigation adapters, and compatibility delegates required by existing Qt signals and integrations.
+- The principal next `MainWindow` cut is lifecycle cleanup, not another split of visual or feature behavior.
