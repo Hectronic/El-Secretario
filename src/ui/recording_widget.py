@@ -406,27 +406,13 @@ class RecordingWidget(QWidget):
         self.widget_support.update_transcription_actions()
 
     def copy_transcription_to_clipboard(self):
-        text = self.text_display.toPlainText() if self.text_display else ""
-        if not text.strip():
-            return
-        QApplication.clipboard().setText(text)
-        self.status_changed.emit("Transcription copied.")
+        self.widget_support.copy_transcription_to_clipboard(application=QApplication)
 
     def open_speaker_manager(self):
-        text = self.text_display.toPlainText()
-        speakers = find_speaker_labels(text)
-        if not speakers:
-            QMessageBox.information(self, "Info", "No speakers found in the text.")
-            return
-        known_speakers = self.db.get_all_speakers()
-        dialog = SpeakerDialog(speakers, self, known_speakers=known_speakers)
-        if dialog.exec():
-            self.text_display.setText(apply_speaker_mapping(text, dialog.get_mapping()))
-            self.save_all_changes()
+        self.widget_support.open_speaker_manager(dialog_cls=SpeakerDialog, message_box=QMessageBox)
 
     def retranscribe_recording(self):
-        if self.current_recording_path:
-            self.start_transcription(self.current_recording_path)
+        self.widget_support.retranscribe_recording()
 
     def delete_recording(self):
         self.record_actions.delete_recording()
@@ -462,27 +448,13 @@ class RecordingWidget(QWidget):
         self.record_actions.disable_playback_controls()
 
     def _clear_transcriber_thread_ref(self, *args):
-        thread = self.transcriber_thread
-        self.transcriber_thread = None
-        if thread: thread.deleteLater()
+        self.widget_support.clear_thread_ref("transcriber_thread")
 
     def _clear_ai_thread_ref(self, *args):
-        thread = self.ai_thread
-        self.ai_thread = None
-        if thread: thread.deleteLater()
+        self.widget_support.clear_thread_ref("ai_thread")
 
     def _cleanup_thread(self, attr_name):
-        thread = getattr(self, attr_name, None)
-        if not thread: return
-        try:
-            if thread.isRunning():
-                thread.requestInterruption()
-                thread.quit()
-                thread.wait(3000)
-        except Exception: pass
-        try: thread.deleteLater()
-        except Exception: pass
-        setattr(self, attr_name, None)
+        self.widget_support.cleanup_thread(attr_name)
 
     def cleanup(self):
         self.widget_support.cleanup(qurl=QUrl)

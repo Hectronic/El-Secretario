@@ -130,19 +130,50 @@ class RecordingWidgetSupport:
         if self.widget.copy_transcription_btn:
             self.widget.copy_transcription_btn.setEnabled(bool(text.strip()))
 
+    def copy_transcription_to_clipboard(self, *, application):
+        text = self.widget.text_display.toPlainText() if self.widget.text_display else ""
+        if text.strip():
+            application.clipboard().setText(text)
+            self.widget.status_changed.emit("Transcription copied.")
+
+    def open_speaker_manager(self, *, dialog_cls, message_box):
+        text = self.widget.text_display.toPlainText()
+        speakers = find_speaker_labels(text)
+        if not speakers:
+            message_box.information(self.widget, "Info", "No speakers found in the text.")
+            return
+        dialog = dialog_cls(speakers, self.widget, known_speakers=self.widget.db.get_all_speakers())
+        if dialog.exec():
+            self.widget.text_display.setText(apply_speaker_mapping(text, dialog.get_mapping()))
+            self.widget.save_all_changes()
+
+    def retranscribe_recording(self):
+        if self.widget.current_recording_path:
+            self.widget.start_transcription(self.widget.current_recording_path)
+
     def cleanup(self, *, qurl):
         self.widget.stop_audio()
         self.widget.player.setSource(qurl())
         for attribute in ("transcriber_thread", "ai_thread"):
-            thread = getattr(self.widget, attribute, None)
-            if thread:
-                try:
-                    if thread.isRunning():
-                        thread.requestInterruption(); thread.quit(); thread.wait(3000)
-                except Exception:
-                    pass
-                try:
-                    thread.deleteLater()
-                except Exception:
-                    pass
-                setattr(self.widget, attribute, None)
+            self.cleanup_thread(attribute)
+
+    def cleanup_thread(self, attribute):
+        thread = getattr(self.widget, attribute, None)
+        if not thread:
+            return
+        try:
+            if thread.isRunning():
+                thread.requestInterruption(); thread.quit(); thread.wait(3000)
+        except Exception:
+            pass
+        try:
+            thread.deleteLater()
+        except Exception:
+            pass
+        setattr(self.widget, attribute, None)
+
+    def clear_thread_ref(self, attribute):
+        thread = getattr(self.widget, attribute, None)
+        setattr(self.widget, attribute, None)
+        if thread:
+            thread.deleteLater()
