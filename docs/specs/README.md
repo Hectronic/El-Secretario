@@ -110,6 +110,7 @@ What user or product problem is being solved?
 | REFACTOR-2026-09-RECORD-DETAILS | Implemented | Recording detail loading and persistence extraction | SPEC-004, SPEC-006 |
 | REFACTOR-2026-09-TRANSCRIPTION-ACTIONS | Implemented | Recording direct-transcription orchestration extraction | SPEC-002, SPEC-004, SPEC-006, SPEC-011 |
 | REFACTOR-2026-09-AI-ORCHESTRATION | Implemented | Recording AI and queue-refresh orchestration extraction | SPEC-004, SPEC-011 |
+| REFACTOR-2026-09-WIDGET-SUPPORT | Implemented | Recording dirty-state, trim, and cleanup extraction | SPEC-004, SPEC-005 |
 
 ## Spec Granularity Rules
 

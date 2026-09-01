@@ -44,6 +44,7 @@ from src.ui.recording.record_actions import RecordingActionsCoordinator
 from src.ui.recording.state import recording_audio_path
 from src.ui.recording.speaker_actions import apply_speaker_mapping, find_speaker_labels
 from src.ui.recording.transcription_actions import RecordingTranscriptionCoordinator
+from src.ui.recording.widget_support import RecordingWidgetSupport
 from src.ai_assistant import AIAssistant
 from src.ai_provider import validate_ai_provider_config
 from src.ui.recording.transcription_panel import build_transcription_panel
@@ -99,6 +100,7 @@ class RecordingWidget(QWidget):
         self.record_details = RecordingDetailsCoordinator(self)
         self.transcription_actions = RecordingTranscriptionCoordinator(self)
         self.ai_actions = RecordingAiCoordinator(self)
+        self.widget_support = RecordingWidgetSupport(self)
 
         self.init_ui()
         self._connect_dirty_tracking()
@@ -314,79 +316,31 @@ class RecordingWidget(QWidget):
         return
 
     def _connect_dirty_tracking(self):
-        for widget_name, signal_name in (
-            ("title_input", "textChanged"),
-            ("text_display", "textChanged"),
-            ("notes_display", "textChanged"),
-            ("tags_input", "textChanged"),
-            ("is_diarized_check_meta", "stateChanged"),
-            ("trim_start_spin", "valueChanged"),
-            ("trim_end_spin", "valueChanged"),
-        ):
-            widget = getattr(self, widget_name, None)
-            if widget is None:
-                continue
-            signal = getattr(widget, signal_name, None)
-            if signal is not None:
-                signal.connect(self._mark_dirty)
+        self.widget_support.connect_dirty_tracking()
 
     def _mark_dirty(self, *_args):
-        if self._suppress_dirty_tracking:
-            return
-        self._set_dirty(True)
+        self.widget_support.mark_dirty(*_args)
 
     def _set_dirty(self, is_dirty: bool):
-        self._has_unsaved_changes = bool(is_dirty)
-        if getattr(self, "save_all_btn", None):
-            self.save_all_btn.setEnabled(self._has_unsaved_changes)
+        self.widget_support.set_dirty(is_dirty)
 
     def has_unsaved_changes(self):
-        return self._has_unsaved_changes
+        return self.widget_support.has_unsaved_changes()
 
     def _set_audio_edit_enabled(self, enabled: bool):
-        if not self.audio_edit_group:
-            return
-        for widget in (
-            self.audio_edit_group,
-            self.trim_start_spin,
-            self.trim_end_spin,
-            self.mark_start_btn,
-            self.mark_end_btn,
-            self.trim_btn,
-        ):
-            widget.setEnabled(enabled)
+        self.widget_support.set_audio_edit_enabled(enabled)
 
     def _configure_audio_edit_bounds(self, duration_seconds: float):
-        duration_seconds = max(0.0, float(duration_seconds or 0.0))
-        self._audio_edit_start = 0.0
-        self._audio_edit_end = duration_seconds
-        if not self.audio_edit_group:
-            return
-        self.trim_start_spin.blockSignals(True)
-        self.trim_end_spin.blockSignals(True)
-        self.trim_start_spin.setRange(0.0, duration_seconds)
-        self.trim_end_spin.setRange(0.0, duration_seconds)
-        self.trim_start_spin.setValue(0.0)
-        self.trim_end_spin.setValue(duration_seconds)
-        self.trim_start_spin.blockSignals(False)
-        self.trim_end_spin.blockSignals(False)
-        self._set_audio_edit_enabled(duration_seconds > 0.0)
+        self.widget_support.configure_audio_edit_bounds(duration_seconds)
 
     def _current_playhead_seconds(self):
         return playhead_seconds(self.player.position())
 
     def _recording_audio_path(self, record):
-        return recording_audio_path(record, os.getcwd())
+        return self.widget_support.recording_audio_path(record)
 
     def _set_record_audio_source(self, record):
-        audio_exists = os.path.exists(self.current_recording_path)
-        if audio_exists:
-            self.enable_playback_controls()
-            self.player.setSource(QUrl.fromLocalFile(self.current_recording_path))
-        else:
-            self.disable_playback_controls()
-            self.status_changed.emit("Audio file not found.")
-        return audio_exists and record["duration"] > 0.0
+        return self.widget_support.set_record_audio_source(record, qurl=QUrl)
 
     def load_record(self, record_id):
         self.record_details.load_record(record_id)
@@ -449,10 +403,7 @@ class RecordingWidget(QWidget):
         self.ai_actions.on_ai_error(err, message_box=QMessageBox)
 
     def _update_transcription_actions(self):
-        text = self.text_display.toPlainText() if self.text_display else ""
-        has_transcription = bool(text.strip())
-        if self.copy_transcription_btn:
-            self.copy_transcription_btn.setEnabled(has_transcription)
+        self.widget_support.update_transcription_actions()
 
     def copy_transcription_to_clipboard(self):
         text = self.text_display.toPlainText() if self.text_display else ""
@@ -484,57 +435,15 @@ class RecordingWidget(QWidget):
         self.record_actions.open_audio_editor()
 
     def mark_trim_start_from_playhead(self):
-        if not self.trim_start_spin:
-            return
-        start, end = mark_trim_start(
-            self.trim_start_spin.value(),
-            self.trim_end_spin.value(),
-            self._current_playhead_seconds(),
-        )
-        self.trim_start_spin.setValue(start)
-        self.trim_end_spin.setValue(end)
+        self.widget_support.mark_trim_start()
 
     def mark_trim_end_from_playhead(self):
-        if not self.trim_end_spin:
-            return
-        start, end = mark_trim_end(
-            self.trim_start_spin.value(),
-            self.trim_end_spin.value(),
-            self._current_playhead_seconds(),
-        )
-        self.trim_start_spin.setValue(start)
-        self.trim_end_spin.setValue(end)
+        self.widget_support.mark_trim_end()
 
     def trim_audio_selection(self):
-        if not self.audio_edit_group:
-            return
-
-        start_seconds = float(self.trim_start_spin.value())
-        end_seconds = float(self.trim_end_spin.value())
-        validation_message = validate_trim_request(self.current_recording_path, start_seconds, end_seconds)
-        if validation_message:
-            QMessageBox.warning(self, "Error", validation_message)
-            return
-
-        try:
-            duration = trim_recording_audio(
-                self.current_recording_path,
-                start_seconds,
-                end_seconds,
-                trim_audio_segment,
-            )
-            self.db.update_duration(self.current_record_id, duration)
-            if getattr(self, "duration_label", None):
-                self.duration_label.setText(f"{duration:.1f}s")
-            self._configure_audio_edit_bounds(duration)
-            self.player.setSource(QUrl.fromLocalFile(self.current_recording_path))
-            self._set_dirty(False)
-            self.recording_saved.emit()
-            self.status_changed.emit("Audio trimmed. Retranscribing...")
-            self.start_transcription(self.current_recording_path)
-        except Exception as exc:
-            logging.exception("Failed to trim audio for record_id=%s", self.current_record_id)
-            QMessageBox.critical(self, "Trim Error", str(exc))
+        self.widget_support.trim_audio_selection(
+            trim_func=trim_audio_segment, qurl=QUrl, message_box=QMessageBox
+        )
 
     def open_chat_for_recording(self):
         self.record_actions.open_chat_for_recording()
@@ -576,10 +485,7 @@ class RecordingWidget(QWidget):
         setattr(self, attr_name, None)
 
     def cleanup(self):
-        self.stop_audio()
-        self.player.setSource(QUrl())
-        self._cleanup_thread("transcriber_thread")
-        self._cleanup_thread("ai_thread")
+        self.widget_support.cleanup(qurl=QUrl)
 
     def closeEvent(self, event):
         self.cleanup()
