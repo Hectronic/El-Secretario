@@ -53,20 +53,9 @@ from src.ui.recording.controls import create_action_button, create_playback_cont
 from src.ui.recording.record_details import RecordingDetailsCoordinator
 from src.ui.recording.metadata_panel import build_metadata_panel
 from src.ui.recording.record_actions import RecordingActionsCoordinator
-from src.ui.recording.rag_indexing import index_transcription_result_after_refresh
-from src.ui.recording.state import (
-    fallback_record_title,
-    recording_audio_path,
-    to_bool,
-)
+from src.ui.recording.state import fallback_record_title, recording_audio_path
 from src.ui.recording.speaker_actions import apply_speaker_mapping, find_speaker_labels
-from src.ui.recording.transcription_flow import (
-    emit_error_trace,
-    emit_finished_trace,
-    emit_status_trace,
-    persist_direct_transcription_result,
-    start_direct_transcription,
-)
+from src.ui.recording.transcription_actions import RecordingTranscriptionCoordinator
 from src.ui.recording.transcription_panel import build_transcription_panel
 
 Recorder = None
@@ -118,6 +107,7 @@ class RecordingWidget(QWidget):
         self.player.playbackStateChanged.connect(self.media_state_changed)
         self.record_actions = RecordingActionsCoordinator(self)
         self.record_details = RecordingDetailsCoordinator(self)
+        self.transcription_actions = RecordingTranscriptionCoordinator(self)
 
         self.init_ui()
         self._connect_dirty_tracking()
@@ -411,36 +401,16 @@ class RecordingWidget(QWidget):
         self.record_details.load_record(record_id)
 
     def set_transcription_config(self, config):
-        if not getattr(self, "model_combo", None):
-            return
-        if config.get("model"):
-            index = self.model_combo.findText(config["model"])
-            if index >= 0: self.model_combo.setCurrentIndex(index)
-        if config.get("language") is not None:
-            lang_reverse_map = {None: "Auto", "es": "Spanish", "en": "English"}
-            lang_text = lang_reverse_map.get(config["language"], "Auto")
-            index = self.lang_combo.findText(lang_text)
-            if index >= 0: self.lang_combo.setCurrentIndex(index)
-        if config.get("diarization") is not None:
-            self.diarization_check.setChecked(config["diarization"])
-        if config.get("auto_summarize_after_transcription") is not None:
-            self.auto_summarize_after_transcription = to_bool(
-                config.get("auto_summarize_after_transcription")
-            )
+        self.transcription_actions.set_transcription_config(config)
 
     def start_transcription_with_config(self, audio_path, config):
         self.set_transcription_config(config)
         self.start_transcription(audio_path)
 
     def start_transcription(self, audio_path):
-        settings = QSettings("Hectronic", "Secretario")
-        self.transcriber_thread = start_direct_transcription(
-            self,
+        self.transcription_actions.start_transcription(
             audio_path,
-            settings=settings,
-            model_size=self.model_combo.currentText(),
-            language_label=self.lang_combo.currentText(),
-            enable_diarization=self.diarization_check.isChecked(),
+            settings_cls=QSettings,
             thread_cls=TranscriberThread,
             preflight_check=get_transcription_preflight_error,
             sound_file_cls=sf.SoundFile,
@@ -448,54 +418,13 @@ class RecordingWidget(QWidget):
         )
 
     def on_transcription_finished(self, result):
-        logging.info("Post-transcription checkpoint P1: entered on_transcription_finished record_id=%s", self.current_record_id)
-        emit_finished_trace(self.summary_task_queue, self.current_record_id, result)
-        logging.info("Post-transcription checkpoint P2: queue trace emitted")
-        self.status_changed.emit("Saved.")
-        self.progress_changed.emit(-2)
-        self.retranscribe_btn.setEnabled(True)
-        logging.info("Post-transcription checkpoint P3: UI status/progress updated")
-        text = result["text"]
-        self.text_display.setText(text)
-        self._update_transcription_actions()
-        logging.info("Post-transcription checkpoint P4: text set in editor (len=%s)", len(text))
-        filename = os.path.basename(self.current_recording_path)
-        self.current_record_id = persist_direct_transcription_result(
-            self.db,
-            self.current_record_id,
-            filename,
-            result,
-        )
-        logging.info("Post-transcription checkpoint P5: transcription result persisted")
-        logging.info("Post-transcription checkpoint P6: DB updated and record_id=%s", self.current_record_id)
-        self.load_record(self.current_record_id)
-        logging.info("Post-transcription checkpoint P7: load_record completed")
-        self.recording_saved.emit()
-        logging.info("Post-transcription checkpoint P8: recording_saved emitted")
-        if self.auto_summarize_after_transcription and text.strip():
-            self._enqueue_post_transcription_ai_tasks()
-            logging.info("Post-transcription checkpoint P9: post-transcription AI tasks enqueued")
-        settings = QSettings("Hectronic", "Secretario")
-        index_transcription_result_after_refresh(
-            rag=self.rag,
-            db=self.db,
-            settings=settings,
-            record_id=self.current_record_id,
-            title=filename,
-            date_label=self.date_label.text(),
-            emit_status=self.status_changed.emit,
-        )
+        self.transcription_actions.on_transcription_finished(result, settings_cls=QSettings)
 
     def on_transcription_error(self, err):
-        emit_error_trace(self.summary_task_queue, self.current_record_id, err)
-        self.status_changed.emit("Failed.")
-        self.progress_changed.emit(-2)
-        self.retranscribe_btn.setEnabled(True)
-        QMessageBox.critical(self, "Error", err)
+        self.transcription_actions.on_transcription_error(err, message_box=QMessageBox)
 
     def _on_transcriber_status_update(self, message):
-        self.status_changed.emit(message)
-        emit_status_trace(self.summary_task_queue, self.current_record_id, message)
+        self.transcription_actions.on_status_update(message)
 
     def save_all_changes(self):
         return self.record_details.save_all_changes()

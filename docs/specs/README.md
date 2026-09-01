@@ -108,6 +108,7 @@ What user or product problem is being solved?
 | REFACTOR-2026-08-LIFECYCLE | Implemented | Main-window lifecycle and navigation extraction | SPEC-001, SPEC-007, SPEC-008, SPEC-009, SPEC-010, SPEC-011 |
 | REFACTOR-2026-09-RECORD-ACTIONS | Implemented | Recording detail actions and playback extraction | SPEC-004, SPEC-005, SPEC-007 |
 | REFACTOR-2026-09-RECORD-DETAILS | Implemented | Recording detail loading and persistence extraction | SPEC-004, SPEC-006 |
+| REFACTOR-2026-09-TRANSCRIPTION-ACTIONS | Implemented | Recording direct-transcription orchestration extraction | SPEC-002, SPEC-004, SPEC-006, SPEC-011 |
 
 ## Spec Granularity Rules
 
