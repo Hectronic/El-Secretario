@@ -50,15 +50,12 @@ from src.ui.recording.audio_trim import (
 )
 from src.ui.recording.content_tabs import build_content_tabs
 from src.ui.recording.controls import create_action_button, create_playback_controls, create_primary_action
+from src.ui.recording.record_details import RecordingDetailsCoordinator
 from src.ui.recording.metadata_panel import build_metadata_panel
 from src.ui.recording.record_actions import RecordingActionsCoordinator
-from src.ui.recording.rag_indexing import (
-    index_saved_record_changes,
-    index_transcription_result_after_refresh,
-)
+from src.ui.recording.rag_indexing import index_transcription_result_after_refresh
 from src.ui.recording.state import (
     fallback_record_title,
-    record_has_ai_text,
     recording_audio_path,
     to_bool,
 )
@@ -120,6 +117,7 @@ class RecordingWidget(QWidget):
         self.player.durationChanged.connect(self.duration_changed)
         self.player.playbackStateChanged.connect(self.media_state_changed)
         self.record_actions = RecordingActionsCoordinator(self)
+        self.record_details = RecordingDetailsCoordinator(self)
 
         self.init_ui()
         self._connect_dirty_tracking()
@@ -410,57 +408,7 @@ class RecordingWidget(QWidget):
         return audio_exists and record["duration"] > 0.0
 
     def load_record(self, record_id):
-        record = self.db.fetch_record(record_id)
-        if not record:
-            return
-        if self.audio_edit_mode:
-            self._load_audio_editor_record(record)
-            return
-        self._load_record_detail(record)
-
-    def _load_audio_editor_record(self, record):
-        self.current_record_id = record["id"]
-        self.current_recording_path = self._recording_audio_path(record)
-        self._configure_audio_edit_bounds(record["duration"])
-        can_edit_audio = self._set_record_audio_source(record)
-        self._set_audio_edit_enabled(can_edit_audio)
-        self._set_dirty(False)
-
-    def _load_record_detail(self, record):
-        self._suppress_dirty_tracking = True
-        try:
-            self.current_record_id = record["id"]
-            self.text_display.setText(record["transcription"])
-            self.notes_display.setText(record.get("recording_notes") or "")
-            self.summary_display.setText(record["summary"] if record["summary"] else "")
-            self.title_input.setText(record["title"] if record["title"] else "")
-            self.title_input.setEnabled(True)
-            self.tags_input.setText(record["tags"] if record["tags"] else "")
-            self.tags_input.setEnabled(True)
-            self.is_diarized_check_meta.setChecked(bool(record["is_diarized"]))
-            self.is_diarized_check_meta.setEnabled(True)
-            self.date_label.setText(record["created_at"])
-            self.duration_label.setText(f"{record['duration']:.1f}s")
-            self._configure_audio_edit_bounds(record["duration"])
-
-            has_text = record_has_ai_text(record)
-            self.summarize_btn.setEnabled(has_text)
-            self.extract_tasks_btn.setEnabled(has_text)
-            self._update_extract_tasks_button()
-            self.rename_speakers_btn.setEnabled(has_text)
-            self._update_transcription_actions()
-
-            self.current_recording_path = self._recording_audio_path(record)
-            can_edit_audio = self._set_record_audio_source(record)
-
-            self.tasks_widget.record_id = self.current_record_id
-            self.tasks_widget.refresh()
-            self.ask_meeting_btn.setEnabled(True)
-            self.edit_audio_btn.setEnabled(can_edit_audio)
-            self._set_audio_edit_enabled(can_edit_audio)
-            self._set_dirty(False)
-        finally:
-            self._suppress_dirty_tracking = False
+        self.record_details.load_record(record_id)
 
     def set_transcription_config(self, config):
         if not getattr(self, "model_combo", None):
@@ -550,33 +498,7 @@ class RecordingWidget(QWidget):
         emit_status_trace(self.summary_task_queue, self.current_record_id, message)
 
     def save_all_changes(self):
-        if self.current_record_id:
-            new_title = self.title_input.text().strip()
-            new_text = self.text_display.toPlainText()
-            new_notes = self.notes_display.toPlainText().strip()
-            new_tags = self.tags_input.text().strip()
-            is_diarized = self.is_diarized_check_meta.isChecked()
-            self.db.update_title(self.current_record_id, new_title)
-            self.db.update_transcription(self.current_record_id, new_text, is_diarized=is_diarized)
-            self.db.update_recording_notes(self.current_record_id, new_notes)
-            self.db.update_tags(self.current_record_id, new_tags)
-            settings = QSettings("Hectronic", "Secretario")
-            index_saved_record_changes(
-                rag=self.rag,
-                db=self.db,
-                settings=settings,
-                record_id=self.current_record_id,
-                transcription=new_text,
-                notes=new_notes,
-                title=new_title,
-                date_label=self.date_label.text(),
-                tags=new_tags,
-            )
-            self._set_dirty(False)
-            self.recording_saved.emit()
-            self.status_changed.emit("Saved.")
-            return True
-        return False
+        return self.record_details.save_all_changes()
 
     def run_ai_task(self, task_type):
         text = compose_record_ai_text(
