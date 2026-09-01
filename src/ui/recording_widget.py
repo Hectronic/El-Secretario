@@ -51,6 +51,7 @@ from src.ui.recording.audio_trim import (
 from src.ui.recording.content_tabs import build_content_tabs
 from src.ui.recording.controls import create_action_button, create_playback_controls, create_primary_action
 from src.ui.recording.metadata_panel import build_metadata_panel
+from src.ui.recording.record_actions import RecordingActionsCoordinator
 from src.ui.recording.rag_indexing import (
     index_saved_record_changes,
     index_transcription_result_after_refresh,
@@ -118,6 +119,7 @@ class RecordingWidget(QWidget):
         self.player.positionChanged.connect(self.position_changed)
         self.player.durationChanged.connect(self.duration_changed)
         self.player.playbackStateChanged.connect(self.media_state_changed)
+        self.record_actions = RecordingActionsCoordinator(self)
 
         self.init_ui()
         self._connect_dirty_tracking()
@@ -691,23 +693,10 @@ class RecordingWidget(QWidget):
             self.start_transcription(self.current_recording_path)
 
     def delete_recording(self):
-        if self.current_record_id:
-            if QMessageBox.question(self, "Delete", "Are you sure?") == QMessageBox.StandardButton.Yes:
-                filename = self.db.delete(self.current_record_id)
-                if filename:
-                    try:
-                        file_path = os.path.join(os.getcwd(), "recordings", filename)
-                        if os.path.exists(file_path): os.remove(file_path)
-                    except Exception as e: print(f"Error deleting file {filename}: {e}")
-                if self.rag:
-                    try: self.rag.delete_document(str(self.current_record_id))
-                    except Exception: pass
-                self.recording_deleted.emit(self.current_record_id)
+        self.record_actions.delete_recording()
 
     def open_audio_editor(self):
-        if self.current_record_id is None:
-            return
-        self.open_audio_editor_requested.emit(int(self.current_record_id))
+        self.record_actions.open_audio_editor()
 
     def mark_trim_start_from_playhead(self):
         if not self.trim_start_spin:
@@ -763,50 +752,20 @@ class RecordingWidget(QWidget):
             QMessageBox.critical(self, "Trim Error", str(exc))
 
     def open_chat_for_recording(self):
-        if not self.current_record_id:
-            return
-        record = self.db.fetch_record(self.current_record_id)
-        if not isinstance(record, dict):
-            return
-        title = fallback_record_title(self.current_record_id, record.get("title"))
-        contexts = [
-            {
-                "type": "recording",
-                "value": int(self.current_record_id),
-                "label": title,
-            }
-        ]
-        self.start_chat_requested.emit(contexts)
+        self.record_actions.open_chat_for_recording()
 
-    def play_audio(self): self.player.play()
-    def pause_audio(self): self.player.pause()
-    def stop_audio(self): self.player.stop()
-    def position_changed(self, p): self.slider.setValue(p)
-    def duration_changed(self, d): self.slider.setRange(0, d)
-    def set_position(self, p): self.player.setPosition(p)
-    def media_state_changed(self, s):
-        if self.player.mediaStatus() == QMediaPlayer.MediaStatus.EndOfMedia: self.stop_audio()
+    def play_audio(self): self.record_actions.play_audio()
+    def pause_audio(self): self.record_actions.pause_audio()
+    def stop_audio(self): self.record_actions.stop_audio()
+    def position_changed(self, p): self.record_actions.position_changed(p)
+    def duration_changed(self, d): self.record_actions.duration_changed(d)
+    def set_position(self, p): self.record_actions.set_position(p)
+    def media_state_changed(self, s): self.record_actions.media_state_changed(s)
     def enable_playback_controls(self):
-        self.play_btn.setEnabled(True); self.pause_btn.setEnabled(True); self.stop_btn.setEnabled(True)
-        if getattr(self, "ask_meeting_btn", None):
-            self.ask_meeting_btn.setEnabled(True)
-        if getattr(self, "retranscribe_btn", None):
-            self.retranscribe_btn.setEnabled(True)
-        if getattr(self, "delete_btn", None):
-            self.delete_btn.setEnabled(True)
-        if getattr(self, "edit_audio_btn", None):
-            self.edit_audio_btn.setEnabled(True)
+        self.record_actions.enable_playback_controls()
         
     def disable_playback_controls(self):
-        self.play_btn.setEnabled(False); self.pause_btn.setEnabled(False); self.stop_btn.setEnabled(False)
-        if getattr(self, "ask_meeting_btn", None):
-            self.ask_meeting_btn.setEnabled(False)
-        if getattr(self, "retranscribe_btn", None):
-            self.retranscribe_btn.setEnabled(False)
-        if getattr(self, "delete_btn", None):
-            self.delete_btn.setEnabled(False)
-        if getattr(self, "edit_audio_btn", None):
-            self.edit_audio_btn.setEnabled(False)
+        self.record_actions.disable_playback_controls()
 
     def _clear_transcriber_thread_ref(self, *args):
         thread = self.transcriber_thread
