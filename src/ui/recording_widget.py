@@ -26,21 +26,9 @@ from src.database import DBManager
 from src.audio import trim_audio_segment
 from src.worker_components.transcriber_thread import TranscriberThread
 from src.stt_providers.sherpa_onnx.model_manager import get_transcription_preflight_error
-from src.ai_assistant import AIAssistant
-from src.ai_provider import validate_ai_provider_config
 from src.ui.speaker_dialog import SpeakerDialog
 from src.ui.recording.actions_bar import build_actions_bar
-from src.ui.recording.ai_actions import (
-    AUTO_SUMMARY_QUEUE_REQUIRED_MESSAGE,
-    QUEUE_REQUIRED_MESSAGE,
-    apply_ai_result,
-    compose_record_ai_text,
-    configure_legacy_ai_thread,
-    enqueue_post_transcription_summary,
-    enqueue_recording_summary,
-    enqueue_task_extraction,
-    extract_tasks_button_text,
-)
+from src.ui.recording.ai_orchestration import RecordingAiCoordinator
 from src.ui.recording.audio_trim import (
     mark_trim_end,
     mark_trim_start,
@@ -53,9 +41,11 @@ from src.ui.recording.controls import create_action_button, create_playback_cont
 from src.ui.recording.record_details import RecordingDetailsCoordinator
 from src.ui.recording.metadata_panel import build_metadata_panel
 from src.ui.recording.record_actions import RecordingActionsCoordinator
-from src.ui.recording.state import fallback_record_title, recording_audio_path
+from src.ui.recording.state import recording_audio_path
 from src.ui.recording.speaker_actions import apply_speaker_mapping, find_speaker_labels
 from src.ui.recording.transcription_actions import RecordingTranscriptionCoordinator
+from src.ai_assistant import AIAssistant
+from src.ai_provider import validate_ai_provider_config
 from src.ui.recording.transcription_panel import build_transcription_panel
 
 Recorder = None
@@ -108,6 +98,7 @@ class RecordingWidget(QWidget):
         self.record_actions = RecordingActionsCoordinator(self)
         self.record_details = RecordingDetailsCoordinator(self)
         self.transcription_actions = RecordingTranscriptionCoordinator(self)
+        self.ai_actions = RecordingAiCoordinator(self)
 
         self.init_ui()
         self._connect_dirty_tracking()
@@ -430,89 +421,32 @@ class RecordingWidget(QWidget):
         return self.record_details.save_all_changes()
 
     def run_ai_task(self, task_type):
-        text = compose_record_ai_text(
-            self.db,
-            self.text_display.toPlainText(),
-            self.notes_display.toPlainText(),
+        self.ai_actions.run_ai_task(
+            task_type,
+            settings_cls=QSettings,
+            assistant_cls=AIAssistant,
+            validate_provider=validate_ai_provider_config,
+            message_box=QMessageBox,
         )
-        if not text:
-            return
-
-        title = fallback_record_title(self.current_record_id, self.title_input.text())
-        if self.summary_task_queue:
-            if task_type == "summary":
-                enqueue_recording_summary(self.summary_task_queue, self.current_record_id, text, title)
-                return
-            if task_type == "task_extraction":
-                force_reextract = enqueue_task_extraction(
-                    self.summary_task_queue,
-                    self.db,
-                    self.current_record_id,
-                    text,
-                    self.tags_input.text(),
-                    title,
-                )
-                if force_reextract:
-                    self.tasks_widget.refresh()
-                    self._update_extract_tasks_button()
-                return
-        elif task_type in {"summary", "task_extraction"}:
-            QMessageBox.warning(self, "Error", QUEUE_REQUIRED_MESSAGE)
-            return
-
-        settings = QSettings("Hectronic", "Secretario")
-        is_valid, error_msg = validate_ai_provider_config(settings)
-        if not is_valid:
-            QMessageBox.warning(self, "Error", error_msg)
-            return
-        if task_type == "clean":
-            return
-        self.ai_thread = configure_legacy_ai_thread(self, AIAssistant, task_type, text)
 
     def _enqueue_post_transcription_ai_tasks(self):
-        text = compose_record_ai_text(
-            self.db,
-            self.text_display.toPlainText(),
-            self.notes_display.toPlainText(),
-        )
-        title = fallback_record_title(self.current_record_id, self.title_input.text())
-        if not enqueue_post_transcription_summary(
-            self.summary_task_queue,
-            self.current_record_id,
-            text,
-            title,
-        ) and text.strip():
-            QMessageBox.warning(self, "Error", AUTO_SUMMARY_QUEUE_REQUIRED_MESSAGE)
+        self.ai_actions.enqueue_post_transcription_ai_tasks(message_box=QMessageBox)
 
     def on_ai_finished(self, task_type, result):
-        apply_ai_result(self, task_type, result)
+        self.ai_actions.on_ai_finished(task_type, result)
 
     def application_top_level_widgets(self):
         return QApplication.topLevelWidgets()
 
 
     def _update_extract_tasks_button(self):
-        self.extract_tasks_btn.setText(extract_tasks_button_text(self.db, self.current_record_id))
+        self.ai_actions.update_extract_tasks_button()
 
     def refresh_from_background_queue(self, include_summary=False, include_tasks=False):
-        """
-        Refresh UI sections after queue-completed tasks while this tab is open.
-        Keeps user context (doesn't force tab switches or overwrite editable fields).
-        """
-        if not self.current_record_id:
-            return
-        if include_summary:
-            rec = self.db.fetch_record(self.current_record_id)
-            if isinstance(rec, dict):
-                self.summary_display.setText(rec.get("summary") or "")
-        if include_tasks:
-            self.tasks_widget.refresh()
-        self._update_extract_tasks_button()
+        self.ai_actions.refresh_from_background_queue(include_summary, include_tasks)
 
     def on_ai_error(self, err):
-        self.status_changed.emit("AI Task Failed.")
-        self.progress_changed.emit(-2)
-        QMessageBox.critical(self, "Error", err)
+        self.ai_actions.on_ai_error(err, message_box=QMessageBox)
 
     def _update_transcription_actions(self):
         text = self.text_display.toPlainText() if self.text_display else ""
