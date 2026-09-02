@@ -2,7 +2,7 @@
 
 Status: Implemented
 Owner: TBD
-Last updated: 2026-08-31
+Last updated: 2026-09-01
 
 ## Problem
 
@@ -32,7 +32,7 @@ Users need a recording detail view that lets them review and maintain the saved 
 ## Architecture Notes
 
 - UI: `src/ui/recording_widget.py` owns high-level recording tab orchestration. `src/ui/recording/transcription_panel.py`, `metadata_panel.py`, `content_tabs.py`, and `actions_bar.py` own focused UI construction. `src/ui/recording/controls.py` owns shared recording-tab button/playback-control factories so action styling, playback controls, and enabled-state defaults stay consistent.
-- UI helpers: `src/ui/recording/state.py` owns small non-visual helpers for record paths, AI-text presence, fallback labels, and settings booleans. `src/ui/recording/ai_actions.py`, `speaker_actions.py`, and `audio_trim.py` own queue-facing AI actions, speaker-label mapping, and legacy trim validation/backup helpers. `src/ui/recording/rag_indexing.py` owns recording-tab RAG auto-index checks and add-document side effects after save or direct transcription.
+- UI helpers: `src/ui/recording/state.py` owns small non-visual helpers for record paths, AI-text presence, fallback labels, and settings booleans. `src/ui/recording/record_actions.py` owns recording deletion, audio-editor/chat requests, playback adapters, and control enablement. `src/ui/recording/record_details.py` owns recording-row loading, metadata persistence, save-state reset, notifications, and RAG indexing after user saves. `src/ui/recording/transcription_actions.py` owns direct-transcription configuration, worker completion/error/status effects, persistence refresh, and post-transcription indexing. `src/ui/recording/ai_actions.py`, `speaker_actions.py`, and `audio_trim.py` own queue-facing AI actions, speaker-label mapping, and legacy trim validation/backup helpers.
 - Services: AI actions are routed through the summary task queue when available; legacy trim uses safe `.orig` backup creation before overwriting the source audio and retranscribing.
 - Persistence: `src/database.py` persists recording metadata, transcription, notes, tags, and deletion.
 - Workers/integrations: `src/ui/recording/transcription_flow.py` owns direct transcription startup, preflight, runtime worker kwargs, thread wiring, queue traces, and persistence of direct transcription results before the recording detail view refreshes.

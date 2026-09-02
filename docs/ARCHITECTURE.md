@@ -69,7 +69,7 @@ Use these boundaries when adding new features:
 - `src/ui/main_window/__init__.py` is a closed compatibility shell, not a feature owner: visual composition, tab/chat/sidebar/welcome/recording/queue/RAG behavior, navigation decisions, and shutdown cleanup live in focused modules. It intentionally retains dependency composition, minimal Qt event adapters, and legacy delegates while callers migrate.
 - `src/ui/main_window/window_lifecycle.py` owns cancellation of background work, tab cleanup, recorder stop, floating-chat disposal, and palette/resize reactions. Its callers must preserve the early-Qt-event guards in `MainWindow` and the shutdown ordering covered by stress tests.
 - `src/database.py` is now a thin compatibility facade over `src/persistence/`; preserve this public import path while callers are migrated incrementally to aggregate-specific repositories where appropriate.
-- `src/ui/recording_widget.py` is now mostly a Qt orchestration shell for recording detail and legacy audio-edit tabs. Focused recording-tab UI builders, controls, small state helpers, direct transcription flow helpers, AI action helpers, speaker mapping, audio trim helpers, and RAG indexing helpers live under `src/ui/recording/`; remaining risk is broad widget-level orchestration and persistence coupling.
+- `src/ui/recording_widget.py` is now a Qt composition shell for recording detail and legacy audio-edit tabs. Focused modules own UI builders, controls, state/trim/cleanup support, detail loading/persistence, transcription and AI orchestration, speaker mapping, and RAG indexing; public widget methods remain compatible delegates.
 - `src/ui/welcome_widget.py` mixes landing page layout, recorder configuration, microphone testing, favorites, search, today view, and settings persistence.
 - `src/ui/summary_task_queue.py` still carries queue orchestration and signal wiring complexity, but most non-Qt queue logic already lives in `src/app/summary_queue/`.
 - `src/rag_engine.py` combines vector store adapter, in-memory fallback, subprocess entrypoints, keyword fallback, Chroma compatibility, and Windows safety policy.
@@ -95,7 +95,7 @@ Do not move everything at once. Move code when a spec or change touches that are
 Recommended next cuts:
 
 1. Move RAG subprocess/keyword/vector-store adapter logic out of `RAGEngine` into smaller adapter modules.
-2. Continue shrinking `RecordingWidget` by moving deletion, open-chat, playback adapters, and persistence-facing orchestration into focused modules/services; UI builders, shared controls, direct transcription flow helpers, AI action helpers, speaker mapping, audio trim helpers, and RAG indexing helpers already live under `src/ui/recording/`.
+2. Continue shrinking `RecordingWidget` by moving dirty-state and legacy audio-edit coordination into focused modules; detail loading/persistence, deletion, open-chat, playback adapters, UI builders, shared controls, direct-transcription and AI orchestration, speaker mapping, audio trim helpers, and RAG indexing helpers already live under `src/ui/recording/`.
 3. Move `WelcomeWidget` recorder configuration and microphone test behavior into a separate component/service.
 4. Migrate selected application services to the repositories in `src/persistence/` only when doing so reduces coupling; retain `DBManager` as the compatibility boundary for existing UI code.
 
