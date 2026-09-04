@@ -15,5 +15,6 @@ Last updated: 2026-09-05
 
 ## Tests
 
-- Focused: `tests/ui/welcome/`, `tests/test_welcome_daily_summary_button.py`.
+- Focused: `tests/ui/welcome/test_landing_actions.py`, `tests/ui/welcome/`,
+  `tests/test_welcome_daily_summary_button.py`.
 - Full suite: `QT_QPA_PLATFORM=offscreen PYTHONUNBUFFERED=1 ./venv/bin/python -m pytest -q`.
