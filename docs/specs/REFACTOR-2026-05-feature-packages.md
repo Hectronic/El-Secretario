@@ -85,10 +85,8 @@ Reduce large flat modules and create expansion points for future product work wi
 - `src/ui/main_window/sidebar_actions.py` is now mostly an orchestrator over `tasks_sidebar_actions.py`, `chat_sessions_actions.py`, `calendar_sidebar_actions.py`, and `history_tags_actions.py`; future cuts should target direct wiring from `MainWindow` to those focused coordinators where practical.
 - `src/database.py` is now a thin compatibility facade over `src/persistence/`. Future persistence work should extend the aggregate-specific repository that owns it and retain facade compatibility unless an intentional API migration is planned.
 - `src/ui/recording_widget.py` is now mostly a Qt orchestration shell for the recording detail/audio-edit tab. UI panel construction, controls, state helpers, RAG indexing, record loading, direct transcription flow, AI actions, speaker mapping, and legacy trim helpers have been extracted under `src/ui/recording/`; remaining reductions should target deletion/open-chat/playback adapters and any broad persistence coupling.
-- `src/ui/welcome_widget.py` still mixes landing layout, recorder configuration, microphone tests, favorites, today view, search, and settings persistence.
 - `src/ui/summary_task_queue.py` now acts mostly as a Qt adapter; keep moving any remaining business-only helpers into `src/app/summary_queue/`.
 - `src/rag_engine.py` now owns the public RAG facade and Windows runtime-mode selection; fallback store, Chroma initialization/compatibility, result parsing/ranking, filter composition, and subprocess task handling have moved to `src/rag/`.
-- `src/ui/welcome_widget.py` still mixes landing layout and navigation signals; `src/ui/welcome/` now owns shared button constructors, capture-setting helpers, microphone-test helpers, and landing-list data formatting.
 
 ## Follow-Ups
 
