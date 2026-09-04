@@ -112,6 +112,7 @@ What user or product problem is being solved?
 | REFACTOR-2026-09-AI-ORCHESTRATION | Implemented | Recording AI and queue-refresh orchestration extraction | SPEC-004, SPEC-011 |
 | REFACTOR-2026-09-WIDGET-SUPPORT | Implemented | Recording dirty-state, trim, and cleanup extraction | SPEC-004, SPEC-005 |
 | REFACTOR-2026-09-WELCOME-MIC | Implemented | Welcome microphone runtime extraction | SPEC-001 |
+| REFACTOR-2026-09-WELCOME-CAPTURE | Implemented | Welcome capture configuration runtime extraction | SPEC-001 |
 
 ## Spec Granularity Rules
 

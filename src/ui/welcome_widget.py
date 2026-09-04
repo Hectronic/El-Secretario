@@ -29,6 +29,7 @@ from src.ui.welcome.capture_state import (
     save_capture_settings,
 )
 from src.ui.welcome.mic_runtime import WelcomeMicRuntime
+from src.ui.welcome.capture_runtime import WelcomeCaptureRuntime
 from src.ui.welcome.landing_data import (
     fetch_favorites_page,
     fetch_today_items,
@@ -127,6 +128,7 @@ class WelcomeWidget(QWidget):
         self.settings = QSettings("Hectronic", "Secretario")
         self.current_amplitude = 0.0
         self.mic_runtime = WelcomeMicRuntime(self)
+        self.capture_runtime = WelcomeCaptureRuntime(self)
         self.init_ui()
         self.load_favorites()
         self.load_today()
@@ -134,35 +136,13 @@ class WelcomeWidget(QWidget):
         self._connect_config_signals()
 
     def _load_saved_config(self):
-        load_capture_settings(
-            self.settings,
-            mic_combo=self.mic_combo,
-            model_combo=self.model_combo,
-            lang_combo=self.lang_combo,
-            diarization_check=self.diarization_check,
-            sys_audio_check=self.sys_audio_check,
-            auto_summary_check=self.auto_summary_check,
-        )
+        self.capture_runtime.load_saved_config()
         
     def _connect_config_signals(self):
-        self.mic_combo.currentIndexChanged.connect(self._save_config)
-        self.model_combo.currentIndexChanged.connect(self._save_config)
-        self.lang_combo.currentIndexChanged.connect(self._save_config)
-        self.diarization_check.toggled.connect(self._save_config)
-        self.sys_audio_check.toggled.connect(self._save_config)
-        self.auto_summary_check.toggled.connect(self._save_config)
+        self.capture_runtime.connect_config_signals()
 
     def _save_config(self):
-        save_capture_settings(
-            self.settings,
-            mic_combo=self.mic_combo,
-            model_combo=self.model_combo,
-            lang_combo=self.lang_combo,
-            diarization_check=self.diarization_check,
-            sys_audio_check=self.sys_audio_check,
-            auto_summary_check=self.auto_summary_check,
-        )
-        self.status_message_requested.emit("Recording configuration saved.")
+        self.capture_runtime.save_config()
 
     def _update_digital_clock(self):
         self.digital_clock_label.setText(QTime.currentTime().toString("HH:mm:ss"))
@@ -674,32 +654,15 @@ class WelcomeWidget(QWidget):
 
     def get_recording_config(self):
         """Get the current recording configuration."""
-        # Stop mic test if running
-        if self.test_stream is not None:
-            self.stop_mic_test()
-            
-        return build_recording_config(
-            mic_combo=self.mic_combo,
-            model_combo=self.model_combo,
-            lang_combo=self.lang_combo,
-            diarization_check=self.diarization_check,
-            sys_audio_check=self.sys_audio_check,
-            auto_summary_check=self.auto_summary_check,
-        )
+        return self.capture_runtime.get_recording_config()
 
     def on_new_recording(self):
         """Emit new recording signal with configuration."""
-        if self.settings.value("audio_rescan_before_capture", True, type=bool):
-            self.populate_mics(keep_current=True)
-        config = self.get_recording_config()
-        self.new_recording_requested.emit(config)
+        self.capture_runtime.request_capture(self.new_recording_requested)
 
     def on_import_audio(self):
         """Emit import audio signal with configuration."""
-        if self.settings.value("audio_rescan_before_capture", True, type=bool):
-            self.populate_mics(keep_current=True)
-        config = self.get_recording_config()
-        self.import_audio_requested.emit(config)
+        self.capture_runtime.request_capture(self.import_audio_requested)
 
     def create_big_button(self, text, color, callback, width=200, height=150, class_name=None):
         return create_big_button(text, color, callback, width=width, height=height, class_name=class_name)
