@@ -30,6 +30,7 @@ from src.ui.welcome.capture_state import (
 )
 from src.ui.welcome.mic_runtime import WelcomeMicRuntime
 from src.ui.welcome.capture_runtime import WelcomeCaptureRuntime
+from src.ui.welcome.landing_actions import WelcomeLandingActions
 from src.ui.welcome.landing_data import (
     fetch_favorites_page,
     fetch_today_items,
@@ -129,6 +130,7 @@ class WelcomeWidget(QWidget):
         self.current_amplitude = 0.0
         self.mic_runtime = WelcomeMicRuntime(self)
         self.capture_runtime = WelcomeCaptureRuntime(self)
+        self.landing_actions = WelcomeLandingActions(self)
         self.init_ui()
         self.load_favorites()
         self.load_today()
@@ -674,63 +676,31 @@ class WelcomeWidget(QWidget):
         return create_squircle_button(text, color, callback, width=width, height=height, class_name=class_name)
 
     def on_search_triggered(self):
-        text = self.search_input.text().strip()
-        if text:
-            self.search_triggered.emit(text)
+        self.landing_actions.trigger_search()
 
     def display_results(self, results):
-        self.results_list.clear()
-        if not results:
-            self.results_list.hide()
-            return
-        
-        self.results_list.show()
-        for result in search_result_items(results):
-            item = QListWidgetItem(result.text)
-            item.setData(Qt.ItemDataRole.UserRole, result.record_id)
-            self.results_list.addItem(item)
+        self.landing_actions.display_results(results)
 
     def on_result_clicked(self, item):
-        record_id = int(item.data(Qt.ItemDataRole.UserRole))
-        self.result_clicked.emit(record_id)
+        self.landing_actions.open_item(item)
         
     def load_favorites(self):
-        self.fav_list.clear()
-        page = fetch_favorites_page(self.db, page=self.favorites_page)
-        self.favorites_page = page.page
-
-        for favorite in page.items:
-            item = QListWidgetItem(favorite.text)
-            item.setData(Qt.ItemDataRole.UserRole, favorite.record_id)
-            self.fav_list.addItem(item)
-            
-        self.prev_btn.setEnabled(page.has_previous)
-        self.next_btn.setEnabled(page.has_next)
+        self.landing_actions.load_favorites()
 
     def prev_page(self):
-        if self.favorites_page > 0:
-            self.favorites_page -= 1
-            self.load_favorites()
+        self.landing_actions.previous_page()
 
     def next_page(self):
-        self.favorites_page += 1
-        self.load_favorites()
+        self.landing_actions.next_page()
         
     def on_fav_clicked(self, item):
-        record_id = int(item.data(Qt.ItemDataRole.UserRole))
-        self.result_clicked.emit(record_id)
+        self.landing_actions.open_item(item)
 
     def load_today(self):
-        """Load today's recordings."""
-        self.today_list.clear()
-        for record in fetch_today_items(self.db):
-            item = QListWidgetItem(record.text)
-            item.setData(Qt.ItemDataRole.UserRole, record.record_id)
-            self.today_list.addItem(item)
+        self.landing_actions.load_today()
 
     def on_today_clicked(self, item):
-        record_id = int(item.data(Qt.ItemDataRole.UserRole))
-        self.result_clicked.emit(record_id)
+        self.landing_actions.open_item(item)
 
     def save_settings(self):
         """Save current settings to QSettings."""
