@@ -26,15 +26,9 @@ from src.ui.welcome.button_factory import (
 from src.ui.welcome.capture_state import (
     build_recording_config,
     load_capture_settings,
-    populate_microphones,
     save_capture_settings,
 )
-from src.ui.welcome.mic_test import (
-    calculate_rms,
-    start_mic_test as start_mic_test_session,
-    stop_mic_test as stop_mic_test_session,
-    update_vu_meter,
-)
+from src.ui.welcome.mic_runtime import WelcomeMicRuntime
 from src.ui.welcome.landing_data import (
     fetch_favorites_page,
     fetch_today_items,
@@ -132,6 +126,7 @@ class WelcomeWidget(QWidget):
         self.test_timer.timeout.connect(self.update_test_vu)
         self.settings = QSettings("Hectronic", "Secretario")
         self.current_amplitude = 0.0
+        self.mic_runtime = WelcomeMicRuntime(self)
         self.init_ui()
         self.load_favorites()
         self.load_today()
@@ -650,58 +645,32 @@ class WelcomeWidget(QWidget):
         if Recorder is None:
             from src.audio import Recorder as _Recorder
             Recorder = _Recorder
-        populate_microphones(
-            self.mic_combo,
-            recorder_getter=lambda: Recorder,
-            skip_audio_enum=os.environ.get("EL_SECRETARIO_SKIP_AUDIO_ENUM", "").strip().lower() in {"1", "true", "yes"},
-            keep_current=keep_current,
-        )
+        self.mic_runtime.populate_mics(recorder_getter=lambda: Recorder, keep_current=keep_current)
 
     def on_rescan_mics_clicked(self):
-        self.populate_mics(keep_current=True)
-        detected = max(0, self.mic_combo.count() - 1)
-        if detected > 0:
-            self.status_message_requested.emit(f"Audio re-scan complete: {detected} input device(s) detected.")
-        else:
-            self.status_message_requested.emit("Audio re-scan complete: no input devices detected, using default.")
+        self.mic_runtime.rescan(recorder_getter=lambda: Recorder)
 
     def toggle_mic_test(self):
         """Toggle microphone testing on/off."""
-        if self.test_stream is not None:
-            self.stop_mic_test()
-        else:
-            self.start_mic_test()
+        import sounddevice as sd
+        self.mic_runtime.toggle(sd_module=sd)
 
     def start_mic_test(self):
         """Start testing the selected microphone."""
         import sounddevice as sd
-        self.test_stream = start_mic_test_session(
-            sd_module=sd,
-            device_index=self.mic_combo.currentData(),
-            audio_callback=self.test_audio_callback,
-            vu_meter=self.test_vu_meter,
-            status_label=self.test_status_label,
-            test_button=self.test_mic_btn,
-            test_timer=self.test_timer,
-        )
+        self.mic_runtime.start(sd_module=sd)
 
     def stop_mic_test(self):
         """Stop testing the microphone."""
-        self.test_stream = stop_mic_test_session(
-            stream=self.test_stream,
-            vu_meter=self.test_vu_meter,
-            status_label=self.test_status_label,
-            test_button=self.test_mic_btn,
-            test_timer=self.test_timer,
-        )
+        self.mic_runtime.stop()
 
     def test_audio_callback(self, indata, frames, time, status):
         """Callback for test audio stream."""
-        self.current_amplitude = calculate_rms(indata)
+        self.mic_runtime.audio_callback(indata, frames, time, status)
 
     def update_test_vu(self):
         """Update the test VU meter."""
-        update_vu_meter(self.test_vu_meter, self.current_amplitude)
+        self.mic_runtime.update_vu()
 
     def get_recording_config(self):
         """Get the current recording configuration."""

@@ -35,7 +35,7 @@ Users need a fast landing surface to start a recording, import audio, search, an
 - UI: `src/ui/welcome_widget.py` owns the landing widget composition and user-facing signals.
 - UI helpers: `src/ui/welcome/button_factory.py` owns the reusable button constructors used by the welcome screen.
 - Capture helpers: `src/ui/welcome/capture_state.py` owns capture-setting persistence, microphone list hydration, and recording config mapping.
-- Mic test helpers: `src/ui/welcome/mic_test.py` owns stream startup/cleanup, RMS calculation, and VU meter state updates.
+- Mic test helpers: `src/ui/welcome/mic_test.py` owns stream startup/cleanup, RMS calculation, and VU meter state updates; `src/ui/welcome/mic_runtime.py` owns the welcome-widget microphone discovery and test-session orchestration.
 - Landing data helpers: `src/ui/welcome/landing_data.py` owns search-result, favorites, and today-list query formatting for the welcome screen.
 - Main window: `src/ui/main_window/shell_actions.py` wires welcome-screen signals; `src/ui/main_window/recording_tabs.py` owns the capture-tab lifecycle from that signal through completed-capture persistence and transcription handoff. `MainWindow` keeps compatibility delegates.
 - Persistence: `QSettings` stores capture preferences and the welcome widget reads them back on startup.
