@@ -73,7 +73,7 @@ Use these boundaries when adding new features:
 - `src/ui/welcome_widget.py` is a thin signal façade. Its layout, capture runtime, microphone runtime, and landing actions live in `src/ui/welcome/`; retain its public delegates while callers migrate.
 - `src/ui/summary_task_queue.py` still carries queue orchestration and signal wiring complexity, but most non-Qt queue logic already lives in `src/app/summary_queue/`.
 - `src/rag_engine.py` combines vector store adapter, in-memory fallback, subprocess entrypoints, keyword fallback, Chroma compatibility, and Windows safety policy.
-- `src/ui/styles.py` is a large shared stylesheet module. It is useful centrally, but feature-specific styling should not keep growing there by default.
+- `src/ui/styles.py` is the theme-application and compatibility façade; static global theme sheets live in `src/ui/theme_styles.py`. Feature-specific styling should not grow in either shared module by default.
 
 ## Target Direction
 

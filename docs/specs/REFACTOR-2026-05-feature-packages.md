@@ -49,6 +49,7 @@ Reduce large flat modules and create expansion points for future product work wi
 - From active chat context sidebar construction in `src/ui/main_window/__init__.py` to `src/ui/main_window/chat_context_sidebar.py`: the helper creates and registers the non-interactive mirrored context panel while `SidebarSyncCoordinator` keeps synchronization behavior.
 - From queue-management widget logic in `src/ui/queue_management_widget.py` to `src/app/summary_queue/`: action orchestration (`actions.py`) and presentation/snapshot mapping (`presentation.py`) now live in app-level modules while the widget primarily applies mapped view state.
 - From worker startup internals in `src/ui/summary_task_queue.py` to `src/app/summary_queue/`: worker construction (`worker_factory.py`), common signal wiring (`worker_signals.py`), and queue-start lifecycle (`worker_lifecycle.py`) now live in focused modules.
+- From the global theme application facade in `src/ui/styles.py` to `src/ui/theme_styles.py`: static dark, light, and SNES sheets plus compatibility style constants now live in a dedicated theme resource module.
 - From the monolithic `src/database.py` to `src/persistence/`: schema/migrations, records/imports, chat sessions/imports, transcription logs, summaries, and tasks now have aggregate-specific repository modules. `DBManager` remains the public compatibility facade so existing callers retain their API.
 
 ## Specs Affected
