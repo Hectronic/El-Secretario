@@ -104,5 +104,9 @@ Users need long-running AI and transcription work to run sequentially, visibly, 
 
 ## Open Questions
 
-- Should task payloads become dataclasses before moving more queue logic out of Qt?
+- Follow-up candidate: define a dedicated queue-task contract (`SPEC-015` or the
+  next available spec) to migrate worker-facing task dictionaries to dataclasses.
+  This must be an explicit compatibility migration covering queue admission,
+  workers, completion handling, persistence actions, and external integrations;
+  do not fold it into maintenance changes to the Qt adapter.
 - Should RAG reindexing eventually move from `src/app/summary_queue/rag_reindex.py` to a broader RAG service package if non-queue callers need it?
