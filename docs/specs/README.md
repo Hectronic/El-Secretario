@@ -115,6 +115,7 @@ What user or product problem is being solved?
 | REFACTOR-2026-09-WELCOME-CAPTURE | Implemented | Welcome capture configuration runtime extraction | SPEC-001 |
 | REFACTOR-2026-09-WELCOME-LANDING | Implemented | Welcome landing data and navigation extraction | SPEC-001 |
 | REFACTOR-2026-09-WELCOME-LAYOUT | Implemented | Welcome visual composition and responsive layout extraction | SPEC-001 |
+| REFACTOR-2026-09-SUMMARY-COMPLETION | Implemented | Summary queue completion-action policy extraction | SPEC-011, SPEC-012 |
 
 ## Spec Granularity Rules
 

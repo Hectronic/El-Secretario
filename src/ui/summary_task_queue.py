@@ -19,6 +19,7 @@ from typing import Deque, Dict, Optional, Tuple, Any, List
 from PyQt6.QtCore import QObject, pyqtSignal, QSettings, QTimer
 
 from src.app.summary_queue.completion import handle_worker_completion
+from src.app.summary_queue.completion_actions import QueueCompletionActionCoordinator
 from src.app.summary_queue.history import QueueHistory
 from src.app.summary_queue.helpers import (
     parse_task_extraction_result as _parse_task_extraction_result,
@@ -343,19 +344,10 @@ class SummaryTaskQueueManager(QObject):
 
     def _on_generator_recording_summary_completed(self, record_id: int, title: str):
         try:
-            rec = self.db.fetch_record(int(record_id))
-            if not isinstance(rec, dict):
-                return
-            ai_text = self.db.get_record_ai_text(int(record_id))
-            if not str(ai_text or "").strip():
-                return
-            source = (self._current_task or {}).get("source") or "summary"
-            self.enqueue_task_extraction(
-                int(record_id),
-                ai_text,
-                rec.get("tags") or "",
-                title or rec.get("title") or f"Recording {record_id}",
-                source=source,
+            self._completion_action_coordinator().enqueue_tasks_for_completed_recording(
+                record_id,
+                title,
+                current_task=self._current_task,
             )
         except Exception:
             pass
@@ -368,33 +360,23 @@ class SummaryTaskQueueManager(QObject):
 
         try:
             logging.info("Queue: applying completion actions for task type=%s.", task.get("type"))
-            for action in handle_worker_completion(self.db, task, result):
-                self._apply_completion_action(action)
+            self._completion_action_coordinator().apply(
+                handle_worker_completion(self.db, task, result)
+            )
         except Exception as e:
             logging.error("Queue: persistence error for task type=%s: %s", task.get("type"), e, exc_info=True)
 
     def _apply_completion_action(self, action: Dict):
-        action_type = action.get("type")
-        logging.debug("Queue: applying completion action type=%s.", action_type)
-        if action_type == "enqueue_task_extraction":
-            self.enqueue_task_extraction(
-                action["record_id"],
-                action.get("text", ""),
-                action.get("tags", ""),
-                action.get("title", ""),
-                source=action.get("source") or "summary",
-            )
-        elif action_type == "enqueue_recording_summary":
-            self.enqueue_recording_summary(
-                action["record_id"],
-                action.get("text", ""),
-                action.get("title", ""),
-                source=action.get("source") or "transcription",
-            )
-        elif action_type == "status":
-            self.task_status_update.emit(action.get("message", ""))
-        else:
-            logging.debug("Queue: ignored unknown completion action type=%s.", action_type)
+        """Compatibility delegate for integrations using the former private hook."""
+        self._completion_action_coordinator().apply((action,))
+
+    def _completion_action_coordinator(self) -> QueueCompletionActionCoordinator:
+        return QueueCompletionActionCoordinator(
+            self.db,
+            enqueue_task_extraction=self.enqueue_task_extraction,
+            enqueue_recording_summary=self.enqueue_recording_summary,
+            emit_status=self.task_status_update.emit,
+        )
 
     def _on_worker_error(self, error_msg: str):
         task = self._current_task or {}

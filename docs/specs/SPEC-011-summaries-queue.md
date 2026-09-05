@@ -2,7 +2,7 @@
 
 Status: Implemented
 Owner: TBD
-Last updated: 2026-08-31
+Last updated: 2026-09-05
 
 ## Problem
 
@@ -45,6 +45,7 @@ Users need long-running AI and transcription work to run sequentially, visibly, 
 - Runtime/thread helpers: `src/app/summary_queue/runtime.py` owns worker stop/cleanup utilities, retry-wait message shaping, and runtime stats aggregation.
 - Qt thread wrappers: `src/app/summary_queue/threads.py` owns `RAGReindexThread` so `src/ui/summary_task_queue.py` stays focused on adapter orchestration.
 - Completion handling: `src/app/summary_queue/completion.py` owns post-worker persistence and returns actions for the Qt adapter to apply.
+- Completion-action policy: `src/app/summary_queue/completion_actions.py` dispatches normalized follow-ups and the recording-summary-to-task-extraction chain without depending on Qt.
 - Worker config: `src/app/summary_queue/workers.py` owns transcription worker kwargs preparation from settings and queued task data.
 - Worker creation: `src/app/summary_queue/worker_factory.py` owns per-task worker construction and task-type specific signal hookups.
 - Worker signal wiring: `src/app/summary_queue/worker_signals.py` owns common worker signal wiring (`error`, `finished`, optional status/retry).
@@ -93,6 +94,7 @@ Users need long-running AI and transcription work to run sequentially, visibly, 
 - 2026-08-29: moved summary queue status and completion-view synchronization from `src/ui/main_window/__init__.py` to `src/ui/main_window/summary_queue_status.py`, preserving the `MainWindow` API used by startup and existing UI integrations.
 - 2026-08-30: moved startup summary scheduling from `src/ui/main_window/__init__.py` to `src/ui/main_window/runtime_startup.py`, preserving its opt-in settings and bootstrap order.
 - 2026-08-31: moved the welcome-screen current-day summary request to `src/ui/main_window/runtime_startup.py` while preserving its queue payload.
+- 2026-09-05: moved completion follow-up dispatch and the recording-summary task-extraction chain out of `SummaryTaskQueueManager` into `src/app/summary_queue/completion_actions.py`.
 
 ## Open Questions
 
