@@ -79,8 +79,8 @@ Reduce large flat modules and create expansion points for future product work wi
 
 ## Remaining Hotspots
 
-- `src/ui/main_window/__init__.py` remains a large shell and should keep shrinking through coordinators and focused right-sidebar builders.
-- `src/ui/main_window/bootstrap.py` now isolates the startup sequence, but the shell still owns tab lifecycle and broad app orchestration.
+- `src/ui/main_window/__init__.py` is the public Qt façade: startup state, lifecycle guards, and compatibility delegates remain there while feature behavior is owned by focused coordinators.
+- `src/ui/main_window/bootstrap.py` owns the deterministic startup sequence; tab lifecycle and feature orchestration are delegated to focused coordinators.
 - `src/ui/main_window/content_tabs.py` now owns note/chat/summary/tools/tasks/collections/calendar tab lifecycle; remaining `MainWindow` shell reduction should focus on cross-feature orchestration and legacy wrappers.
 - `src/ui/main_window/sidebar_actions.py` is now mostly an orchestrator over `tasks_sidebar_actions.py`, `chat_sessions_actions.py`, `calendar_sidebar_actions.py`, and `history_tags_actions.py`; future cuts should target direct wiring from `MainWindow` to those focused coordinators where practical.
 - `src/database.py` is now a thin compatibility facade over `src/persistence/`. Future persistence work should extend the aggregate-specific repository that owns it and retain facade compatibility unless an intentional API migration is planned.
