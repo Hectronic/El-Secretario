@@ -44,6 +44,7 @@ Users need long-running AI and transcription work to run sequentially, visibly, 
 - Queue execution state: `src/app/summary_queue/state.py` owns pending ordering, deduplication, and active-task transitions without depending on Qt.
 - RAG reindexing: `src/app/summary_queue/rag_reindex.py` owns candidate selection, existing-index checks, metadata building, and the indexing loop.
 - Runtime/thread helpers: `src/app/summary_queue/runtime.py` owns worker stop/cleanup utilities, retry-wait message shaping, and runtime stats aggregation.
+- Retry wait state: `src/app/summary_queue/wait_state.py` owns retry countdown transitions while the Qt adapter owns timer scheduling and signals.
 - Qt thread wrappers: `src/app/summary_queue/threads.py` owns `RAGReindexThread` so `src/ui/summary_task_queue.py` stays focused on adapter orchestration.
 - Completion handling: `src/app/summary_queue/completion.py` owns post-worker persistence and returns actions for the Qt adapter to apply.
 - Completion-action policy: `src/app/summary_queue/completion_actions.py` dispatches normalized follow-ups and the recording-summary-to-task-extraction chain without depending on Qt.
@@ -97,6 +98,7 @@ Users need long-running AI and transcription work to run sequentially, visibly, 
 - 2026-08-31: moved the welcome-screen current-day summary request to `src/ui/main_window/runtime_startup.py` while preserving its queue payload.
 - 2026-09-05: moved completion follow-up dispatch and the recording-summary task-extraction chain out of `SummaryTaskQueueManager` into `src/app/summary_queue/completion_actions.py`.
 - 2026-09-05: moved sequential queue state and deduplication out of `SummaryTaskQueueManager` into `src/app/summary_queue/state.py`, retaining compatible private views for existing integrations.
+- 2026-09-05: moved retry-wait countdown transitions out of `SummaryTaskQueueManager` into `src/app/summary_queue/wait_state.py`.
 
 ## Open Questions
 

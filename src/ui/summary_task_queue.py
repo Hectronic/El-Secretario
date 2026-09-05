@@ -31,6 +31,7 @@ from src.app.summary_queue.runtime import (
     stop_worker,
 )
 from src.app.summary_queue.state import QueueExecutionState
+from src.app.summary_queue.wait_state import QueueRetryWaitState
 from src.app.summary_queue.tasks import (
     build_daily_summary_task,
     build_rag_reindex_task,
@@ -78,8 +79,7 @@ class SummaryTaskQueueManager(QObject):
         self._zombie_workers = [] 
         self.db = DBManager()
         self.rag_engine = None
-        self._wait_remaining_seconds = 0
-        self._wait_description = ""
+        self._wait_state = QueueRetryWaitState()
         self._wait_timer = QTimer(self)
         self._wait_timer.setInterval(1000)
         self._wait_timer.timeout.connect(self._tick_wait_timer)
@@ -134,7 +134,7 @@ class SummaryTaskQueueManager(QObject):
         return self._current_task
 
     def get_wait_state(self) -> Tuple[bool, int, str]:
-        return self._wait_remaining_seconds > 0, int(self._wait_remaining_seconds), self._wait_description
+        return self._wait_state.snapshot()
 
     def get_session_history(self) -> List[Dict]:
         """Return session execution history (newest first)."""
@@ -443,27 +443,21 @@ class SummaryTaskQueueManager(QObject):
             total_attempts,
             error_text,
         )
-        self._wait_remaining_seconds = wait
-        self._wait_description = description
-        self.wait_state_changed.emit(True, self._wait_remaining_seconds, self._wait_description)
+        self._wait_state.begin(wait, description)
+        self.wait_state_changed.emit(*self._wait_state.snapshot())
         if not self._wait_timer.isActive():
             self._wait_timer.start()
         self.task_status_update.emit(status_message)
         logging.info("Queue: retry wait state set (%ss) for attempt %s/%s.", wait, attempt + 1, total_attempts)
 
     def _tick_wait_timer(self):
-        if self._wait_remaining_seconds <= 0:
+        if not self._wait_state.tick():
             self._clear_wait_state()
             return
-        self._wait_remaining_seconds -= 1
-        if self._wait_remaining_seconds <= 0:
-            self._clear_wait_state()
-            return
-        self.wait_state_changed.emit(True, self._wait_remaining_seconds, self._wait_description)
+        self.wait_state_changed.emit(*self._wait_state.snapshot())
 
     def _clear_wait_state(self):
-        self._wait_remaining_seconds = 0
-        self._wait_description = ""
+        self._wait_state.clear()
         if self._wait_timer.isActive():
             self._wait_timer.stop()
         self.wait_state_changed.emit(False, 0, "")
