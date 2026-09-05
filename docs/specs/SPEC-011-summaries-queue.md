@@ -41,6 +41,7 @@ Users need long-running AI and transcription work to run sequentially, visibly, 
 - Application helpers: `src/app/summary_queue/helpers.py` owns non-Qt helper logic for task extraction parsing and audio duration probing.
 - Task factories: `src/app/summary_queue/tasks.py` owns queue task payload construction, source normalization, and dedupe key calculation.
 - Queue history: `src/app/summary_queue/history.py` owns session history storage, newest-first projection, and consecutive status-trace deduplication.
+- Queue execution state: `src/app/summary_queue/state.py` owns pending ordering, deduplication, and active-task transitions without depending on Qt.
 - RAG reindexing: `src/app/summary_queue/rag_reindex.py` owns candidate selection, existing-index checks, metadata building, and the indexing loop.
 - Runtime/thread helpers: `src/app/summary_queue/runtime.py` owns worker stop/cleanup utilities, retry-wait message shaping, and runtime stats aggregation.
 - Qt thread wrappers: `src/app/summary_queue/threads.py` owns `RAGReindexThread` so `src/ui/summary_task_queue.py` stays focused on adapter orchestration.
@@ -95,6 +96,7 @@ Users need long-running AI and transcription work to run sequentially, visibly, 
 - 2026-08-30: moved startup summary scheduling from `src/ui/main_window/__init__.py` to `src/ui/main_window/runtime_startup.py`, preserving its opt-in settings and bootstrap order.
 - 2026-08-31: moved the welcome-screen current-day summary request to `src/ui/main_window/runtime_startup.py` while preserving its queue payload.
 - 2026-09-05: moved completion follow-up dispatch and the recording-summary task-extraction chain out of `SummaryTaskQueueManager` into `src/app/summary_queue/completion_actions.py`.
+- 2026-09-05: moved sequential queue state and deduplication out of `SummaryTaskQueueManager` into `src/app/summary_queue/state.py`, retaining compatible private views for existing integrations.
 
 ## Open Questions
 

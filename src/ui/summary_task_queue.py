@@ -12,9 +12,8 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-from collections import deque
 import logging
-from typing import Deque, Dict, Optional, Tuple, Any, List
+from typing import Dict, Optional, Tuple, Any, List
 
 from PyQt6.QtCore import QObject, pyqtSignal, QSettings, QTimer
 
@@ -31,6 +30,7 @@ from src.app.summary_queue.runtime import (
     collect_runtime_stats,
     stop_worker,
 )
+from src.app.summary_queue.state import QueueExecutionState
 from src.app.summary_queue.tasks import (
     build_daily_summary_task,
     build_rag_reindex_task,
@@ -74,9 +74,7 @@ class SummaryTaskQueueManager(QObject):
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self._queue: Deque[Dict] = deque()
-        self._current_task: Optional[Dict] = None
-        self._current_worker: Optional[Any] = None
+        self._state = QueueExecutionState()
         self._zombie_workers = [] 
         self.db = DBManager()
         self.rag_engine = None
@@ -86,7 +84,34 @@ class SummaryTaskQueueManager(QObject):
         self._wait_timer.setInterval(1000)
         self._wait_timer.timeout.connect(self._tick_wait_timer)
         self._history = QueueHistory(max_entries=300)
-        self._current_task_had_error = False
+    @property
+    def _queue(self):
+        """Compatibility view of pending tasks for existing integrations/tests."""
+        return self._state.pending
+
+    @property
+    def _current_task(self):
+        return self._state.current_task
+
+    @_current_task.setter
+    def _current_task(self, task):
+        self._state.current_task = task
+
+    @property
+    def _current_worker(self):
+        return self._state.current_worker
+
+    @_current_worker.setter
+    def _current_worker(self, worker):
+        self._state.current_worker = worker
+
+    @property
+    def _current_task_had_error(self):
+        return self._state.current_task_had_error
+
+    @_current_task_had_error.setter
+    def _current_task_had_error(self, had_error):
+        self._state.current_task_had_error = bool(had_error)
 
     @property
     def current_worker(self):
@@ -94,10 +119,7 @@ class SummaryTaskQueueManager(QObject):
 
     @property
     def pending_count(self) -> int:
-        count = len(self._queue)
-        if self._current_task:
-            count += 1
-        return count
+        return self._state.pending_count
 
     @property
     def is_running(self) -> bool:
@@ -128,8 +150,7 @@ class SummaryTaskQueueManager(QObject):
 
     def remove_task_at(self, index: int) -> bool:
         """Remove a task from the pending queue at the given index."""
-        if 0 <= index < len(self._queue):
-            del self._queue[index]
+        if self._state.remove_pending_at(index):
             self._emit_queue_state()
             logging.info("Queue: removed pending task at index=%s (remaining=%s).", index, len(self._queue))
             return True
@@ -138,10 +159,7 @@ class SummaryTaskQueueManager(QObject):
 
     def move_task(self, from_index: int, to_index: int) -> bool:
         """Move a task within the pending queue."""
-        if 0 <= from_index < len(self._queue) and 0 <= to_index < len(self._queue):
-            task = self._queue[from_index]
-            del self._queue[from_index]
-            self._queue.insert(to_index, task)
+        if self._state.move_pending(from_index, to_index):
             self._emit_queue_state()
             logging.info("Queue: moved pending task from %s to %s.", from_index, to_index)
             return True
@@ -215,20 +233,18 @@ class SummaryTaskQueueManager(QObject):
         self.task_status_update.emit(msg)
 
     def _enqueue_unique_task(self, task: Dict) -> bool:
-        dedupe_key = self._task_key(task)
-
-        if self._current_task and self._task_key(self._current_task) == dedupe_key:
+        duplicate_state = self._state.duplicate_state(task)
+        if duplicate_state == "running":
             self.task_skipped.emit(task, "Task already running.")
             self._append_history("skipped", task, "Task already running.")
             logging.info("Queue: skipped duplicate running task type=%s.", task.get("type"))
             return False
 
-        for queued_task in self._queue:
-            if self._task_key(queued_task) == dedupe_key:
-                self.task_skipped.emit(task, "Task already queued.")
-                self._append_history("skipped", task, "Task already queued.")
-                logging.info("Queue: skipped duplicate queued task type=%s.", task.get("type"))
-                return False
+        if duplicate_state == "queued":
+            self.task_skipped.emit(task, "Task already queued.")
+            self._append_history("skipped", task, "Task already queued.")
+            logging.info("Queue: skipped duplicate queued task type=%s.", task.get("type"))
+            return False
 
         self._queue.append(task)
         logging.info("Queue: enqueued task type=%s (pending=%s).", task.get("type"), len(self._queue))
@@ -239,15 +255,11 @@ class SummaryTaskQueueManager(QObject):
         return True
 
     def cancel_all(self):
-        pending_removed = len(self._queue)
-        current_task = self._current_task
-        self._queue.clear()
+        worker = self._current_worker
+        pending_removed, current_task = self._state.cancel_all()
         logging.info("Queue: cancel_all requested (pending_removed=%s, had_current=%s).", pending_removed, bool(current_task))
-        if self._current_worker and self._current_worker.isRunning():
-            stop_worker(self._current_worker, log_context="cancel_all")
-        self._current_worker = None
-        self._current_task = None
-        self._current_task_had_error = False
+        if worker and worker.isRunning():
+            stop_worker(worker, log_context="cancel_all")
         self._clear_wait_state()
         self.task_status_update.emit("Queue stopped by user.")
         if current_task:
@@ -289,9 +301,9 @@ class SummaryTaskQueueManager(QObject):
             self._emit_queue_state()
             return
 
-        task = self._queue.popleft()
-        self._current_task = task
-        self._current_task_had_error = False
+        task = self._state.take_next()
+        if task is None:
+            return
         self._clear_wait_state()
 
         # Exactly one worker is started at a time; this is the sequential execution gate.
@@ -405,18 +417,15 @@ class SummaryTaskQueueManager(QObject):
             self.history_changed.emit(len(self._history))
 
     def _on_worker_completely_finished(self):
-        task = self._current_task
-        worker = self._current_worker
-        self._current_worker = None
-        self._current_task = None
+        had_error = self._current_task_had_error
+        task, worker = self._state.finish_current()
         self._history.clear_status_dedup()
         self._clear_wait_state()
         if task:
-            if not self._current_task_had_error:
+            if not had_error:
                 self._append_history("finished", task)
                 logging.info("Queue: task finished successfully type=%s.", task.get("type"))
             self.task_finished.emit(task)
-        self._current_task_had_error = False
         if worker:
             worker.deleteLater()
             self._zombie_workers.append(worker)
