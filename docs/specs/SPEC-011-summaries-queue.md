@@ -40,6 +40,7 @@ Users need long-running AI and transcription work to run sequentially, visibly, 
 - Qt adapter: `src/ui/summary_task_queue.py` owns Qt signals, `QThread` wiring, worker lifecycle, cancellation, and UI-facing queue state.
 - Application helpers: `src/app/summary_queue/helpers.py` owns non-Qt helper logic for task extraction parsing and audio duration probing.
 - Task factories: `src/app/summary_queue/tasks.py` owns queue task payload construction, source normalization, and dedupe key calculation.
+- Task admission: `src/app/summary_queue/admission.py` owns task validation, extraction-title resolution, and submission policy without depending on Qt.
 - Queue history: `src/app/summary_queue/history.py` owns session history storage, newest-first projection, and consecutive status-trace deduplication.
 - Queue execution state: `src/app/summary_queue/state.py` owns pending ordering, deduplication, and active-task transitions without depending on Qt.
 - RAG reindexing: `src/app/summary_queue/rag_reindex.py` owns candidate selection, existing-index checks, metadata building, and the indexing loop.
@@ -99,6 +100,7 @@ Users need long-running AI and transcription work to run sequentially, visibly, 
 - 2026-09-05: moved completion follow-up dispatch and the recording-summary task-extraction chain out of `SummaryTaskQueueManager` into `src/app/summary_queue/completion_actions.py`.
 - 2026-09-05: moved sequential queue state and deduplication out of `SummaryTaskQueueManager` into `src/app/summary_queue/state.py`, retaining compatible private views for existing integrations.
 - 2026-09-05: moved retry-wait countdown transitions out of `SummaryTaskQueueManager` into `src/app/summary_queue/wait_state.py`.
+- 2026-09-05: moved queue task admission and validation out of `SummaryTaskQueueManager` into `src/app/summary_queue/admission.py`.
 
 ## Open Questions
 

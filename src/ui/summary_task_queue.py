@@ -19,6 +19,7 @@ from PyQt6.QtCore import QObject, pyqtSignal, QSettings, QTimer
 
 from src.app.summary_queue.completion import handle_worker_completion
 from src.app.summary_queue.completion_actions import QueueCompletionActionCoordinator
+from src.app.summary_queue.admission import QueueTaskAdmissionCoordinator
 from src.app.summary_queue.history import QueueHistory
 from src.app.summary_queue.helpers import (
     parse_task_extraction_result as _parse_task_extraction_result,
@@ -32,16 +33,7 @@ from src.app.summary_queue.runtime import (
 )
 from src.app.summary_queue.state import QueueExecutionState
 from src.app.summary_queue.wait_state import QueueRetryWaitState
-from src.app.summary_queue.tasks import (
-    build_daily_summary_task,
-    build_rag_reindex_task,
-    build_recording_summary_task,
-    build_task_extraction_task,
-    build_transcription_task,
-    build_weekly_summary_task,
-    normalize_source,
-    task_key,
-)
+from src.app.summary_queue.tasks import normalize_source, task_key
 from src.app.summary_queue.worker_factory import build_queue_worker
 from src.app.summary_queue.worker_signals import connect_queue_worker_signals
 from src.app.summary_queue.worker_lifecycle import start_queue_worker_lifecycle
@@ -172,51 +164,26 @@ class SummaryTaskQueueManager(QObject):
         return False
 
     def enqueue_daily_summary(self, summary_data: Dict) -> bool:
-        task = build_daily_summary_task(summary_data)
-        if task is None:
-            self.task_skipped.emit(summary_data, "Daily summary task missing date.")
-            self._append_history("skipped", summary_data, "Daily summary task missing date.")
-            logging.warning("Queue: daily summary skipped because date is missing.")
-            return False
-        return self._enqueue_unique_task(task)
+        return self._task_admission_coordinator().enqueue_daily_summary(summary_data)
 
     def enqueue_recording_summary(self, record_id: int, text: str, title: str, source: str = "manual") -> bool:
-        return self._enqueue_unique_task(
-            build_recording_summary_task(record_id, text, title, source)
-        )
+        return self._task_admission_coordinator().enqueue_recording_summary(record_id, text, title, source)
 
     def enqueue_weekly_summary(self, week_sunday: str, text: str, tags_filter: str = "", source: str = "manual") -> bool:
-        return self._enqueue_unique_task(
-            build_weekly_summary_task(week_sunday, text, tags_filter, source)
-        )
+        return self._task_admission_coordinator().enqueue_weekly_summary(week_sunday, text, tags_filter, source)
 
     def enqueue_task_extraction(self, record_id: int, text: str, tags: str, title: str = "", force: bool = False, source: str = "manual") -> bool:
-        if self.db.has_ai_tasks_for_record(record_id) and not force:
-            task = build_task_extraction_task(record_id, title=title, source=source)
-            self.task_skipped.emit(task, "Tasks already generated for this record.")
-            self._append_history("skipped", task, "Tasks already generated for this record.")
-            logging.info("Queue: task extraction skipped for record_id=%s (AI tasks already exist).", record_id)
-            return False
-
-        resolved_title = (title or "").strip()
-        if not resolved_title:
-            rec = self.db.fetch_record(record_id)
-            if isinstance(rec, dict):
-                resolved_title = (rec.get("title") or f"Recording {record_id}").strip()
-            else:
-                resolved_title = f"Recording {record_id}"
-
-        return self._enqueue_unique_task(
-            build_task_extraction_task(record_id, text, tags, resolved_title, force, source)
+        return self._task_admission_coordinator().enqueue_task_extraction(
+            record_id, text, tags, title, force, source
         )
 
     def enqueue_transcription(self, record_id: int, audio_path: str, model_size: str = "base", language: str = None, diarization: bool = False, title: str = "", source: str = "manual") -> bool:
-        return self._enqueue_unique_task(
-            build_transcription_task(record_id, audio_path, model_size, language, diarization, title, source)
+        return self._task_admission_coordinator().enqueue_transcription(
+            record_id, audio_path, model_size, language, diarization, title, source
         )
 
     def enqueue_rag_reindex(self, scope: str = "all", source: str = "manual") -> bool:
-        return self._enqueue_unique_task(build_rag_reindex_task(scope, source))
+        return self._task_admission_coordinator().enqueue_rag_reindex(scope, source)
 
     def set_rag_engine(self, rag_engine) -> None:
         self.rag_engine = rag_engine
@@ -288,6 +255,17 @@ class SummaryTaskQueueManager(QObject):
 
     def _normalize_source(self, source: Optional[str], default: str = "manual") -> str:
         return normalize_source(source, default)
+
+    def _task_admission_coordinator(self) -> QueueTaskAdmissionCoordinator:
+        return QueueTaskAdmissionCoordinator(
+            self.db,
+            submit=self._enqueue_unique_task,
+            skip=self._skip_task,
+        )
+
+    def _skip_task(self, task: Dict, reason: str) -> None:
+        self.task_skipped.emit(task, reason)
+        self._append_history("skipped", task, reason)
 
     def _emit_queue_state(self):
         self.queue_changed.emit(self.pending_count, self._current_worker is not None)
