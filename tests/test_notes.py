@@ -54,8 +54,7 @@ class TestNotes(unittest.TestCase):
 
     def test_note_widget_save(self):
         """Test saving a note from the NoteWidget."""
-        widget = NoteWidget(rag_engine=None)
-        widget.db = self.db # Use test DB
+        widget = NoteWidget(rag_engine=None, persistence=self.db)
         
         widget.title_input.setText("Widget Note")
         widget.content_editor.setPlainText("Widget Content")
@@ -69,6 +68,13 @@ class TestNotes(unittest.TestCase):
         self.assertEqual(len(all_records), 1)
         self.assertEqual(all_records[0]['title'], "Widget Note")
         self.assertEqual(all_records[0]['type'], "note")
+
+    def test_note_widget_uses_injected_persistence(self):
+        widget = NoteWidget(rag_engine=None, persistence=self.db)
+        try:
+            self.assertIs(widget.db, self.db)
+        finally:
+            widget.deleteLater()
 
     def test_welcome_widget_new_note_signal(self):
         """Test that WelcomeWidget emits new_note_requested signal."""
