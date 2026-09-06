@@ -23,9 +23,9 @@ class SummaryBatchWidget(QWidget):
     Widget for batch generating summaries for pending days, weeks, and recordings.
     """
     
-    def __init__(self, task_queue=None, parent=None):
+    def __init__(self, task_queue=None, parent=None, persistence=None):
         super().__init__(parent)
-        self.db = DBManager()
+        self.db = persistence if persistence is not None else DBManager()
         self.task_queue = task_queue
         self.generator = None
         self.is_processing = False
@@ -222,7 +222,8 @@ class SummaryBatchWidget(QWidget):
             generate_weekly=self.chk_weekly.isChecked(),
             generate_recordings=self.chk_recordings.isChecked(),
             exclude_today=self.chk_exclude_today.isChecked(),
-            exclude_current_week=self.chk_exclude_curr_week.isChecked()
+            exclude_current_week=self.chk_exclude_curr_week.isChecked(),
+            persistence=self.db,
         )
         
         self.generator.progress.connect(self.on_progress)
