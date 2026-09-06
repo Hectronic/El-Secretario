@@ -3,6 +3,14 @@ import pytest
 from unittest.mock import MagicMock, patch
 from src.summary_generator import SummaryGenerator
 
+
+def test_summary_generator_accepts_injected_persistence_port():
+    persistence = MagicMock()
+
+    generator = SummaryGenerator(persistence=persistence)
+
+    assert generator.db is persistence
+
 @pytest.fixture
 def mock_db():
     with patch('src.summary_generator.DBManager') as mock:

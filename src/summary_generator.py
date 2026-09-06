@@ -45,7 +45,8 @@ class SummaryGenerator(QThread):
                  exclude_today: bool = True,
                  exclude_current_week: bool = True,
                  specific_dates: Optional[List[str]] = None,
-                 parent=None):
+                 parent=None,
+                 persistence=None):
         """
         Initialize the summary generator.
         """
@@ -57,7 +58,9 @@ class SummaryGenerator(QThread):
         self.exclude_today = exclude_today
         self.exclude_current_week = exclude_current_week
         self.specific_dates = specific_dates
-        self.db = DBManager()
+        # The compatibility facade remains the default while callers can inject
+        # the aggregate persistence port used by summary workflows.
+        self.db = persistence if persistence is not None else DBManager()
         self._cancelled = False
         
     def cancel(self):

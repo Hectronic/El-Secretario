@@ -57,7 +57,7 @@ Users need long-running AI and transcription work to run sequentially, visibly, 
 - Main-window queue presentation: `src/ui/main_window/summary_queue_status.py` owns the status bar, queue-tab opening, queue-signal subscriptions, progress/status rendering, and refresh of affected open views. `MainWindow` keeps compatibility delegates for existing callers.
 - Startup scheduling: `src/ui/main_window/runtime_startup.py` owns opt-in scheduling of the prior weekly or latest missing daily summary. `MainWindow` keeps compatibility delegates used by bootstrap.
 - Daily summary shortcut: `src/ui/main_window/runtime_startup.py` also owns the current-day summary queue request emitted by the welcome screen.
-- Persistence: `src/database.py` owns summary, transcription, and task persistence.
+- Persistence: summary workflows accept an injected aggregate persistence port; `src/database.py` remains the compatible default facade while repositories under `src/persistence/` own the aggregate implementations.
 - Workers/integrations: `src/summary_generator.py`, `src/ai_assistant.py`, `src/ai_provider.py`, `src/worker_components/transcriber_thread.py`, and RAG engine integrations provide the actual work.
 - AI provider retry policy: `src/ai_provider.py` retries cloud-provider transient failures conservatively and treats Gemini quota/rate-limit errors as terminal for the current operation.
 - Platform constraints: queued transcription must preserve backend, device, compute type, `force_cpu`, diarization, and CUDA cleanup policy.
@@ -101,6 +101,7 @@ Users need long-running AI and transcription work to run sequentially, visibly, 
 - 2026-09-05: moved sequential queue state and deduplication out of `SummaryTaskQueueManager` into `src/app/summary_queue/state.py`, retaining compatible private views for existing integrations.
 - 2026-09-05: moved retry-wait countdown transitions out of `SummaryTaskQueueManager` into `src/app/summary_queue/wait_state.py`.
 - 2026-09-05: moved queue task admission and validation out of `SummaryTaskQueueManager` into `src/app/summary_queue/admission.py`.
+- 2026-09-06: made `SummaryGenerator` accept injected persistence so summary workflows can migrate incrementally away from direct `DBManager` construction.
 
 ## Open Questions
 
