@@ -42,7 +42,7 @@ Users need to ask questions over selected recordings, notes, notebooks, tags, da
 
 ## Architecture Notes
 
-- Chat shell: `src/ui/chat_widget.py` owns the visible chat widget, user input, worker signal wiring, public chat signals, context panel composition, session lifecycle calls, and high-level UI orchestration.
+- Chat shell: `src/ui/chat_widget.py` owns the visible chat façade, user input, worker signal wiring, public chat signals, session lifecycle calls, and high-level UI orchestration. `src/ui/chat/layout.py` owns visual composition/theme application; the shell accepts injected chat and notebook persistence ports while retaining compatible defaults.
 - Context building: `src/ui/chat/context_builder.py` owns chat context text assembly from notebooks, forced records, date/week filters, tags, tasks, and RAG fragments, plus context serialization for sessions.
 - Context parsing: `src/ui/chat/context_state.py` normalizes stored context JSON into UI-ready date, tag, notebook, and forced-record state.
 - Sessions: `src/ui/chat/session_state.py`, `src/ui/chat/session_loader.py`, and `src/ui/chat/session_applier.py` own session naming, save/update payloads, malformed JSON handling, and applying loaded messages/contexts to a widget.
@@ -59,7 +59,7 @@ Users need to ask questions over selected recordings, notes, notebooks, tags, da
 - Unit: context text assembly, context serialization/parsing, session naming/payload persistence, loaded-session application, message rendering, theme styles, header state, and busy state.
 - Dialog/UI: add-context dialog selection and context manager panel state round trips.
 - Main-window UI: floating chat host resizing, float/dock/minimize/restore/close lifecycle, chat sidebar open/open-floating/delete actions, and content-tab chat reuse.
-- Integration: `ChatWidget` sends messages with recording/week/tag/task context, persists sessions, restores loaded sessions, and updates styles on theme changes.
+- Integration: `ChatWidget` sends messages with recording/week/tag/task context, persists sessions, restores loaded sessions, and updates styles on theme changes. `tests/integration/test_chat_session_persistence.py` verifies the real SQLite response → session → restored-context round trip.
 - Manual: start chats from recording, calendar/week, tag, notebook, and search flows; float/dock/minimize/restore; delete an open session; verify light/dark readability.
 
 ## Documentation
@@ -72,6 +72,7 @@ Users need to ask questions over selected recordings, notes, notebooks, tags, da
 
 - 2026-06-27: created the dedicated chat spec for the existing `src/ui/chat/` helper split and main-window floating/session coordinators.
 - 2026-06-27: recorded `src/ui/chat_widget.py` as the chat shell and `src/ui/main_window/chat_floating.py` plus `chat_sessions_actions.py` as the main-window ownership boundary for floating and sidebar session behavior.
+- 2026-09-06: moved chat visual composition and theme application to `src/ui/chat/layout.py` and added injected persistence ports plus a real SQLite session round-trip integration contract.
 
 ## Open Questions
 
