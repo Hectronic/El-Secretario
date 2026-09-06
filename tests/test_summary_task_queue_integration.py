@@ -221,8 +221,10 @@ def test_queue_component_skips_fatal_transcription_and_continues(qtbot, monkeypa
 
     skipped_events = []
     failed_events = []
+    statuses = []
     queue.task_skipped.connect(lambda task, reason: skipped_events.append((task, reason)))
     queue.task_failed.connect(lambda task, reason: failed_events.append((task, reason)))
+    queue.task_status_update.connect(statuses.append)
 
     try:
         assert queue.enqueue_transcription(
@@ -250,7 +252,11 @@ def test_queue_component_skips_fatal_transcription_and_continues(qtbot, monkeypa
         assert not failed_events
         assert db.fetch_record(record_id_1)["transcription"] == ""
         assert db.fetch_record(record_id_2)["transcription"] == "Recovered transcription"
+        assert any("Skipping failed transcription" in status for status in statuses)
         assert any("Skipped" in widget.history_list.item(i).text() for i in range(widget.history_list.count()))
+        history = queue.get_session_history()
+        assert any(entry["event"] == "skipped" and entry["task"]["record_id"] == record_id_1 for entry in history)
+        assert any(entry["event"] == "finished" and entry["task"]["record_id"] == record_id_2 for entry in history)
     finally:
         queue.cancel_all()
 
