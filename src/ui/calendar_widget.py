@@ -20,6 +20,7 @@ from PyQt6.QtGui import QTextCharFormat, QColor, QTextCursor
 from src.database import DBManager
 from src.ai_assistant import AIAssistant
 from src.summary_generator import SummaryGenerator, get_pending_summary_counts
+from src.ui.calendar import layout as calendar_layout
 
 class CalendarWidget(QWidget):
     """
@@ -29,11 +30,11 @@ class CalendarWidget(QWidget):
     start_chat_requested = pyqtSignal(str, list) # Emits (date_str_or_list, tags_list)
     selection_changed = pyqtSignal(QDate, str, str)   # Emits (monday, date_str, tags) to sync back to sidebar
 
-    def __init__(self, rag_engine, task_queue=None, parent=None):
+    def __init__(self, rag_engine, task_queue=None, parent=None, persistence=None):
         super().__init__(parent)
         self.rag = rag_engine
         self.summary_task_queue = task_queue
-        self.db = DBManager()
+        self.db = persistence if persistence is not None else DBManager()
         self.selected_recordings = [] # List of dicts
         self.selected_dates = set() # Set of QDate objects
         self.current_week_monday = None # QDate of the Monday of the currently highlighted week
@@ -45,110 +46,7 @@ class CalendarWidget(QWidget):
         self.init_ui()
         
     def init_ui(self):
-        layout = QVBoxLayout(self)
-        
-        # Main Splitter
-        splitter = QSplitter(Qt.Orientation.Horizontal)
-        
-        # Left Panel: Actions & Tags (Simplified)
-        left_widget = QWidget()
-        left_layout = QVBoxLayout(left_widget)
-        
-        self.selection_label = QLabel("<b>Selection Context:</b>\nNo context yet")
-        self.selection_label.setWordWrap(True)
-        left_layout.addWidget(self.selection_label)
-        
-        # Tag Filter (Keep it so users can refine the view within the tab)
-        tag_group = QGroupBox("Filter by Tags")
-        tag_layout = QVBoxLayout()
-        self.tag_list = QListWidget()
-        self.tag_list.itemChanged.connect(self.on_tag_changed)
-        tag_layout.addWidget(self.tag_list)
-        tag_group.setLayout(tag_layout)
-        left_layout.addWidget(tag_group)
-        
-        # Action Buttons
-        self.summary_btn = QPushButton("Generate Weekly Summary")
-        self.summary_btn.clicked.connect(self.on_generate_summary_clicked)
-        left_layout.addWidget(self.summary_btn)
-        
-        self.daily_summary_btn = QPushButton("Generate Daily Summary")
-        self.daily_summary_btn.clicked.connect(self.on_generate_daily_summary_clicked)
-        left_layout.addWidget(self.daily_summary_btn)
-        
-        self.pending_btn = QPushButton("Generate All Pending")
-        self.pending_btn.clicked.connect(self.on_generate_pending_clicked)
-        left_layout.addWidget(self.pending_btn)
-
-        splitter.addWidget(left_widget)
-        
-        # Right Panel: Summaries & Recordings
-        right_splitter = QSplitter(Qt.Orientation.Vertical)
-        
-        # Daily Summary
-        daily_summary_widget = QWidget()
-        daily_summary_layout = QVBoxLayout(daily_summary_widget)
-        daily_summary_layout.setContentsMargins(0, 0, 0, 0)
-        
-        # Day Navigation Buttons
-        header_layout = QHBoxLayout()
-        self.daily_summary_label = QLabel("<b>Daily Summary:</b>")
-        header_layout.addWidget(self.daily_summary_label)
-        header_layout.addStretch()
-        
-        self.prev_day_btn = QPushButton("<")
-        self.prev_day_btn.setFixedWidth(30)
-        self.prev_day_btn.clicked.connect(self.navigate_prev_day)
-        
-        self.today_btn = QPushButton("Today")
-        self.today_btn.clicked.connect(self.navigate_today)
-        
-        self.next_day_btn = QPushButton(">")
-        self.next_day_btn.setFixedWidth(30)
-        self.next_day_btn.clicked.connect(self.navigate_next_day)
-        
-        header_layout.addWidget(self.prev_day_btn)
-        header_layout.addWidget(self.today_btn)
-        header_layout.addWidget(self.next_day_btn)
-        daily_summary_layout.addLayout(header_layout)
-        
-        self.daily_summary_text = QTextEdit()
-        self.daily_summary_text.setReadOnly(True)
-        daily_summary_layout.addWidget(self.daily_summary_text)
-        
-        # Weekly Summary
-        summary_widget = QWidget()
-        summary_layout = QVBoxLayout(summary_widget)
-        summary_layout.setContentsMargins(0, 0, 0, 0)
-        summary_layout.addWidget(QLabel("<b>Weekly Summary:</b>"))
-        self.summary_text = QTextEdit()
-        self.summary_text.setReadOnly(True)
-        summary_layout.addWidget(self.summary_text)
-        
-        # Recordings List
-        recordings_widget = QWidget()
-        recordings_layout = QVBoxLayout(recordings_widget)
-        recordings_layout.setContentsMargins(0, 0, 0, 0)
-        recordings_layout.addWidget(QLabel("<b>Recordings:</b>"))
-        self.recording_list = QListWidget()
-        recordings_layout.addWidget(self.recording_list)
-        
-        self.open_tab_btn = QPushButton("Start Chat with Selection")
-        self.open_tab_btn.clicked.connect(self.request_new_chat_tab)
-        self.open_tab_btn.setMinimumHeight(40)
-        recordings_layout.addWidget(self.open_tab_btn)
-
-        right_splitter.addWidget(summary_widget)
-        right_splitter.addWidget(daily_summary_widget)
-        right_splitter.addWidget(recordings_widget)
-        
-        splitter.addWidget(right_splitter)
-        splitter.setSizes([250, 850])
-        right_splitter.setSizes([300, 300, 400])
-        
-        layout.addWidget(splitter)
-        
-        self.load_tags()
+        calendar_layout.build_calendar_layout(self)
 
     def load_tags(self):
         self.tag_list.clear()
