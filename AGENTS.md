@@ -11,6 +11,26 @@ This document contains useful information and strict rules for AI agents working
 - Always run tests with the project virtual environment: `./.venv/bin/python -m pytest`, falling back to `./venv/bin/python -m pytest`, or `./run_with_test.sh`.
 - Do not run tests with global/system Python.
 
+### Integration-Test Gate
+
+- Decide explicitly whether a change crosses a component boundary. It does when it
+  combines UI/signals, persistence, worker or queue lifecycle, STT/AI/RAG adapters,
+  or platform/runtime behavior.
+- For every boundary-crossing feature, fix, or refactor, add or update an integration
+  test unless equivalent coverage already exists. Record the existing test and the
+  contract it proves in the final handoff.
+- Integration tests must exercise real application boundaries: use temporary SQLite
+  databases and real Qt signals in `offscreen` mode; replace only external AI, STT,
+  RAG, audio-hardware, or network edges with deterministic doubles.
+- Keep cross-component contracts in `tests/integration/` when they span features;
+  feature-local integration tests may remain beside the feature when that makes their
+  ownership clearer.
+- Run focused unit tests and focused integration tests before the full suite. Run the
+  full suite for any change that crosses one of the boundaries above.
+- Do not label a mock-only unit test as integration coverage. Assert observable
+  outcomes across the boundary: persisted state, emitted signals, UI-facing status,
+  cleanup, or continuation after a recoverable failure.
+
 2. **Documentation Updates**:
 - Documentation must be kept up to date.
 - With every new feature or significant change, verify and update the relevant documentation.
@@ -29,7 +49,7 @@ This document contains useful information and strict rules for AI agents working
 - Keep compatibility shims only when needed during incremental migrations, and move tests to mirror the new package layout under `tests/ui/<feature>/` or `tests/persistence/`.
 
 4. **Platforms**:
-- This project is used on Ubuntu and Windows. Preserve existing platform guards and do not break either platform.
+- This project is used on Windows, Ubuntu, and macOS. Preserve existing platform guards and do not break any supported platform.
 
 5. **Transcription Runtime Preferences**:
 - Respect the configured STT backend, device, compute type, and `force_cpu` setting.
@@ -44,9 +64,10 @@ This document contains useful information and strict rules for AI agents working
 2. Plan the smallest safe change.
 3. Implement the change.
 4. Create or update tests.
-5. Run focused tests first.
-6. Run the full suite before finishing when shared UI, worker, STT, threading, or persistence code is touched.
-7. Update documentation when behavior changes.
+5. Decide and document the integration-test boundary; add/update integration coverage when applicable.
+6. Run focused unit and integration tests first.
+7. Run the full suite before finishing when shared UI, worker, STT, threading, or persistence code is touched.
+8. Update documentation when behavior changes.
 
 ## Refactor and Specs Steward
 
