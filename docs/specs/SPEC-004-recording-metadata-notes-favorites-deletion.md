@@ -43,6 +43,7 @@ Users need a recording detail view that lets them review and maintain the saved 
 ## Test Plan
 
 - Unit/UI: recording control factories, panel builders, non-visual recording helpers, direct transcription flow helpers, AI action helpers, RAG indexing helpers, speaker mapping helpers, trim validation/backup helpers, recording widget tab composition, copy button state, full-transcription clipboard copy, notes-only state, save/delete behavior, and bottom action dirty-state behavior.
+- Integration: `tests/integration/test_persistence_ports.py` verifies that notes persist through an injected real SQLite port and that batch widgets query the same injected port.
 - Integration: recording flow and tab lifecycle coverage for open/save/delete workflows.
 - Manual: open a transcribed recording, click Copy Transcription, and paste into another app on Ubuntu and Windows.
 

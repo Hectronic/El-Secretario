@@ -67,6 +67,7 @@ Users need long-running AI and transcription work to run sequentially, visibly, 
 
 - Unit: helper parsing, audio-duration fallback, dedupe keys, queue history, skip behavior, AI provider retry policy.
 - Integration: summary-to-task chaining, queued transcription persistence, queue widget updates, RAG reindex worker.
+- Integration contracts: `tests/test_summary_task_queue_integration.py` covers queued transcription and summary/task chaining with real SQLite and fake worker boundaries; `tests/test_recording_flow.py` covers capture-tab handoff; `tests/integration/test_persistence_ports.py` covers injected persistence across batch widgets.
 - UI: queue management widget reflects current/pending/history state.
 - Manual: run a real queued summary, task extraction, transcription, and RAG reindex on Ubuntu and Windows before release.
 
