@@ -52,6 +52,7 @@ Reduce large flat modules and create expansion points for future product work wi
 - From the global theme application facade in `src/ui/styles.py` to `src/ui/theme_styles.py`: static dark, light, and SNES sheets plus compatibility style constants now live in a dedicated theme resource module.
 - From the monolithic `src/database.py` to `src/persistence/`: schema/migrations, records/imports, chat sessions/imports, transcription logs, summaries, and tasks now have aggregate-specific repository modules. `DBManager` remains the public compatibility facade so existing callers retain their API.
 - From `CalendarWidget` summary-generation handlers to `src/ui/calendar/summary_actions.py`: daily, weekly, pending, completion, and error actions now have a focused owner while the widget retains its public Qt slots.
+- From direct `DBManager` construction in `RecordingWidget` to an injected persistence port: recording detail actions and loading now share caller-provided persistence when supplied, while retaining the compatible default facade.
 
 ## Specs Affected
 
@@ -88,7 +89,6 @@ Reduce large flat modules and create expansion points for future product work wi
 - `src/ui/main_window/content_tabs.py` now owns note/chat/summary/tools/tasks/collections/calendar tab lifecycle; remaining `MainWindow` shell reduction should focus on cross-feature orchestration and legacy wrappers.
 - `src/ui/main_window/sidebar_actions.py` is now mostly an orchestrator over `tasks_sidebar_actions.py`, `chat_sessions_actions.py`, `calendar_sidebar_actions.py`, and `history_tags_actions.py`; future cuts should target direct wiring from `MainWindow` to those focused coordinators where practical.
 - `src/database.py` is now a thin compatibility facade over `src/persistence/`. Future persistence work should extend the aggregate-specific repository that owns it and retain facade compatibility unless an intentional API migration is planned.
-- `src/ui/recording_widget.py` is now mostly a Qt orchestration shell for the recording detail/audio-edit tab. UI panel construction, controls, state helpers, RAG indexing, record loading, direct transcription flow, AI actions, speaker mapping, and legacy trim helpers have been extracted under `src/ui/recording/`; remaining reductions should target deletion/open-chat/playback adapters and any broad persistence coupling.
 - `src/ui/summary_task_queue.py` now acts mostly as a Qt adapter; keep moving any remaining business-only helpers into `src/app/summary_queue/`.
 - `src/rag_engine.py` now owns the public RAG facade and Windows runtime-mode selection; fallback store, Chroma initialization/compatibility, result parsing/ranking, filter composition, and subprocess task handling have moved to `src/rag/`.
 

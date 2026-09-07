@@ -61,10 +61,19 @@ class RecordingWidget(QWidget):
     status_changed = pyqtSignal(str)
     progress_changed = pyqtSignal(int)
 
-    def __init__(self, rag_engine, recorder=None, record_id=None, task_queue=None, parent=None, audio_edit_mode=False):
+    def __init__(
+        self,
+        rag_engine,
+        recorder=None,
+        record_id=None,
+        task_queue=None,
+        parent=None,
+        audio_edit_mode=False,
+        persistence=None,
+    ):
         super().__init__(parent)
         self.rag = rag_engine
-        self.db = DBManager()
+        self.db = persistence if persistence is not None else DBManager()
         if recorder is not None:
             self.recorder = recorder
         else:
