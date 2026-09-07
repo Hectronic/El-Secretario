@@ -2,6 +2,8 @@ from unittest.mock import MagicMock
 
 from src.database import DBManager
 from src.ui.chat_widget import ChatWidget
+from src.ui.main_window.chat_floating import FloatingChatCoordinator
+from PyQt6.QtWidgets import QFrame, QHBoxLayout, QMainWindow, QTabWidget, QWidget
 
 
 def _notebook_port():
@@ -9,6 +11,30 @@ def _notebook_port():
     port.get_notebooks.return_value = []
     port.get_entries.return_value = []
     return port
+
+
+class _FloatingChatWindow(QMainWindow):
+    def __init__(self):
+        super().__init__()
+        central = QWidget()
+        central.resize(800, 600)
+        self.setCentralWidget(central)
+        self.central_tabs = QTabWidget(central)
+        self.central_tabs.setGeometry(0, 0, 500, 400)
+        self.floating_chat_bar = QFrame(central)
+        self.floating_chat_bar.setVisible(False)
+        self.floating_chat_layout = QHBoxLayout(self.floating_chat_bar)
+        self.floating_chat_hosts = []
+        self.synced_contexts = []
+
+    def _sync_chat_context_section(self, chat_widget=None):
+        self.synced_contexts.append(chat_widget)
+
+    def load_chat_sessions(self):
+        pass
+
+    def close_tab(self, index):
+        self.central_tabs.removeTab(index)
 
 
 def test_chat_response_persists_and_restores_session_with_real_sqlite(qtbot, tmp_path):
@@ -41,3 +67,33 @@ def test_chat_response_persists_and_restores_session_with_real_sqlite(qtbot, tmp
 
     assert restored.chat_history == widget.chat_history
     assert restored.context_panel.active_global_tags == ["planning"]
+
+
+def test_floating_chat_round_trip_keeps_real_persisted_session(qtbot, tmp_path):
+    db = DBManager(str(tmp_path / "floating-chat.sqlite"))
+    rag = MagicMock()
+    rag.search.return_value = []
+    chat = ChatWidget(
+        rag,
+        initial_contexts=[{"type": "tag", "value": "planning", "label": "planning"}],
+        persistence=db,
+        notebook_persistence=_notebook_port(),
+    )
+    window = _FloatingChatWindow()
+    coordinator = FloatingChatCoordinator(window)
+    qtbot.addWidget(window)
+    window.central_tabs.addTab(chat, "Planning")
+
+    chat.chat_history.append({"role": "user", "content": "Keep this session."})
+    chat.on_chat_finished("Persisted before floating.")
+    session_id = chat.current_session_id
+    coordinator.float_chat_widget(chat)
+    coordinator.minimize_floating_chat(chat)
+    coordinator.restore_floating_chat(chat)
+    coordinator.dock_chat_widget_to_tab(chat)
+
+    saved = next(session for session in db.fetch_chat_sessions() if session["id"] == session_id)
+    assert "Persisted before floating." in saved["messages"]
+    assert window.central_tabs.currentWidget() is chat
+    assert chat.display_mode == "tab"
+    assert not chat.context_panel.isHidden()

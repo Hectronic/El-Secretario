@@ -2,7 +2,7 @@
 
 Status: Implemented
 Owner: TBD
-Last updated: 2026-06-27
+Last updated: 2026-09-07
 
 ## Problem
 
@@ -49,7 +49,10 @@ Users need to ask questions over selected recordings, notes, notebooks, tags, da
 - Rendering/state helpers: `src/ui/chat/message_renderer.py`, `src/ui/chat/theme_styles.py`, `src/ui/chat/header_state.py`, and `src/ui/chat/busy_state.py` own markdown rendering, light/dark styles, title/header state, and input/busy controls.
 - Add-context dialog: `src/ui/chat/add_context_dialog.py` owns manual context selection UI and selected-context payloads.
 - Context sidebar component: `src/ui/context_manager_panel.py` is shared by chat widgets and the main window to show active context, forced records, notebooks, tags, and date filters.
-- Main-window floating lifecycle: `src/ui/main_window/chat_floating.py` owns `FloatingChatHost` sizing/resizing and `FloatingChatCoordinator` dock/undock/minimize/restore/close behavior.
+- Main-window floating lifecycle: `src/ui/main_window/floating_chat_host.py` owns
+  bounded resizing, edge handling, and preferred host size. `chat_floating.py` owns
+  `FloatingChatCoordinator` dock/undock/minimize/restore/close behavior and retains
+  a compatible `FloatingChatHost` import for existing callers.
 - Main-window session sidebar: `src/ui/main_window/chat_sessions_actions.py` owns sidebar open, open-floating, delete, and cleanup behavior for saved chat sessions.
 - Content tabs: `src/ui/main_window/content_tabs.py` creates/reuses chat tabs and passes session/context parameters from other app areas.
 - Platform constraints: preserve PyQt behavior on Ubuntu and Windows, including stable parent/child ownership when moving widgets between tabs and floating hosts.
@@ -58,8 +61,15 @@ Users need to ask questions over selected recordings, notes, notebooks, tags, da
 
 - Unit: context text assembly, context serialization/parsing, session naming/payload persistence, loaded-session application, message rendering, theme styles, header state, and busy state.
 - Dialog/UI: add-context dialog selection and context manager panel state round trips.
-- Main-window UI: floating chat host resizing, float/dock/minimize/restore/close lifecycle, chat sidebar open/open-floating/delete actions, and content-tab chat reuse.
-- Integration: `ChatWidget` sends messages with recording/week/tag/task context, persists sessions, restores loaded sessions, and updates styles on theme changes. `tests/integration/test_chat_session_persistence.py` verifies the real SQLite response → session → restored-context round trip.
+- Main-window UI: `tests/ui/main_window/test_floating_chat_host.py` covers bounded
+  host resizing; `tests/ui/main_window/test_chat_floating.py` covers
+  float/dock/minimize/restore/close lifecycle, chat sidebar open/open-floating/delete
+  actions, and content-tab chat reuse.
+- Integration: `ChatWidget` sends messages with recording/week/tag/task context,
+  persists sessions, restores loaded sessions, and updates styles on theme changes.
+  `tests/integration/test_chat_session_persistence.py` verifies both the real SQLite
+  response → session → restored-context round trip and session-preserving
+  float/minimize/restore/dock lifecycle.
 - Manual: start chats from recording, calendar/week, tag, notebook, and search flows; float/dock/minimize/restore; delete an open session; verify light/dark readability.
 
 ## Documentation
@@ -73,6 +83,9 @@ Users need to ask questions over selected recordings, notes, notebooks, tags, da
 - 2026-06-27: created the dedicated chat spec for the existing `src/ui/chat/` helper split and main-window floating/session coordinators.
 - 2026-06-27: recorded `src/ui/chat_widget.py` as the chat shell and `src/ui/main_window/chat_floating.py` plus `chat_sessions_actions.py` as the main-window ownership boundary for floating and sidebar session behavior.
 - 2026-09-06: moved chat visual composition and theme application to `src/ui/chat/layout.py` and added injected persistence ports plus a real SQLite session round-trip integration contract.
+- 2026-09-07: moved `FloatingChatHost` resizing and edge handling to
+  `src/ui/main_window/floating_chat_host.py`; the coordinator remains in
+  `chat_floating.py` and the original import stays compatible.
 
 ## Open Questions
 

@@ -56,6 +56,7 @@ Reduce large flat modules and create expansion points for future product work wi
 - From direct `DBManager` construction in `SummaryTaskQueueManager` to an injected persistence port: queued daily-summary workers now receive the same persistence boundary as the caller, preserving the compatible default facade.
 - From worker-signal outcome handlers in `SummaryTaskQueueManager` to `src/app/summary_queue/execution.py`: worker completion, failure/skip policy, status traces, retry waits, cleanup, and sequential continuation now have an app-level owner.
 - From inline RAG platform guards in `src/rag_engine.py` to `src/rag/runtime_policy.py`: Windows-safe delete and subprocess modes are resolved in a pure policy while macOS and Ubuntu retain in-process Chroma behavior.
+- From `src/ui/main_window/chat_floating.py` to `src/ui/main_window/floating_chat_host.py`: bounded floating-host resizing and edge interaction now have a focused Qt owner while the coordinator retains chat lifecycle behavior and a compatibility import.
 
 ## Specs Affected
 
