@@ -37,7 +37,7 @@ Users need recordings, notes, summaries, and generated AI text to be searchable 
 
 ## Architecture Notes
 
-- Public service: `src/rag_engine.py` keeps the public `RAGEngine` API used by UI, queue, and search integrations.
+- Public service: `src/rag_engine.py` keeps the public `RAGEngine` API used by UI, queue, and search integrations. `src/rag/runtime_policy.py` owns Windows-safe delete and subprocess-mode selection, keeping macOS and Ubuntu on in-process Chroma execution.
 - Fallback store: `src/rag/fallback_store.py` owns the in-memory Chroma-compatible collection/client used when persistent Chroma cannot initialize.
 - Result mapping: `src/rag/results.py` owns semantic result parsing and keyword fallback ranking.
 - Filters: `src/rag/filters.py` owns deleted-content exclusion and ID/metadata filter composition.

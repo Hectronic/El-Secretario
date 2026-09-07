@@ -21,6 +21,7 @@ from src.rag.chroma_compat import suppress_sentencepiece_swig_deprecation_warnin
 from src.rag.chroma_store import create_chroma_store
 from src.rag.filters import build_search_where_clause
 from src.rag.results import parse_semantic_query_results
+from src.rag.runtime_policy import RAGRuntimePolicy
 from src.rag.subprocess_tasks import (
     rag_keyword_search_in_subprocess,
     rag_query_in_subprocess,
@@ -39,20 +40,12 @@ import chromadb
 class RAGEngine:
     def __init__(self, persist_directory: str = "chroma_db"):
         self.persist_directory = persist_directory
-        self._is_windows = platform.system() == "Windows"
-        # Enable safe delete by default on Windows due to native crashes in chroma rust delete path.
-        self._safe_delete_mode = (
-            self._is_windows
-            and os.environ.get("EL_SECRETARIO_CHROMA_SAFE_DELETE", "1").strip().lower() in {"1", "true", "yes"}
-        )
-        self._subprocess_upsert_mode = (
-            self._is_windows
-            and os.environ.get("EL_SECRETARIO_RAG_SUBPROCESS_UPSERT", "1").strip().lower() in {"1", "true", "yes"}
-        )
-        self._subprocess_query_mode = (
-            self._is_windows
-            and os.environ.get("EL_SECRETARIO_RAG_SUBPROCESS_QUERY", "1").strip().lower() in {"1", "true", "yes"}
-        )
+        policy = RAGRuntimePolicy.resolve(platform.system(), os.environ)
+        # Compatibility attributes retained for callers and existing Windows guards.
+        self._is_windows = policy.is_windows
+        self._safe_delete_mode = policy.safe_delete_mode
+        self._subprocess_upsert_mode = policy.subprocess_upsert_mode
+        self._subprocess_query_mode = policy.subprocess_query_mode
         self._semantic_query_disabled = False
         store = create_chroma_store(
             self.persist_directory,
