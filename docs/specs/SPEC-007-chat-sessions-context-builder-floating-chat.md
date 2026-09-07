@@ -53,7 +53,10 @@ Users need to ask questions over selected recordings, notes, notebooks, tags, da
   bounded resizing, edge handling, and preferred host size. `chat_floating.py` owns
   `FloatingChatCoordinator` dock/undock/minimize/restore/close behavior and retains
   a compatible `FloatingChatHost` import for existing callers.
-- Main-window session sidebar: `src/ui/main_window/chat_sessions_actions.py` owns sidebar open, open-floating, delete, and cleanup behavior for saved chat sessions.
+- Main-window session sidebar: `src/ui/main_window/sidebar_sessions.py` renders
+  saved-session content and synchronizes history tabs, while
+  `chat_sessions_actions.py` owns sidebar open, open-floating, delete, and cleanup
+  behavior for saved chat sessions.
 - Content tabs: `src/ui/main_window/content_tabs.py` creates/reuses chat tabs and passes session/context parameters from other app areas.
 - Platform constraints: preserve PyQt behavior on Ubuntu and Windows, including stable parent/child ownership when moving widgets between tabs and floating hosts.
 

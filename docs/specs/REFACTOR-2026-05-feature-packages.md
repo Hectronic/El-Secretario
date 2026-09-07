@@ -57,6 +57,7 @@ Reduce large flat modules and create expansion points for future product work wi
 - From worker-signal outcome handlers in `SummaryTaskQueueManager` to `src/app/summary_queue/execution.py`: worker completion, failure/skip policy, status traces, retry waits, cleanup, and sequential continuation now have an app-level owner.
 - From inline RAG platform guards in `src/rag_engine.py` to `src/rag/runtime_policy.py`: Windows-safe delete and subprocess modes are resolved in a pure policy while macOS and Ubuntu retain in-process Chroma behavior.
 - From `src/ui/main_window/chat_floating.py` to `src/ui/main_window/floating_chat_host.py`: bounded floating-host resizing and edge interaction now have a focused Qt owner while the coordinator retains chat lifecycle behavior and a compatibility import.
+- From `src/ui/main_window/sidebar_content.py` to `src/ui/main_window/sidebar_history.py`, `sidebar_organization.py`, and `sidebar_sessions.py`: history/filter/deletion, collection/notebook, and saved-session content behaviors now have focused owners while the original coordinator remains a compatible façade.
 
 ## Specs Affected
 

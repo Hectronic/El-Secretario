@@ -415,7 +415,7 @@ class TestMainWindowDailySummaryIntegration(unittest.TestCase):
 
         self.mock_db.delete_chat_session.assert_called_once_with(7)
 
-    @patch("src.ui.main_window.sidebar_content.QInputDialog.getText")
+    @patch("src.ui.main_window.sidebar_organization.QInputDialog.getText")
     def test_notebooks_header_create_button_creates_notebook(self, mock_get_text):
         mock_get_text.return_value = ("Ideas", True)
 
@@ -429,7 +429,7 @@ class TestMainWindowDailySummaryIntegration(unittest.TestCase):
         current = self.window.central_tabs.currentWidget()
         self.assertEqual(current.__class__.__name__, "NotebooksListWidget")
 
-    @patch("src.ui.main_window.sidebar_content.QMenu")
+    @patch("src.ui.main_window.sidebar_organization.QMenu")
     def test_notebooks_sidebar_context_menu_chat_opens_notebook_chat(self, mock_menu_cls):
         self.mock_notebook_db.get_notebooks.return_value = [{"id": 3, "name": "Ideas"}]
         self.window.load_notebooks()
@@ -454,8 +454,8 @@ class TestMainWindowDailySummaryIntegration(unittest.TestCase):
 
         self.window.open_notebook_chat.assert_called_once_with(3, "Ideas")
 
-    @patch("src.ui.main_window.sidebar_content.QInputDialog.getText")
-    @patch("src.ui.main_window.sidebar_content.QMenu")
+    @patch("src.ui.main_window.sidebar_organization.QInputDialog.getText")
+    @patch("src.ui.main_window.sidebar_organization.QMenu")
     def test_notebooks_sidebar_context_menu_rename_updates_notebook(self, mock_menu_cls, mock_get_text):
         self.mock_notebook_db.get_notebooks.return_value = [{"id": 3, "name": "Ideas"}]
         self.window.load_notebooks()

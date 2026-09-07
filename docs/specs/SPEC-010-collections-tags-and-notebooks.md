@@ -40,7 +40,8 @@ then open those groups as focused views or chat contexts.
   `src/ui/main_window/window_navigation.py` own feature views and navigation.
 - Persistence: `src/notebook_database.py` owns notebook SQLite tables; recording
   tags remain in `src/persistence/records.py` behind `DBManager`.
-- Integrations: `src/ui/main_window/sidebar_content.py` populates sidebar lists;
+- Integrations: `src/ui/main_window/sidebar_organization.py` owns collection and
+  notebook sidebar content; `sidebar_content.py` remains its compatible façade.
   `src/ui/main_window/content_tabs.py` opens reusable views and chat contexts.
 - Platform constraints: SQLite and Qt sidebar behavior are identical on Windows,
   Ubuntu, and macOS.
@@ -51,9 +52,9 @@ then open those groups as focused views or chat contexts.
   cascading deletion against SQLite.
 - UI: `tests/ui/main_window/test_window_navigation.py` and
   `tests/ui/main_window/test_content_tabs.py` cover sidebar routing and tab reuse.
-- Integration: notebook persistence is exercised with real SQLite in
-  `tests/test_notebooks.py`; future UI changes crossing sidebar, notebook storage,
-  and chat must add a focused test under `tests/integration/`.
+- Integration: `tests/integration/test_sidebar_content_persistence.py` verifies real
+  recording and notebook SQLite stores populate the sidebar and produce notebook
+  chat context.
 - Manual: create a notebook, add text and audio entries, reopen it, and open a
   notebook/collection chat on each supported desktop platform.
 

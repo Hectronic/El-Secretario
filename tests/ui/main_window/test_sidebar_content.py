@@ -21,7 +21,8 @@ from PyQt6.QtWidgets import QApplication, QCheckBox, QComboBox, QLineEdit, QList
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "..")))
 
-from src.ui.main_window import sidebar_content as sidebar_content_module
+from src.ui.main_window import sidebar_history as sidebar_history_module
+from src.ui.main_window import sidebar_sessions as sidebar_sessions_module
 from src.ui.main_window.sidebar_content import SidebarContentCoordinator
 
 
@@ -128,9 +129,9 @@ class TestSidebarContentCoordinator(unittest.TestCase):
     def setUp(self):
         self.window = _Window()
         self.coordinator = SidebarContentCoordinator(self.window)
-        self.record_patch = patch.object(sidebar_content_module, "RecordingListItemWidget", _RecordWidget)
-        self.summary_patch = patch.object(sidebar_content_module, "SummaryListItemWidget", _SummaryWidget)
-        self.session_patch = patch.object(sidebar_content_module, "SidebarChatSessionWidget", _SessionWidget)
+        self.record_patch = patch.object(sidebar_history_module, "RecordingListItemWidget", _RecordWidget)
+        self.summary_patch = patch.object(sidebar_history_module, "SummaryListItemWidget", _SummaryWidget)
+        self.session_patch = patch.object(sidebar_sessions_module, "SidebarChatSessionWidget", _SessionWidget)
         self.record_patch.start()
         self.summary_patch.start()
         self.session_patch.start()
