@@ -19,4 +19,5 @@ Last updated: 2026-09-07
   `src/ui/calendar/summary_actions.py` owns summary-generation orchestration;
   `CalendarWidget` remains the public Qt façade.
 - `tests/integration/test_calendar_selection_sync.py` verifies real SQLite filtering
-  and emitted synchronization after progressive navigation.
+  and emitted synchronization after progressive navigation, plus the selected-date
+  summary request through the real queue boundary to persisted daily-summary state.

@@ -51,7 +51,8 @@ Users need a recording detail view that lets them review and maintain the saved 
 - Integration: `tests/integration/test_persistence_ports.py` verifies that notes persist through an injected real SQLite port and that batch widgets query the same injected port.
 - Integration: recording flow and tab lifecycle coverage for open/save/delete workflows;
   `tests/integration/test_recording_widget_persistence.py` verifies real SQLite
-  injection through recording-to-chat context creation.
+  injection through recording-to-chat context creation and confirmed deletion of
+  the database row, local audio file, and RAG document.
 - Manual: open a transcribed recording, click Copy Transcription, and paste into another app on Ubuntu and Windows.
 
 ## Documentation

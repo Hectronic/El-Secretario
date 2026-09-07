@@ -65,11 +65,11 @@ class SummaryTaskQueueManager(QObject):
     wait_state_changed = pyqtSignal(bool, int, str)  # is_waiting, seconds_left, description
     history_changed = pyqtSignal(int)  # number of entries in session history
 
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, persistence=None):
         super().__init__(parent)
         self._state = QueueExecutionState()
         self._zombie_workers = [] 
-        self.db = DBManager()
+        self.db = persistence if persistence is not None else DBManager()
         self.rag_engine = None
         self._wait_state = QueueRetryWaitState()
         self._wait_timer = QTimer(self)

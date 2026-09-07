@@ -53,6 +53,7 @@ Reduce large flat modules and create expansion points for future product work wi
 - From the monolithic `src/database.py` to `src/persistence/`: schema/migrations, records/imports, chat sessions/imports, transcription logs, summaries, and tasks now have aggregate-specific repository modules. `DBManager` remains the public compatibility facade so existing callers retain their API.
 - From `CalendarWidget` summary-generation handlers to `src/ui/calendar/summary_actions.py`: daily, weekly, pending, completion, and error actions now have a focused owner while the widget retains its public Qt slots.
 - From direct `DBManager` construction in `RecordingWidget` to an injected persistence port: recording detail actions and loading now share caller-provided persistence when supplied, while retaining the compatible default facade.
+- From direct `DBManager` construction in `SummaryTaskQueueManager` to an injected persistence port: queued daily-summary workers now receive the same persistence boundary as the caller, preserving the compatible default facade.
 
 ## Specs Affected
 
@@ -80,6 +81,7 @@ Reduce large flat modules and create expansion points for future product work wi
   - `tests/ui/main_window/test_summary_actions.py`
 - Representative root-level integration tests still cover cross-feature behavior such as recording flow, chat context sync, settings, summary queue, and Windows bootstrap scripts.
 - `tests/integration/test_calendar_selection_sync.py` covers real SQLite date/tag filtering, sidebar synchronization, and daily-summary queue admission.
+- Recording deletion and calendar-to-queue daily-summary completion are covered with real SQLite in `tests/integration/`, while external dialogs, AI providers, and workers remain controlled test boundaries.
 - Full suite status for this refactor was validated after the code change.
 
 ## Remaining Hotspots
