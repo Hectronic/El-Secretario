@@ -12,15 +12,11 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  See <https://www.gnu.org/licenses/>.
 
-from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, 
-                             QListWidget, QListWidgetItem, QLabel, QSplitter, 
-                             QGroupBox, QPushButton, QMessageBox, QApplication, QTextEdit, QProgressDialog)
-from PyQt6.QtCore import Qt, pyqtSignal, QDate, QTimer, QSettings
-from PyQt6.QtGui import QTextCharFormat, QColor, QTextCursor
+from PyQt6.QtWidgets import QWidget, QListWidgetItem, QMessageBox
+from PyQt6.QtCore import Qt, pyqtSignal, QDate
 from src.database import DBManager
-from src.ai_assistant import AIAssistant
-from src.summary_generator import SummaryGenerator, get_pending_summary_counts
 from src.ui.calendar import layout as calendar_layout
+from src.ui.calendar import summary_actions
 
 class CalendarWidget(QWidget):
     """
@@ -251,167 +247,25 @@ class CalendarWidget(QWidget):
             self.summary_text.setPlaceholderText("No summary for this week.")
 
     def on_generate_daily_summary_clicked(self):
-        if len(self.selected_dates) != 1:
-            QMessageBox.warning(self, "Select One Date", "Please select exactly one date.")
-            return
-            
-        date = list(self.selected_dates)[0]
-        date_str = date.toString("yyyy-MM-dd")
-        tags = self.get_selected_tags()
-        tags_filter = self.get_tags_filter_str()
-        
-        if self.summary_task_queue:
-            self.summary_task_queue.enqueue_daily_summary({
-                "date": date_str,
-                "tags_filter": tags_filter,
-                "source": "calendar",
-            })
-            return
-
-        recordings = self.db.fetch_by_dates([date_str], tags)
-        if not recordings:
-            QMessageBox.warning(self, "No Recordings", "No recordings found.")
-            return
-            
-        full_text = ""
-        for rec in recordings:
-            full_text += f"\n\n--- Recording: {rec['title'] or 'Untitled'} ({rec['created_at']}) ---\n"
-            full_text += rec['transcription'] or ""
-            
-        if not full_text.strip():
-            QMessageBox.warning(self, "No Content", "No transcription content.")
-            return
-            
-        self.progress = QProgressDialog("Generating Daily Summary...", "Cancel", 0, 0, self)
-        self.progress.setWindowModality(Qt.WindowModality.WindowModal)
-        self.progress.show()
-        
-        settings = QSettings("Hectronic", "Secretario")
-        from src.ai_provider import validate_ai_provider_config
-        is_valid, error_msg = validate_ai_provider_config(settings)
-        if not is_valid:
-            self.progress.close()
-            QMessageBox.critical(self, "Error", error_msg)
-            return
-            
-        self.pending_daily_key = (date_str, self.get_tags_filter_str())
-        self.worker = AIAssistant("", "daily_summary", full_text)
-        self.worker.task_completed.connect(self.on_summary_finished)
-        self.worker.error.connect(self.on_summary_error)
-        self.worker.start()
+        return summary_actions.on_generate_daily_summary_clicked(self)
 
     def on_generate_summary_clicked(self):
-        if not self.current_week_monday:
-            QMessageBox.warning(self, "No Week Selected", "No week context.")
-            return
-            
-        week_sunday = self.current_week_monday.addDays(6).toString("yyyy-MM-dd")
-        week_dates = [self.current_week_monday.addDays(i).toString("yyyy-MM-dd") for i in range(7)]
-        tags = self.get_selected_tags()
-        recordings_for_summary = self.db.fetch_by_dates(week_dates, tags)
-        
-        if not recordings_for_summary:
-            QMessageBox.warning(self, "No Recordings", "No recordings found for the week.")
-            return
-
-        full_text = ""
-        for rec in recordings_for_summary:
-            full_text += f"\n\n--- Recording: {rec['title'] or 'Untitled'} ({rec['created_at']}) ---\n"
-            full_text += rec['transcription'] or ""
-
-        if not full_text.strip():
-            QMessageBox.warning(self, "No Content", "No transcription content.")
-            return
-
-        if self.summary_task_queue:
-            tags_filter = self.get_tags_filter_str() or ""
-            self.summary_task_queue.enqueue_weekly_summary(week_sunday, full_text, tags_filter, source="calendar")
-            return
-
-        self.progress = QProgressDialog("Generating Weekly Summary...", "Cancel", 0, 0, self)
-        self.progress.setWindowModality(Qt.WindowModality.WindowModal)
-        self.progress.show()
-
-        settings = QSettings("Hectronic", "Secretario")
-        from src.ai_provider import validate_ai_provider_config
-        is_valid, error_msg = validate_ai_provider_config(settings)
-        if not is_valid:
-            self.progress.close()
-            QMessageBox.critical(self, "Error", error_msg)
-            return
-
-        self.pending_summary_key = self.get_summary_key()
-        self.worker = AIAssistant("", "weekly_summary", full_text)
-        self.worker.task_completed.connect(self.on_summary_finished)
-        self.worker.error.connect(self.on_summary_error)
-        self.worker.start()
+        return summary_actions.on_generate_summary_clicked(self)
 
     def on_generate_pending_clicked(self):
-        tags_filter = self.get_tags_filter_str()
-        pending_daily, pending_weekly = get_pending_summary_counts(tags_filter)
-        
-        if pending_daily == 0 and pending_weekly == 0:
-            QMessageBox.information(self, "All Done", "No pending summaries.")
-            return
-            
-        msg = f"Found {pending_daily} days and {pending_weekly} weeks without summaries.\n\nGenerate all?"
-        reply = QMessageBox.question(self, "Generate Pending", msg, QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
-        if reply != QMessageBox.StandardButton.Yes:
-            return
-            
-        self.pending_progress = QProgressDialog("Generating pending summaries...", "Cancel", 0, pending_daily + pending_weekly, self)
-        self.pending_progress.setWindowModality(Qt.WindowModality.WindowModal)
-        self.pending_progress.show()
-        
-        self.summary_generator = SummaryGenerator(True, True, tags_filter, parent=self)
-        self.summary_generator.progress.connect(self.on_pending_progress)
-        self.summary_generator.finished.connect(self.on_pending_finished)
-        self.summary_generator.error.connect(self.on_pending_error)
-        self.pending_progress.canceled.connect(self.summary_generator.cancel)
-        self.summary_generator.start()
+        return summary_actions.on_generate_pending_clicked(self)
 
     def on_pending_progress(self, current, total):
-        if hasattr(self, 'pending_progress'):
-            self.pending_progress.setValue(current)
+        return summary_actions.on_pending_progress(self, current, total)
 
     def on_pending_finished(self, daily_count, weekly_count):
-        if hasattr(self, 'pending_progress'):
-            self.pending_progress.close()
-        QMessageBox.information(self, "Complete", f"Generated {daily_count} daily and {weekly_count} weekly summaries.")
-        self.update_daily_summary_view()
-        self.update_summary_view()
+        return summary_actions.on_pending_finished(self, daily_count, weekly_count)
 
     def on_pending_error(self, error_msg):
-        if hasattr(self, 'pending_progress'):
-            self.pending_progress.close()
-        QMessageBox.critical(self, "Error", f"Failed: {error_msg}")
+        return summary_actions.on_pending_error(self, error_msg)
 
     def on_summary_finished(self, task_type, result):
-        if hasattr(self, 'progress'):
-            self.progress.close()
-        
-        if task_type == "weekly_summary":
-            if self.pending_summary_key:
-                week_str, tags_tuple = self.pending_summary_key
-                tags_filter = ",".join(tags_tuple) if tags_tuple else None
-                self.db.save_weekly_summary(week_str, result, tags_filter)
-                if self.pending_summary_key == self.get_summary_key():
-                    self.update_summary_view()
-            self.pending_summary_key = None
-            
-        elif task_type == "daily_summary":
-            if self.pending_daily_key:
-                date_str, tags_filter = self.pending_daily_key
-                self.db.save_daily_summary(date_str, result, tags_filter)
-                if len(self.selected_dates) == 1:
-                    current_date = list(self.selected_dates)[0].toString("yyyy-MM-dd")
-                    if current_date == date_str:
-                        self.update_daily_summary_view()
-            self.pending_daily_key = None
+        return summary_actions.on_summary_finished(self, task_type, result)
 
     def on_summary_error(self, error_msg):
-        if hasattr(self, 'progress'):
-            self.progress.close()
-        self.pending_summary_key = None
-        self.pending_daily_key = None
-        QMessageBox.critical(self, "Error", f"Failed: {error_msg}")
+        return summary_actions.on_summary_error(self, error_msg)

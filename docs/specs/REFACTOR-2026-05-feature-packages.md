@@ -51,6 +51,7 @@ Reduce large flat modules and create expansion points for future product work wi
 - From worker startup internals in `src/ui/summary_task_queue.py` to `src/app/summary_queue/`: worker construction (`worker_factory.py`), common signal wiring (`worker_signals.py`), and queue-start lifecycle (`worker_lifecycle.py`) now live in focused modules.
 - From the global theme application facade in `src/ui/styles.py` to `src/ui/theme_styles.py`: static dark, light, and SNES sheets plus compatibility style constants now live in a dedicated theme resource module.
 - From the monolithic `src/database.py` to `src/persistence/`: schema/migrations, records/imports, chat sessions/imports, transcription logs, summaries, and tasks now have aggregate-specific repository modules. `DBManager` remains the public compatibility facade so existing callers retain their API.
+- From `CalendarWidget` summary-generation handlers to `src/ui/calendar/summary_actions.py`: daily, weekly, pending, completion, and error actions now have a focused owner while the widget retains its public Qt slots.
 
 ## Specs Affected
 
@@ -61,6 +62,7 @@ Reduce large flat modules and create expansion points for future product work wi
 - SPEC-007: chat sessions/context/floating chat now map to `src/ui/chat/`, `src/ui/chat_widget.py`, and `src/ui/main_window/chat_floating.py`.
 - SPEC-008: active chat context sidebar now maps to `src/ui/context_manager_panel.py`, `src/ui/main_window/sidebar_sync.py`, and `src/ui/main_window/sidebar_content.py`.
 - SPEC-013: settings panels now map to `src/ui/settings/`.
+- SPEC-009: calendar visual composition and summary actions now map to `src/ui/calendar/` while `CalendarWidget` remains the public façade.
 
 ## Tests
 
@@ -76,6 +78,7 @@ Reduce large flat modules and create expansion points for future product work wi
   - `tests/ui/main_window/test_history_navigation_actions.py`
   - `tests/ui/main_window/test_summary_actions.py`
 - Representative root-level integration tests still cover cross-feature behavior such as recording flow, chat context sync, settings, summary queue, and Windows bootstrap scripts.
+- `tests/integration/test_calendar_selection_sync.py` covers real SQLite date/tag filtering, sidebar synchronization, and daily-summary queue admission.
 - Full suite status for this refactor was validated after the code change.
 
 ## Remaining Hotspots
