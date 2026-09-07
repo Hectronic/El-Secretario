@@ -52,6 +52,7 @@ from src.app.summary_queue.runtime import (
     stop_worker,
 )
 from src.app.summary_queue.worker_factory import build_queue_worker
+from src.app.summary_queue.execution import QueueWorkerExecutionCoordinator
 from src.app.summary_queue.worker_signals import connect_queue_worker_signals
 from src.app.summary_queue.worker_lifecycle import start_queue_worker_lifecycle
 from src.app.summary_queue.tasks import (
@@ -87,6 +88,7 @@ __all__ = [
     "collect_runtime_stats",
     "cleanup_between_jobs",
     "QueueActionCoordinator",
+    "QueueWorkerExecutionCoordinator",
     "format_history_entry",
     "format_metrics_label",
     "format_task_display",

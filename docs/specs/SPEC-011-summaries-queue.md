@@ -53,6 +53,9 @@ Users need long-running AI and transcription work to run sequentially, visibly, 
 - Worker creation: `src/app/summary_queue/worker_factory.py` owns per-task worker construction and task-type specific signal hookups.
 - Worker signal wiring: `src/app/summary_queue/worker_signals.py` owns common worker signal wiring (`error`, `finished`, optional status/retry).
 - Worker start lifecycle: `src/app/summary_queue/worker_lifecycle.py` owns the queue-start lifecycle for current-worker set, started events, history append, queue-state emit, and start.
+- Worker outcomes: `src/app/summary_queue/execution.py` owns worker completion,
+  fatal-error skip policy, status traces, retry-wait state, completion cleanup, and
+  sequential continuation. `SummaryTaskQueueManager` remains the Qt-signal façade.
 - Queue widget presentation/actions: `src/app/summary_queue/presentation.py` and `src/app/summary_queue/actions.py` own UI-facing formatting/snapshots and queue action orchestration extracted from `QueueManagementWidget`.
 - Main-window queue presentation: `src/ui/main_window/summary_queue_status.py` owns the status bar, queue-tab opening, queue-signal subscriptions, progress/status rendering, and refresh of affected open views. `MainWindow` keeps compatibility delegates for existing callers.
 - Startup scheduling: `src/ui/main_window/runtime_startup.py` owns opt-in scheduling of the prior weekly or latest missing daily summary. `MainWindow` keeps compatibility delegates used by bootstrap.
@@ -104,6 +107,9 @@ Users need long-running AI and transcription work to run sequentially, visibly, 
 - 2026-09-05: moved retry-wait countdown transitions out of `SummaryTaskQueueManager` into `src/app/summary_queue/wait_state.py`.
 - 2026-09-05: moved queue task admission and validation out of `SummaryTaskQueueManager` into `src/app/summary_queue/admission.py`.
 - 2026-09-06: made `SummaryGenerator` accept injected persistence so summary workflows can migrate incrementally away from direct `DBManager` construction.
+- 2026-09-07: moved worker outcome orchestration from `SummaryTaskQueueManager` to
+  `src/app/summary_queue/execution.py`, retaining the manager's public signals and
+  compatible private hooks.
 
 ## Open Questions
 

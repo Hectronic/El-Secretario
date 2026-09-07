@@ -54,6 +54,7 @@ Reduce large flat modules and create expansion points for future product work wi
 - From `CalendarWidget` summary-generation handlers to `src/ui/calendar/summary_actions.py`: daily, weekly, pending, completion, and error actions now have a focused owner while the widget retains its public Qt slots.
 - From direct `DBManager` construction in `RecordingWidget` to an injected persistence port: recording detail actions and loading now share caller-provided persistence when supplied, while retaining the compatible default facade.
 - From direct `DBManager` construction in `SummaryTaskQueueManager` to an injected persistence port: queued daily-summary workers now receive the same persistence boundary as the caller, preserving the compatible default facade.
+- From worker-signal outcome handlers in `SummaryTaskQueueManager` to `src/app/summary_queue/execution.py`: worker completion, failure/skip policy, status traces, retry waits, cleanup, and sequential continuation now have an app-level owner.
 
 ## Specs Affected
 
@@ -91,7 +92,10 @@ Reduce large flat modules and create expansion points for future product work wi
 - `src/ui/main_window/content_tabs.py` now owns note/chat/summary/tools/tasks/collections/calendar tab lifecycle; remaining `MainWindow` shell reduction should focus on cross-feature orchestration and legacy wrappers.
 - `src/ui/main_window/sidebar_actions.py` is now mostly an orchestrator over `tasks_sidebar_actions.py`, `chat_sessions_actions.py`, `calendar_sidebar_actions.py`, and `history_tags_actions.py`; future cuts should target direct wiring from `MainWindow` to those focused coordinators where practical.
 - `src/database.py` is now a thin compatibility facade over `src/persistence/`. Future persistence work should extend the aggregate-specific repository that owns it and retain facade compatibility unless an intentional API migration is planned.
-- `src/ui/summary_task_queue.py` now acts mostly as a Qt adapter; keep moving any remaining business-only helpers into `src/app/summary_queue/`.
+- `src/ui/summary_task_queue.py` now acts as the public Qt façade: signal declarations,
+  task admission delegates, worker construction/wiring, and compatibility hooks stay
+  there while state, worker outcomes, and completion behavior live in
+  `src/app/summary_queue/`.
 - `src/rag_engine.py` now owns the public RAG facade and Windows runtime-mode selection; fallback store, Chroma initialization/compatibility, result parsing/ranking, filter composition, and subprocess task handling have moved to `src/rag/`.
 
 ## Follow-Ups

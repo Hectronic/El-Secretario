@@ -25,12 +25,8 @@ from src.app.summary_queue.helpers import (
     parse_task_extraction_result as _parse_task_extraction_result,
     read_audio_duration_seconds as _read_audio_duration_seconds,
 )
-from src.app.summary_queue.runtime import (
-    build_retry_wait_state,
-    cleanup_between_jobs,
-    collect_runtime_stats,
-    stop_worker,
-)
+from src.app.summary_queue.runtime import collect_runtime_stats, stop_worker
+from src.app.summary_queue.execution import QueueWorkerExecutionCoordinator
 from src.app.summary_queue.state import QueueExecutionState
 from src.app.summary_queue.wait_state import QueueRetryWaitState
 from src.app.summary_queue.tasks import normalize_source, task_key
@@ -76,6 +72,25 @@ class SummaryTaskQueueManager(QObject):
         self._wait_timer.setInterval(1000)
         self._wait_timer.timeout.connect(self._tick_wait_timer)
         self._history = QueueHistory(max_entries=300)
+        self._execution = QueueWorkerExecutionCoordinator(
+            state=self._state,
+            history=self._history,
+            wait_state=self._wait_state,
+            wait_timer=self._wait_timer,
+            completion_actions=self._completion_action_coordinator,
+            handle_completion=lambda task, result: handle_worker_completion(self.db, task, result),
+            append_history=self._append_history,
+            emit_progress=self.task_progress.emit,
+            emit_status=self.task_status_update.emit,
+            emit_skipped=self.task_skipped.emit,
+            emit_failed=self.task_failed.emit,
+            emit_finished=self.task_finished.emit,
+            emit_wait_state=self.wait_state_changed.emit,
+            emit_queue_state=self._emit_queue_state,
+            start_next=self._start_next_if_idle,
+            retain_worker=self._retain_zombie_worker,
+            is_fatal_transcription_failure=is_transcription_fatal_failure,
+        )
     @property
     def _queue(self):
         """Compatibility view of pending tasks for existing integrations/tests."""
@@ -328,33 +343,13 @@ class SummaryTaskQueueManager(QObject):
             self._on_worker_error(str(e))
 
     def _on_generator_progress(self, current, total):
-        if total > 0:
-            percent = int((current / total) * 100)
-            self.task_progress.emit(percent)
+        self._execution.on_generator_progress(current, total)
 
     def _on_generator_recording_summary_completed(self, record_id: int, title: str):
-        try:
-            self._completion_action_coordinator().enqueue_tasks_for_completed_recording(
-                record_id,
-                title,
-                current_task=self._current_task,
-            )
-        except Exception:
-            pass
+        self._execution.on_generator_recording_summary_completed(record_id, title)
 
     def _on_worker_completed(self, result: Any = None):
-        task = self._current_task or {}
-        if result is None:
-            logging.debug("Queue: worker completed without result for task type=%s.", task.get("type"))
-            return
-
-        try:
-            logging.info("Queue: applying completion actions for task type=%s.", task.get("type"))
-            self._completion_action_coordinator().apply(
-                handle_worker_completion(self.db, task, result)
-            )
-        except Exception as e:
-            logging.error("Queue: persistence error for task type=%s: %s", task.get("type"), e, exc_info=True)
+        self._execution.on_worker_completed(result)
 
     def _apply_completion_action(self, action: Dict):
         """Compatibility delegate for integrations using the former private hook."""
@@ -369,76 +364,30 @@ class SummaryTaskQueueManager(QObject):
         )
 
     def _on_worker_error(self, error_msg: str):
-        task = self._current_task or {}
-        self._clear_wait_state()
-        self._current_task_had_error = True
-        message = str(error_msg or "Unknown error")
-        if task.get("type") == "transcription" and is_transcription_fatal_failure(message):
-            self._append_history("skipped", task, message)
-            self.task_skipped.emit(task, message)
-            self.task_status_update.emit(f"Skipping failed transcription: {message}")
-            logging.warning("Queue: fatal transcription failure converted to skipped: %s", message)
-        else:
-            self._append_history("failed", task, message)
-            self.task_failed.emit(task, message)
-            logging.error("Queue: task failed type=%s error=%s", task.get("type"), message)
+        self._execution.on_worker_error(error_msg)
 
     def _on_worker_status_update(self, message: str):
-        msg = str(message or "").strip()
-        if not msg:
-            return
-        self.task_status_update.emit(msg)
-        current_task = self._current_task or {}
-        if not current_task:
-            return
-        if self._history.append_status_trace_once(current_task, msg):
+        before = len(self._history)
+        self._execution.on_worker_status_update(message)
+        if len(self._history) != before:
             self.history_changed.emit(len(self._history))
 
     def _on_worker_completely_finished(self):
-        had_error = self._current_task_had_error
-        task, worker = self._state.finish_current()
-        self._history.clear_status_dedup()
-        self._clear_wait_state()
-        if task:
-            if not had_error:
-                self._append_history("finished", task)
-                logging.info("Queue: task finished successfully type=%s.", task.get("type"))
-            self.task_finished.emit(task)
-        if worker:
-            worker.deleteLater()
-            self._zombie_workers.append(worker)
-            if len(self._zombie_workers) > 5:
-                self._zombie_workers.pop(0)
-        # Opportunistic cleanup between queued jobs helps long pending runs.
-        cleanup_between_jobs()
-        self._emit_queue_state()
-        self._start_next_if_idle()
+        self._execution.on_worker_completely_finished()
 
     def _on_worker_retry_wait(self, delay_seconds: float, attempt: int, total_attempts: int, error_text: str):
-        wait, description, status_message = build_retry_wait_state(
-            delay_seconds,
-            attempt,
-            total_attempts,
-            error_text,
-        )
-        self._wait_state.begin(wait, description)
-        self.wait_state_changed.emit(*self._wait_state.snapshot())
-        if not self._wait_timer.isActive():
-            self._wait_timer.start()
-        self.task_status_update.emit(status_message)
-        logging.info("Queue: retry wait state set (%ss) for attempt %s/%s.", wait, attempt + 1, total_attempts)
+        self._execution.on_worker_retry_wait(delay_seconds, attempt, total_attempts, error_text)
 
     def _tick_wait_timer(self):
-        if not self._wait_state.tick():
-            self._clear_wait_state()
-            return
-        self.wait_state_changed.emit(*self._wait_state.snapshot())
+        self._execution.tick_wait_state()
 
     def _clear_wait_state(self):
-        self._wait_state.clear()
-        if self._wait_timer.isActive():
-            self._wait_timer.stop()
-        self.wait_state_changed.emit(False, 0, "")
+        self._execution.clear_wait_state()
+
+    def _retain_zombie_worker(self, worker):
+        self._zombie_workers.append(worker)
+        if len(self._zombie_workers) > 5:
+            self._zombie_workers.pop(0)
 
     def _append_history(self, event: str, task: Dict, message: str = ""):
         self._history.append(event, task, message)
