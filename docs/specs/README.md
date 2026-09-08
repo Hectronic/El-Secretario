@@ -119,6 +119,7 @@ What user or product problem is being solved?
 | REFACTOR-2026-09-CONTRACT-AUDIT | Implemented | Product-spec completion and intentional-facade audit | SPEC-003, SPEC-006, SPEC-010, SPEC-013 |
 | REFACTOR-2026-09-FLOATING-CHAT-HOST | Implemented | Floating chat host resizing and coordinator separation | SPEC-007 |
 | REFACTOR-2026-09-SIDEBAR-CONTENT | Implemented | Sidebar history, organization, and session-content separation | SPEC-004, SPEC-007, SPEC-010 |
+| REFACTOR-2026-09-CHAT-RUNTIME | Implemented | Chat provider validation and completion-worker lifecycle extraction | SPEC-007, SPEC-013 |
 
 ## Spec Granularity Rules
 

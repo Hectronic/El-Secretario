@@ -28,6 +28,10 @@ Users need to ask questions over selected recordings, notes, notebooks, tags, da
 - Given notebook context is selected, when context text is built, then notebook entries are included with their titles and content.
 - Given no date or tag filter restricts the query, when context text is built, then RAG search results are included as relevant fragments.
 - Given RAG search fails while building context, when the message is sent, then the failure is logged and chat context building continues from other available sources.
+- Given the configured AI provider is invalid, when a user sends a message, then no
+  completion worker starts and the validation problem is rendered in the chat.
+- Given a completion worker succeeds or fails, when it emits its terminal signal,
+  then the busy UI state is restored and the worker is released.
 - Given active date range, tag, notebook, and forced-record contexts, when a session is saved, then those contexts are serialized into the session payload.
 - Given a saved session has message and context JSON, when it is loaded, then chat history, title, session ID, and context state are restored.
 - Given stored session JSON is malformed, when a session is loaded, then the widget falls back to empty messages or no contexts rather than crashing.
@@ -42,7 +46,13 @@ Users need to ask questions over selected recordings, notes, notebooks, tags, da
 
 ## Architecture Notes
 
-- Chat shell: `src/ui/chat_widget.py` owns the visible chat façade, user input, worker signal wiring, public chat signals, session lifecycle calls, and high-level UI orchestration. `src/ui/chat/layout.py` owns visual composition/theme application; the shell accepts injected chat and notebook persistence ports while retaining compatible defaults.
+- Chat shell: `src/ui/chat_widget.py` owns the visible chat façade, user input,
+  public chat signals, response persistence, and high-level UI orchestration.
+  `src/ui/chat/conversation_runtime.py` owns provider validation, one active
+  `ChatThread`, signal wiring, and safe worker cleanup. `src/ui/chat/layout.py`
+  owns visual composition/theme application; the shell accepts injected chat,
+  notebook persistence, and conversation-runtime ports while retaining compatible
+  defaults.
 - Context building: `src/ui/chat/context_builder.py` owns chat context text assembly from notebooks, forced records, date/week filters, tags, tasks, and RAG fragments, plus context serialization for sessions.
 - Context parsing: `src/ui/chat/context_state.py` normalizes stored context JSON into UI-ready date, tag, notebook, and forced-record state.
 - Sessions: `src/ui/chat/session_state.py`, `src/ui/chat/session_loader.py`, and `src/ui/chat/session_applier.py` own session naming, save/update payloads, malformed JSON handling, and applying loaded messages/contexts to a widget.
@@ -62,7 +72,7 @@ Users need to ask questions over selected recordings, notes, notebooks, tags, da
 
 ## Test Plan
 
-- Unit: context text assembly, context serialization/parsing, session naming/payload persistence, loaded-session application, message rendering, theme styles, header state, and busy state.
+- Unit: context text assembly, context serialization/parsing, session naming/payload persistence, loaded-session application, message rendering, theme styles, header state, busy state, and provider/worker lifecycle in `tests/ui/chat/test_conversation_runtime.py`.
 - Dialog/UI: add-context dialog selection and context manager panel state round trips.
 - Main-window UI: `tests/ui/main_window/test_floating_chat_host.py` covers bounded
   host resizing; `tests/ui/main_window/test_chat_floating.py` covers
@@ -71,7 +81,7 @@ Users need to ask questions over selected recordings, notes, notebooks, tags, da
 - Integration: `ChatWidget` sends messages with recording/week/tag/task context,
   persists sessions, restores loaded sessions, and updates styles on theme changes.
   `tests/integration/test_chat_session_persistence.py` verifies both the real SQLite
-  response → session → restored-context round trip and session-preserving
+  worker response → session → restored-context round trip and session-preserving
   float/minimize/restore/dock lifecycle.
 - Manual: start chats from recording, calendar/week, tag, notebook, and search flows; float/dock/minimize/restore; delete an open session; verify light/dark readability.
 
@@ -89,9 +99,11 @@ Users need to ask questions over selected recordings, notes, notebooks, tags, da
 - 2026-09-07: moved `FloatingChatHost` resizing and edge handling to
   `src/ui/main_window/floating_chat_host.py`; the coordinator remains in
   `chat_floating.py` and the original import stays compatible.
+- 2026-09-08: moved provider validation, `ChatThread` signal wiring, and active
+  worker cleanup into `src/ui/chat/conversation_runtime.py`; `ChatWidget` remains
+  the visible shell and session-persistence owner.
 
 ## Open Questions
 
-- Should remaining `ChatWidget` worker orchestration be split from the widget shell after provider/prompt contracts are documented in SPEC-013?
 - Should floating chat layout preferences persist per session or globally once product behavior is explicitly desired?
 - Should chat context assembly receive a typed context object instead of reading directly from `ContextManagerPanel` before expanding context types further?

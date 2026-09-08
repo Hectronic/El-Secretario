@@ -86,6 +86,10 @@ Reduce large flat modules and create expansion points for future product work wi
 - Representative root-level integration tests still cover cross-feature behavior such as recording flow, chat context sync, settings, summary queue, and Windows bootstrap scripts.
 - `tests/integration/test_calendar_selection_sync.py` covers real SQLite date/tag filtering, sidebar synchronization, and daily-summary queue admission.
 - Recording deletion and calendar-to-queue daily-summary completion are covered with real SQLite in `tests/integration/`, while external dialogs, AI providers, and workers remain controlled test boundaries.
+- Chat completion lifecycle has focused coverage in
+  `tests/ui/chat/test_conversation_runtime.py`; its real Qt UI → deterministic
+  worker → SQLite session/restoration contract is covered in
+  `tests/integration/test_chat_session_persistence.py`.
 - Full suite status for this refactor was validated after the code change.
 
 ## Remaining Hotspots

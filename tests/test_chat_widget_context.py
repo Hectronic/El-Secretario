@@ -41,8 +41,8 @@ class TestChatWidgetContext(unittest.TestCase):
         self.db_patcher.stop()
         self.nb_db_patcher.stop()
 
-    @patch("src.ui.chat_widget.ChatThread")
-    @patch("src.ai_provider.validate_ai_provider_config", return_value=(True, ""))
+    @patch("src.ui.chat.conversation_runtime.ChatThread")
+    @patch("src.ui.chat.conversation_runtime.validate_ai_provider_config", return_value=(True, ""))
     def test_recording_context_uses_single_meeting_and_notes(self, _mock_validate, mock_chat_thread):
         self.mock_db.fetch_record.return_value = {
             "id": 5,
@@ -75,8 +75,8 @@ class TestChatWidgetContext(unittest.TestCase):
         finally:
             widget.deleteLater()
 
-    @patch("src.ui.chat_widget.ChatThread")
-    @patch("src.ai_provider.validate_ai_provider_config", return_value=(True, ""))
+    @patch("src.ui.chat.conversation_runtime.ChatThread")
+    @patch("src.ui.chat.conversation_runtime.validate_ai_provider_config", return_value=(True, ""))
     def test_week_range_context_includes_records_and_tasks(self, _mock_validate, mock_chat_thread):
         weekly_record = {
             "id": 8,

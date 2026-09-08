@@ -18,9 +18,8 @@ from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QTextEdit,
                              QFrame, QDialog, QScrollArea, QSplitter,
                              QGroupBox, QCheckBox, QCalendarWidget, QToolButton,
                              QMessageBox)
-from PyQt6.QtCore import Qt, QSettings, pyqtSignal, QSize, QEvent
+from PyQt6.QtCore import Qt, pyqtSignal, QSize, QEvent
 from PyQt6.QtGui import QCursor, QIcon, QTextCharFormat, QColor, QPalette
-from src.worker_components.threads import ChatThread
 from src.database import DBManager
 from src.ui.styles import TEXT_EDIT_STYLE, BUTTON_PRIMARY_STYLE
 from src.notebook_database import NotebookDBManager
@@ -37,7 +36,7 @@ from src.ui.chat.session_state import (
     persist_chat_session,
     resolve_chat_display_title,
 )
-from src.ui.chat.theme_styles import build_chat_widget_theme
+from src.ui.chat.conversation_runtime import ChatConversationRuntime
 from src.ui.chat import layout as chat_layout
 
 class ChatWidget(QWidget):
@@ -57,6 +56,7 @@ class ChatWidget(QWidget):
         initial_contexts=None,
         persistence=None,
         notebook_persistence=None,
+        conversation_runtime=None,
     ):
         super().__init__(parent)
         self.rag = rag_engine
@@ -65,7 +65,7 @@ class ChatWidget(QWidget):
             notebook_persistence if notebook_persistence is not None else NotebookDBManager()
         )
         self.chat_history = [] 
-        self.chat_thread = None
+        self.conversation_runtime = conversation_runtime or ChatConversationRuntime()
         self.current_session_id = session_id
         self.forced_record_ids = set()
         self.forced_record_labels = []
@@ -205,24 +205,17 @@ class ChatWidget(QWidget):
             forced_record_ids=self.forced_record_ids,
         )
 
-        # Start Chat Thread
-        settings = QSettings("Hectronic", "Secretario")
-        from src.ai_provider import validate_ai_provider_config
-        is_valid, error_msg = validate_ai_provider_config(settings)
-        
-        if not is_valid:
-            self.append_to_chat("System", f"Error: {error_msg}")
+        result = self.conversation_runtime.start(
+            query,
+            context_text,
+            self.chat_history,
+            self.on_chat_finished,
+            self.on_chat_error,
+            lambda: self.set_busy(True),
+        )
+        if result.validation_error:
+            self.append_to_chat("System", f"Error: {result.validation_error}")
             return
-
-        if self.chat_thread and self.chat_thread.isRunning():
-            return
-        self.set_busy(True)
-        self.chat_thread = ChatThread("", query, context_text, self.chat_history)
-        self.chat_thread.finished.connect(self.on_chat_finished)
-        self.chat_thread.error.connect(self.on_chat_error)
-        self.chat_thread.finished.connect(self._clear_chat_thread_ref)
-        self.chat_thread.error.connect(self._clear_chat_thread_ref)
-        self.chat_thread.start()
 
     def on_chat_finished(self, response):
         self.set_busy(False)
@@ -271,26 +264,8 @@ class ChatWidget(QWidget):
         else:
             QApplication.restoreOverrideCursor()
 
-    def _clear_chat_thread_ref(self, *args):
-        thread = self.chat_thread
-        self.chat_thread = None
-        if thread:
-            thread.deleteLater()
-
     def cleanup(self):
-        if self.chat_thread and self.chat_thread.isRunning():
-            try:
-                self.chat_thread.requestInterruption()
-                self.chat_thread.quit()
-                self.chat_thread.wait(3000)
-            except Exception:
-                pass
-        if self.chat_thread:
-            try:
-                self.chat_thread.deleteLater()
-            except Exception:
-                pass
-        self.chat_thread = None
+        self.conversation_runtime.cleanup()
         QApplication.restoreOverrideCursor()
 
     def closeEvent(self, event):
