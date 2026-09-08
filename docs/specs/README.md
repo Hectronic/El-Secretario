@@ -80,7 +80,7 @@ What user or product problem is being solved?
 
 | ID | Capability | Status | Main Code Areas | Representative Tests |
 | --- | --- | --- | --- | --- |
-| [SPEC-001](SPEC-001-audio-capture-and-import.md) | Audio capture and import | Implemented | `src/audio.py`, `src/ui/welcome_widget.py`, `src/ui/welcome/`, `src/ui/recording_in_progress_widget.py`, `src/ui/main_window/shell_actions.py`, `src/ui/main_window/recording_tabs.py` | `tests/test_recording_flow.py`, `tests/test_welcome_daily_summary_button.py`, `tests/ui/main_window/test_recording_tabs.py`, `tests/ui/main_window/test_shell_actions.py`, `tests/test_notes.py`, `tests/ui/welcome/`, `tests/test_z_audio.py` |
+| [SPEC-001](SPEC-001-audio-capture-and-import.md) | Audio capture and import | Implemented | `src/audio.py`, `src/ui/welcome_widget.py`, `src/ui/welcome/`, `src/ui/recording_in_progress_widget.py`, `src/ui/recording_in_progress/`, `src/ui/main_window/shell_actions.py`, `src/ui/main_window/recording_tabs.py` | `tests/test_recording_flow.py`, `tests/test_recording_in_progress_layout.py`, `tests/ui/recording_in_progress/`, `tests/integration/test_recording_in_progress_lifecycle.py`, `tests/test_welcome_daily_summary_button.py`, `tests/ui/main_window/test_recording_tabs.py`, `tests/ui/main_window/test_shell_actions.py`, `tests/test_notes.py`, `tests/ui/welcome/`, `tests/test_z_audio.py` |
 | [SPEC-002](SPEC-002-transcription-runtime-and-stt-provider-selection.md) | Transcription runtime and STT provider selection | Implemented | `src/transcription_options.py`, `src/worker_components/`, `src/stt_providers/` | `tests/test_transcription_options.py`, `tests/worker/`, `tests/worker_components/`, `tests/stt_providers/` |
 | [SPEC-003](SPEC-003-diarization-and-speaker-management.md) | Diarization and speaker management | Implemented | `src/worker_components/transcriber_thread.py`, `src/ui/speaker_dialog.py`, `src/ui/recording/speaker_actions.py`, `src/ui/recording_widget.py` | `tests/test_diarization_toggle.py`, `tests/ui/test_speaker_dialog.py`, `tests/ui/recording/test_speaker_actions.py` |
 | [SPEC-004](SPEC-004-recording-metadata-notes-favorites-deletion.md) | Recording metadata, notes, favorites, deletion | Implemented | `src/database.py`, `src/persistence/records.py`, `src/ui/recording_widget.py`, `src/ui/recording/`, `src/ui/main_window/recording_tabs.py`, `src/ui/note_widget.py`, `src/ui/components.py` | `tests/test_database.py`, `tests/persistence/`, `tests/test_notes.py`, `tests/test_deletion.py`, `tests/test_recording_widget_ui.py`, `tests/ui/recording/`, `tests/ui/main_window/test_recording_tabs.py`, `tests/integration/test_recording_widget_persistence.py` |
@@ -124,6 +124,7 @@ What user or product problem is being solved?
 | REFACTOR-2026-09-AUDIO-EDITOR | Implemented | Audio-editor segment state, persistence, and retranscription runtime extraction | SPEC-005, SPEC-002 |
 | REFACTOR-2026-09-NOTEBOOK-WIDGET | Implemented | Notebook entry presentation, actions, and transcription-runtime extraction | SPEC-010, SPEC-002 |
 | REFACTOR-2026-09-SUMMARY-VIEWER | Implemented | Summary-viewer refresh and chat-context policy extraction | SPEC-011, SPEC-007 |
+| REFACTOR-2026-09-RECORDING-IN-PROGRESS | Implemented | Active-capture runtime, session payload, workspace, and responsive layout extraction | SPEC-001 |
 
 ## Spec Granularity Rules
 

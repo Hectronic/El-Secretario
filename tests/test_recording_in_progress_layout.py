@@ -95,3 +95,16 @@ class TestRecordingInProgressLayout(unittest.TestCase):
         finally:
             widget.cleanup()
             widget.deleteLater()
+
+    @patch("src.ui.recording_in_progress_widget.DBManager")
+    def test_windows_uses_its_larger_compact_layout_threshold(self, mock_db):
+        mock_db.return_value.get_all_tags.return_value = []
+        widget = RecordingInProgressWidget(recorder=_FakeRecorder(), config={})
+        try:
+            widget._is_windows = True
+            widget._apply_layout_density(viewport_height=850)
+            self.assertTrue(widget._compact_mode_active)
+            self.assertEqual(widget.workspace_split.orientation(), Qt.Orientation.Vertical)
+        finally:
+            widget.cleanup()
+            widget.deleteLater()
