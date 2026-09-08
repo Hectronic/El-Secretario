@@ -125,6 +125,7 @@ What user or product problem is being solved?
 | REFACTOR-2026-09-NOTEBOOK-WIDGET | Implemented | Notebook entry presentation, actions, and transcription-runtime extraction | SPEC-010, SPEC-002 |
 | REFACTOR-2026-09-SUMMARY-VIEWER | Implemented | Summary-viewer refresh and chat-context policy extraction | SPEC-011, SPEC-007 |
 | REFACTOR-2026-09-RECORDING-IN-PROGRESS | Implemented | Active-capture runtime, session payload, workspace, and responsive layout extraction | SPEC-001 |
+| REFACTOR-2026-09-BATCH-PROCESS | Implemented | Transcription-batch queue state and request construction extraction | SPEC-011 |
 
 ## Spec Granularity Rules
 
