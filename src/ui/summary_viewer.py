@@ -13,9 +13,10 @@ from PyQt6.QtWidgets import (
     QScrollArea,
     QSizePolicy,
 )
-from PyQt6.QtCore import Qt, pyqtSignal, QDate
+from PyQt6.QtCore import Qt, pyqtSignal
 from src.ui.tasks_list_widget import TasksListWidget
 from src.ui.components import create_tag_chip
+from src.ui.summaries.context import build_week_chat_contexts, summary_date_range, summary_tags
 
 
 class AutoSizingMarkdownView(QTextBrowser):
@@ -424,71 +425,19 @@ class SummaryViewerWidget(QWidget):
         root_layout.addWidget(self.weekly_tasks_tabs, 1)
 
     def _load_weekly_tasks_snapshot(self):
-        if not hasattr(self, "weekly_task_boards"):
-            return
-        week_start = self.summary_data.get("week_start")
-        tags_filter = self.summary_data.get("tags_filter")
-        snapshot = self.db.get_weekly_task_snapshot(week_start, tags_filter) if (self.db and week_start) else {}
-        mapping = {
-            "week_created": "created_this_week",
-            "week_completed": "completed_this_week",
-            "week_pending_before": "pending_from_before",
-        }
-        title_map = {
-            "week_created": "Created",
-            "week_completed": "Completed",
-            "week_pending_before": "Pending From Before",
-        }
-        for mode, board in self.weekly_task_boards.items():
-            key = mapping.get(mode, "")
-            board.snapshot_ref = week_start
-            board.global_tags_filter = tags_filter
-            board.refresh()
-            if hasattr(self, "weekly_tasks_tabs"):
-                idx = self.weekly_tasks_tabs.indexOf(board)
-                if idx >= 0:
-                    self.weekly_tasks_tabs.setTabText(idx, f"{title_map.get(mode, mode)} ({len(snapshot.get(key, []))})")
+        from src.ui.summaries.refresh import refresh_weekly_task_snapshot
+        refresh_weekly_task_snapshot(self)
 
     def _load_weekly_recordings(self):
-        if not self.db or not hasattr(self, "weekly_recordings_list"):
-            return
-        start, end = self._get_batch_range()
-        if not start:
-            return
-        tags = self._get_summary_tags()
-        records = self.db.fetch_by_date_range(start, end, tags=tags)
-        self.weekly_recordings_list.clear()
-        self.weekly_recordings_meta.setText(f"{len(records)} recording(s) in scope")
-        if not records:
-            item = QListWidgetItem("No recordings found for this week.")
-            self.weekly_recordings_list.addItem(item)
-            return
-        for rec in records:
-            item = QListWidgetItem()
-            row = WeeklyRecordingRowWidget(rec, self)
-            row.open_requested.connect(self.open_recording_requested.emit)
-            item.setSizeHint(row.sizeHint())
-            item.setData(Qt.ItemDataRole.UserRole, rec)
-            self.weekly_recordings_list.addItem(item)
-            self.weekly_recordings_list.setItemWidget(item, row)
+        from src.ui.summaries.refresh import refresh_weekly_recordings
+        refresh_weekly_recordings(self)
 
     def _refresh_daily_task_boards(self):
-        date_ref = self.summary_data.get("date")
-        tags_filter = self.summary_data.get("tags_filter")
-        if hasattr(self, "daily_created_board"):
-            self.daily_created_board.snapshot_ref = date_ref
-            self.daily_created_board.global_tags_filter = tags_filter
-            self.daily_created_board.refresh()
-        if hasattr(self, "daily_completed_board"):
-            self.daily_completed_board.snapshot_ref = date_ref
-            self.daily_completed_board.global_tags_filter = tags_filter
-            self.daily_completed_board.refresh()
+        from src.ui.summaries.refresh import refresh_daily_task_boards
+        refresh_daily_task_boards(self)
 
     def _get_summary_tags(self):
-        tags_filter = self.summary_data.get("tags_filter")
-        if not tags_filter:
-            return None
-        return [t.strip() for t in str(tags_filter).split(",") if t.strip()]
+        return summary_tags(self.summary_data)
 
     def _open_day_chat(self):
         date_str = self.summary_data.get("date")
@@ -496,29 +445,9 @@ class SummaryViewerWidget(QWidget):
             self.start_chat_requested.emit(date_str, [])
 
     def _open_week_chat(self):
-        start, end = self._get_batch_range()
-        if not start or not end:
+        contexts = build_week_chat_contexts(self.summary_data, self.db)
+        if not contexts:
             return
-        contexts = [
-            {
-                "type": "date_range",
-                "value": {"start": start, "end": end},
-                "label": f"{start} to {end}",
-            }
-        ]
-        for tag in self._get_summary_tags() or []:
-            contexts.append({"type": "tag", "value": tag, "label": tag})
-        if self.db:
-            for rec in self.db.fetch_by_date_range(start, end, tags=self._get_summary_tags()):
-                rec_id = rec.get("id")
-                if isinstance(rec_id, int):
-                    contexts.append(
-                        {
-                            "type": "recording",
-                            "value": rec_id,
-                            "label": (rec.get("title") or f"Recording {rec_id}").strip(),
-                        }
-                    )
         self.start_chat_contexts_requested.emit(contexts, True)
 
     def _style_action_button(self, button):
@@ -527,17 +456,7 @@ class SummaryViewerWidget(QWidget):
         button.setMinimumHeight(34)
 
     def _get_batch_range(self):
-        type_str = self.summary_data.get("type", "daily")
-        if type_str == "daily":
-            date_str = self.summary_data.get("date")
-            return date_str, date_str
-        else:
-            # Weekly - week_start is the Sunday anchor
-            sunday_str = self.summary_data.get("week_start")
-            if not sunday_str: return None, None
-            sunday = QDate.fromString(sunday_str, "yyyy-MM-dd")
-            monday = sunday.addDays(-6)
-            return monday.toString("yyyy-MM-dd"), sunday_str
+        return summary_date_range(self.summary_data)
 
     def update_content(self, summary_data):
         """Update the content of the viewer with new data."""

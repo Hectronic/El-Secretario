@@ -2,7 +2,7 @@
 
 Status: Implemented
 Owner: TBD
-Last updated: 2026-09-07
+Last updated: 2026-09-08
 
 ## Problem
 
@@ -38,9 +38,13 @@ then open those groups as focused views or chat contexts.
 
 - UI: `src/ui/collection_widget.py`, `src/ui/notebook_widget.py`, and
   `src/ui/main_window/window_navigation.py` own feature views and navigation.
+  `src/ui/notebooks/entry_widget.py` owns a rendered notebook entry, while the
+  widget remains the visible shell.
 - Persistence: `src/notebook_database.py` owns notebook SQLite tables; recording
   tags remain in `src/persistence/records.py` behind `DBManager`.
-- Integrations: `src/ui/main_window/sidebar_organization.py` owns collection and
+- Integrations: `src/ui/notebooks/actions.py` owns notebook-entry persistence and
+  audio-file deletion; `src/ui/notebooks/transcription_runtime.py` owns configured
+  transcription worker lifecycle. `src/ui/main_window/sidebar_organization.py` owns collection and
   notebook sidebar content; `sidebar_content.py` remains its compatible façade.
   `src/ui/main_window/content_tabs.py` opens reusable views and chat contexts.
 - Platform constraints: SQLite and Qt sidebar behavior are identical on Windows,
@@ -54,7 +58,9 @@ then open those groups as focused views or chat contexts.
   `tests/ui/main_window/test_content_tabs.py` cover sidebar routing and tab reuse.
 - Integration: `tests/integration/test_sidebar_content_persistence.py` verifies real
   recording and notebook SQLite stores populate the sidebar and produce notebook
-  chat context.
+  chat context. `tests/integration/test_notebook_widget_persistence.py` verifies a
+  real notebook database receives a worker transcription result, refreshes the Qt
+  entry list, and deletes associated audio safely.
 - Manual: create a notebook, add text and audio entries, reopen it, and open a
   notebook/collection chat on each supported desktop platform.
 
@@ -63,6 +69,12 @@ then open those groups as focused views or chat contexts.
 - README: notebooks and collections are listed as organization features.
 - Other docs: SPEC-007 defines chat context semantics; SPEC-014 covers notebook
   export/import.
+
+## Refactor Notes
+
+- 2026-09-08: moved entry rendering, entry/file actions, and notebook audio-note
+  transcription lifecycle to `src/ui/notebooks/`; `NotebookWidget` retains UI,
+  dialog, recording-control, and navigation ownership.
 
 ## Open Questions
 

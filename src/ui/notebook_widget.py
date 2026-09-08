@@ -17,89 +17,37 @@ import shutil
 from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QPushButton, 
                              QListWidget, QListWidgetItem, QInputDialog, QMessageBox, 
                              QLabel, QTextEdit, QDialog, QDialogButtonBox, QProgressBar)
-from PyQt6.QtCore import Qt, pyqtSignal, QTimer, QSettings
+from PyQt6.QtCore import Qt, pyqtSignal, QTimer
 from src.ui.styles import LIST_WIDGET_STYLE
-from src.worker_components.transcriber_thread import TranscriberThread
-from src.stt_providers.sherpa_onnx.model_manager import get_transcription_preflight_error
-from src.transcription_options import get_saved_transcription_model
-
-class NoteEntryWidget(QWidget):
-    def __init__(self, entry, parent=None):
-        super().__init__(parent)
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(5, 5, 5, 5)
-        
-        # Header
-        header = QHBoxLayout()
-        title_text = entry['title'] if entry['title'] else entry['created_at']
-        type_icon = "🎤" if entry['type'] == 'audio' else "📝"
-        
-        title = QLabel(f"{type_icon} <b>{title_text}</b>")
-        header.addWidget(title)
-        header.addStretch()
-        
-        if entry['type'] == 'audio':
-            duration = entry.get('duration', 0) or 0
-            mins = int(duration // 60)
-            secs = int(duration % 60)
-            header.addWidget(QLabel(f"{mins}m {secs}s"))
-            
-        # Delete Button
-        del_btn = QPushButton("🗑")
-        del_btn.setFixedSize(30, 30)
-        del_btn.setStyleSheet("""
-            QPushButton {
-                background-color: transparent;
-                color: #f44336;
-                border: none;
-                font-size: 16px;
-            }
-            QPushButton:hover {
-                background-color: #333;
-                border-radius: 15px;
-            }
-        """)
-        del_btn.clicked.connect(self.on_delete_clicked)
-        header.addWidget(del_btn)
-            
-        layout.addLayout(header)
-        
-        # Content
-        content = QLabel(entry['content'])
-        content.setWordWrap(True)
-        content.setStyleSheet("color: #ccc; margin-top: 5px;")
-        layout.addWidget(content)
-
-    def on_delete_clicked(self):
-        # We need to signal the parent to delete this entry
-        # Since we are inside a QListWidget, we can't easily emit a signal up to NotebookWidget 
-        # without defining a custom signal on this widget class.
-        if self.parent():
-            # Try to find the NotebookWidget parent
-            parent = self.parent()
-            while parent:
-                if isinstance(parent, QListWidget):
-                    # We found the list widget, but we need the NotebookWidget
-                    # The NotebookWidget is the parent of the QListWidget (usually)
-                    # But cleaner way is to emit a signal from this widget
-                    break
-                parent = parent.parent()
-        
-        # Let's define a signal on the class
-        self.delete_requested.emit()
-
-    delete_requested = pyqtSignal()
+from src.ui.notebooks.actions import (
+    add_text_entry,
+    apply_transcription_error,
+    apply_transcription_result,
+    delete_entry_and_audio,
+    rename_entry,
+)
+from src.ui.notebooks.entry_widget import NoteEntryWidget
+from src.ui.notebooks.transcription_runtime import NotebookTranscriptionRuntime
 
 class NotebookWidget(QWidget):
     chat_requested = pyqtSignal(int, str) # id, name
+    entries_changed = pyqtSignal()
 
-    def __init__(self, db_manager, notebook_id, notebook_name, recorder, parent=None):
+    def __init__(
+        self,
+        db_manager,
+        notebook_id,
+        notebook_name,
+        recorder,
+        parent=None,
+        transcription_runtime=None,
+    ):
         super().__init__(parent)
         self.db = db_manager
         self.notebook_id = notebook_id
         self.notebook_name = notebook_name
         self.recorder = recorder
-        self.transcriber_thread = None
+        self.transcription_runtime = transcription_runtime or NotebookTranscriptionRuntime()
         self.recording_timer = QTimer()
         self.recording_timer.timeout.connect(self.update_recording_time)
         self.recording_seconds = 0
@@ -200,11 +148,12 @@ class NotebookWidget(QWidget):
             self.entries_list.addItem(item)
             self.entries_list.setItemWidget(item, widget)
             item.setData(Qt.ItemDataRole.UserRole, entry)
+        self.entries_changed.emit()
 
     def add_text_note(self):
         text, ok = QInputDialog.getMultiLineText(self, "New Note", "Content:")
         if ok and text.strip():
-            self.db.add_text_entry(self.notebook_id, text.strip())
+            add_text_entry(self.db, self.notebook_id, text)
             self.load_entries()
 
     def toggle_recording(self):
@@ -293,40 +242,21 @@ class NotebookWidget(QWidget):
             self.rec_status.setText(f"Recording: {mins:02d}:{secs:02d}")
 
     def start_transcription(self, entry_id, file_path):
-        # Use existing worker logic with auto GPU detection
-        settings = QSettings("Hectronic", "Secretario")
-        force_cpu = settings.value("force_cpu", False, type=bool)
-        compute_type = settings.value("compute_type", "auto")
-        transcription_backend = settings.value("transcription_backend", "auto")
-        model_size = get_saved_transcription_model(settings)
-        preflight_error = get_transcription_preflight_error(model_size, settings)
-        if preflight_error:
-            QMessageBox.critical(self, "Transcription Error", preflight_error)
-            return
-        if compute_type == "auto":
-            compute_type = None
-
-        self._cleanup_transcriber_thread()
-        self.transcriber_thread = TranscriberThread(
+        self.transcription_runtime.cleanup()
+        result = self.transcription_runtime.start(
             file_path,
-            model_size=model_size,
-            compute_type=compute_type,
-            force_cpu=force_cpu,
-            backend_preference=transcription_backend,
+            lambda response: self.on_transcription_finished(entry_id, response),
+            lambda error: self.on_transcription_error(entry_id, error),
         )
-        self.transcriber_thread.finished.connect(lambda res: self.on_transcription_finished(entry_id, res))
-        self.transcriber_thread.error.connect(lambda err: self.on_transcription_error(entry_id, err))
-        self.transcriber_thread.finished.connect(self._clear_transcriber_thread_ref)
-        self.transcriber_thread.error.connect(self._clear_transcriber_thread_ref)
-        self.transcriber_thread.start()
+        if result.preflight_error:
+            QMessageBox.critical(self, "Transcription Error", result.preflight_error)
 
     def on_transcription_finished(self, entry_id, result):
-        text = result.get('text', '')
-        self.db.update_entry_content(entry_id, text)
+        apply_transcription_result(self.db, entry_id, result)
         self.load_entries()
 
     def on_transcription_error(self, entry_id, error):
-        self.db.update_entry_content(entry_id, f"Transcription Failed: {error}")
+        apply_transcription_error(self.db, entry_id, error)
         self.load_entries()
 
     def on_item_double_clicked(self, item):
@@ -365,7 +295,7 @@ class NotebookWidget(QWidget):
         current_title = entry['title'] if entry['title'] else ""
         new_title, ok = QInputDialog.getText(self, "Rename Note", "New Title:", text=current_title)
         if ok:
-            self.db.rename_entry(entry['id'], new_title.strip())
+            rename_entry(self.db, entry['id'], new_title)
             self.load_entries()
 
     def delete_entry(self, entry):
@@ -373,34 +303,8 @@ class NotebookWidget(QWidget):
                                    "Are you sure you want to delete this note?",
                                    QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
         if reply == QMessageBox.StandardButton.Yes:
-            file_path = self.db.delete_entry(entry['id'])
-            if file_path and os.path.exists(file_path):
-                try:
-                    os.remove(file_path)
-                except Exception as e:
-                    print(f"Error deleting file: {e}")
+            delete_entry_and_audio(self.db, entry['id'])
             self.load_entries()
-
-    def _clear_transcriber_thread_ref(self, *args):
-        thread = self.transcriber_thread
-        self.transcriber_thread = None
-        if thread:
-            thread.deleteLater()
-
-    def _cleanup_transcriber_thread(self):
-        if self.transcriber_thread and self.transcriber_thread.isRunning():
-            try:
-                self.transcriber_thread.requestInterruption()
-                self.transcriber_thread.quit()
-                self.transcriber_thread.wait(3000)
-            except Exception:
-                pass
-        if self.transcriber_thread:
-            try:
-                self.transcriber_thread.deleteLater()
-            except Exception:
-                pass
-        self.transcriber_thread = None
 
     def cleanup(self):
         self.recording_timer.stop()
@@ -415,7 +319,7 @@ class NotebookWidget(QWidget):
             except Exception:
                 pass
             self._amplitude_connected = False
-        self._cleanup_transcriber_thread()
+        self.transcription_runtime.cleanup()
 
     def closeEvent(self, event):
         self.cleanup()

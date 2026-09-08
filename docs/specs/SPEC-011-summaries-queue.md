@@ -2,7 +2,7 @@
 
 Status: Implemented
 Owner: TBD
-Last updated: 2026-09-05
+Last updated: 2026-09-08
 
 ## Problem
 
@@ -58,6 +58,9 @@ Users need long-running AI and transcription work to run sequentially, visibly, 
   sequential continuation. `SummaryTaskQueueManager` remains the Qt-signal façade.
 - Queue widget presentation/actions: `src/app/summary_queue/presentation.py` and `src/app/summary_queue/actions.py` own UI-facing formatting/snapshots and queue action orchestration extracted from `QueueManagementWidget`.
 - Main-window queue presentation: `src/ui/main_window/summary_queue_status.py` owns the status bar, queue-tab opening, queue-signal subscriptions, progress/status rendering, and refresh of affected open views. `MainWindow` keeps compatibility delegates for existing callers.
+- Summary view: `src/ui/summary_viewer.py` remains the visual shell, while
+  `src/ui/summaries/context.py` owns date/tag and chat-context construction and
+  `src/ui/summaries/refresh.py` owns daily/weekly task and recording refresh policy.
 - Startup scheduling: `src/ui/main_window/runtime_startup.py` owns opt-in scheduling of the prior weekly or latest missing daily summary. `MainWindow` keeps compatibility delegates used by bootstrap.
 - Daily summary shortcut: `src/ui/main_window/runtime_startup.py` also owns the current-day summary queue request emitted by the welcome screen.
 - Persistence: summary workflows accept an injected aggregate persistence port; `src/database.py` remains the compatible default facade while repositories under `src/persistence/` own the aggregate implementations.
@@ -70,7 +73,7 @@ Users need long-running AI and transcription work to run sequentially, visibly, 
 
 - Unit: helper parsing, audio-duration fallback, dedupe keys, queue history, skip behavior, AI provider retry policy.
 - Integration: summary-to-task chaining, queued transcription persistence, queue widget updates, RAG reindex worker.
-- Integration contracts: `tests/test_summary_task_queue_integration.py` covers queued transcription and summary/task chaining with real SQLite and fake worker boundaries; `tests/test_recording_flow.py` covers capture-tab handoff; `tests/integration/test_persistence_ports.py` covers injected persistence across batch widgets; and `tests/integration/test_calendar_selection_sync.py` covers calendar admission through the queue to a persisted daily summary.
+- Integration contracts: `tests/test_summary_task_queue_integration.py` covers queued transcription and summary/task chaining with real SQLite and fake worker boundaries; `tests/test_recording_flow.py` covers capture-tab handoff; `tests/integration/test_persistence_ports.py` covers injected persistence across batch widgets; `tests/integration/test_calendar_selection_sync.py` covers calendar admission through the queue to a persisted daily summary; and `tests/integration/test_summary_viewer_persistence.py` covers persisted weekly recordings/tasks through the viewer into emitted chat context.
 - UI: queue management widget reflects current/pending/history state.
 - Manual: run a real queued summary, task extraction, transcription, and RAG reindex on Ubuntu and Windows before release.
 
@@ -110,6 +113,8 @@ Users need long-running AI and transcription work to run sequentially, visibly, 
 - 2026-09-07: moved worker outcome orchestration from `SummaryTaskQueueManager` to
   `src/app/summary_queue/execution.py`, retaining the manager's public signals and
   compatible private hooks.
+- 2026-09-08: moved summary-viewer query refresh and weekly chat-context policy to
+  `src/ui/summaries/`, retaining `SummaryViewerWidget` as the visual façade.
 
 ## Open Questions
 

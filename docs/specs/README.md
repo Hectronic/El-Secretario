@@ -122,6 +122,8 @@ What user or product problem is being solved?
 | REFACTOR-2026-09-CHAT-RUNTIME | Implemented | Chat provider validation and completion-worker lifecycle extraction | SPEC-007, SPEC-013 |
 | REFACTOR-2026-09-TASK-BOARD | Implemented | Task-board filter/query and persistence-action extraction | SPEC-012 |
 | REFACTOR-2026-09-AUDIO-EDITOR | Implemented | Audio-editor segment state, persistence, and retranscription runtime extraction | SPEC-005, SPEC-002 |
+| REFACTOR-2026-09-NOTEBOOK-WIDGET | Implemented | Notebook entry presentation, actions, and transcription-runtime extraction | SPEC-010, SPEC-002 |
+| REFACTOR-2026-09-SUMMARY-VIEWER | Implemented | Summary-viewer refresh and chat-context policy extraction | SPEC-011, SPEC-007 |
 
 ## Spec Granularity Rules
 

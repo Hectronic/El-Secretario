@@ -96,6 +96,9 @@ Reduce large flat modules and create expansion points for future product work wi
 - Audio-editor segment state, safe writes, and retranscription runtime are split
   under `src/ui/audio_editor/`; `tests/integration/test_audio_editor_persistence.py`
   covers real edited-audio persistence and a deterministic worker response.
+- Notebook entry presentation, persistence actions, and audio-note transcription
+  runtime are split under `src/ui/notebooks/`; the real Qt/SQLite contract lives in
+  `tests/integration/test_notebook_widget_persistence.py`.
 - Full suite status for this refactor was validated after the code change.
 
 ## Remaining Hotspots
