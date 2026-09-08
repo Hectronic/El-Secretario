@@ -93,6 +93,9 @@ Reduce large flat modules and create expansion points for future product work wi
 - Task-board filter/query policy and persistence mutations are owned by
   `src/ui/tasks/`; `tests/integration/test_tasks_board_persistence.py` covers the
   real Qt board → SQLite completion and global-filter contract.
+- Audio-editor segment state, safe writes, and retranscription runtime are split
+  under `src/ui/audio_editor/`; `tests/integration/test_audio_editor_persistence.py`
+  covers real edited-audio persistence and a deterministic worker response.
 - Full suite status for this refactor was validated after the code change.
 
 ## Remaining Hotspots

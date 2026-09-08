@@ -16,12 +16,11 @@ from __future__ import annotations
 
 import logging
 import os
-import shutil
 import tempfile
 
 import soundfile as sf
 import numpy as np
-from PyQt6.QtCore import Qt, QSettings, QUrl, pyqtSignal
+from PyQt6.QtCore import Qt, QUrl, pyqtSignal
 from PyQt6.QtGui import QShortcut, QKeySequence
 from PyQt6.QtMultimedia import QAudioOutput, QMediaPlayer
 from PyQt6.QtWidgets import (
@@ -42,7 +41,6 @@ from PyQt6.QtWidgets import QStyle
 
 from src.audio import Recorder
 from src.database import DBManager
-from src.transcription_options import get_saved_transcription_model
 from src.ui.audio_editor.editing_state import (
     AudioChunk,
     ChunkEditHistory,
@@ -50,9 +48,9 @@ from src.ui.audio_editor.editing_state import (
     build_preview_ranges,
     split_chunk,
 )
+from src.ui.audio_editor.persistence import apply_edited_audio
+from src.ui.audio_editor.transcription_runtime import AudioEditorTranscriptionRuntime
 from src.ui.audio_editor.waveform import AudioWaveformWidget
-from src.worker_components.transcriber_thread import TranscriberThread
-from src.stt_providers.sherpa_onnx.model_manager import get_transcription_preflight_error
 
 
 class AudioEditorWidget(QWidget):
@@ -62,10 +60,19 @@ class AudioEditorWidget(QWidget):
     status_changed = pyqtSignal(str)
     progress_changed = pyqtSignal(int)
 
-    def __init__(self, rag_engine, recorder=None, record_id=None, task_queue=None, parent=None):
+    def __init__(
+        self,
+        rag_engine,
+        recorder=None,
+        record_id=None,
+        task_queue=None,
+        parent=None,
+        persistence=None,
+        transcription_runtime=None,
+    ):
         super().__init__(parent)
         self.rag = rag_engine
-        self.db = DBManager()
+        self.db = persistence if persistence is not None else DBManager()
         self.recorder = recorder if recorder is not None else Recorder()
         self.summary_task_queue = task_queue
         self.current_record_id = record_id
@@ -84,7 +91,7 @@ class AudioEditorWidget(QWidget):
         self._has_unsaved_changes = False
         self._history = ChunkEditHistory()
         self._boundary_drag_history_pending = False
-        self.transcriber_thread = None
+        self.transcription_runtime = transcription_runtime or AudioEditorTranscriptionRuntime()
         self.player = QMediaPlayer()
         self.audio_output = QAudioOutput()
         self.player.setAudioOutput(self.audio_output)
@@ -614,13 +621,14 @@ class AudioEditorWidget(QWidget):
             return False
 
         try:
-            backup_path = f"{self.current_recording_path}.orig"
-            if not os.path.exists(backup_path):
-                shutil.copy2(self.current_recording_path, backup_path)
-            sf.write(self.current_recording_path, self.preview_audio, self.current_sample_rate)
+            self.current_duration = apply_edited_audio(
+                self.current_recording_path,
+                self.preview_audio,
+                self.current_sample_rate,
+                self.db,
+                self.current_record_id,
+            )
             self.current_audio = self.preview_audio
-            self.current_duration = float(len(self.preview_audio) / self.current_sample_rate)
-            self.db.update_duration(self.current_record_id, self.current_duration)
             self.status_changed.emit("Audio updated.")
             self.recording_saved.emit()
             self._mark_clean()
@@ -638,40 +646,15 @@ class AudioEditorWidget(QWidget):
     def _retranscribe_current_audio(self):
         if not self.current_recording_path:
             return
-        settings = QSettings("Hectronic", "Secretario")
-        model_size = get_saved_transcription_model(settings)
-        language = settings.value("rec_config/language", "Auto")
-        lang_map = {"Auto": None, "Spanish": "es", "English": "en"}
-        language_code = lang_map.get(language, None)
-        hf_token = settings.value("hf_token", "")
-        force_cpu = settings.value("force_cpu", False, type=bool)
-        compute_type = settings.value("compute_type", "auto")
-        transcription_backend = settings.value("transcription_backend", "auto")
-        enable_diarization = settings.value("rec_config/diarization", False, type=bool)
-        preflight_error = get_transcription_preflight_error(model_size, settings)
-        if preflight_error:
-            QMessageBox.critical(self, "Transcription Error", preflight_error)
-            return
-        if compute_type == "auto":
-            compute_type = None
-        duration = self.current_duration
-        self.transcriber_thread = TranscriberThread(
+        result = self.transcription_runtime.start(
             self.current_recording_path,
-            model_size=model_size,
-            compute_type=compute_type,
-            language=language_code,
-            hf_token=hf_token,
-            enable_diarization=enable_diarization,
-            total_duration=duration,
-            force_cpu=force_cpu,
-            backend_preference=transcription_backend,
+            self.current_duration,
+            self._on_transcription_finished,
+            self._on_transcription_error,
+            lambda: self.progress_changed.emit(0),
         )
-        self.transcriber_thread.finished.connect(self._on_transcription_finished)
-        self.transcriber_thread.error.connect(self._on_transcription_error)
-        self.transcriber_thread.finished.connect(self._clear_transcriber_thread_ref)
-        self.transcriber_thread.error.connect(self._clear_transcriber_thread_ref)
-        self.transcriber_thread.start()
-        self.progress_changed.emit(0)
+        if result.preflight_error:
+            QMessageBox.critical(self, "Transcription Error", result.preflight_error)
 
     def _on_transcription_finished(self, result):
         self.progress_changed.emit(-2)
@@ -696,12 +679,6 @@ class AudioEditorWidget(QWidget):
     def _on_transcription_error(self, err):
         self.progress_changed.emit(-2)
         QMessageBox.critical(self, "Error", err)
-
-    def _clear_transcriber_thread_ref(self, *args):
-        thread = self.transcriber_thread
-        self.transcriber_thread = None
-        if thread:
-            thread.deleteLater()
 
     def mark_start_from_playhead(self):
         self.selection_start_spin.setValue(self._current_playhead_seconds())
@@ -762,19 +739,7 @@ class AudioEditorWidget(QWidget):
             except Exception:
                 pass
             self.preview_temp_path = None
-        if self.transcriber_thread and self.transcriber_thread.isRunning():
-            try:
-                self.transcriber_thread.requestInterruption()
-                self.transcriber_thread.quit()
-                self.transcriber_thread.wait(3000)
-            except Exception:
-                pass
-        if self.transcriber_thread:
-            try:
-                self.transcriber_thread.deleteLater()
-            except Exception:
-                pass
-            self.transcriber_thread = None
+        self.transcription_runtime.cleanup()
 
     def closeEvent(self, event):
         self.cleanup()

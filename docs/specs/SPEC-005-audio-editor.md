@@ -2,7 +2,7 @@
 
 Status: Implemented
 Owner: TBD
-Last updated: 2026-05-10
+Last updated: 2026-09-08
 
 ## Problem
 
@@ -31,17 +31,26 @@ Users need to inspect and edit recordings before continuing with transcription, 
 
 ## Architecture Notes
 
-- UI: `src/ui/audio_editor/widget.py` owns editor interactions; `src/ui/audio_editor/waveform.py` owns waveform rendering and waveform input events.
+- UI: `src/ui/audio_editor/widget.py` owns visual editor interaction;
+  `src/ui/audio_editor/editing_state.py` owns pure chunk ranges, edits, and
+  undo/redo state; `src/ui/audio_editor/waveform.py` owns waveform rendering and
+  waveform input events.
 - Main window: `src/ui/main_window/recording_tabs.py` owns opening editor tabs and integrating them with tab lifecycle.
-- Services: audio cutting currently uses `src/audio.py`; future complex editing should move into `src/services/audio_editing.py`.
+- Services: `src/ui/audio_editor/persistence.py` owns backup-safe edited audio
+  writes and duration persistence; `src/ui/audio_editor/transcription_runtime.py`
+  owns retranscription configuration, worker lifecycle, and cleanup. Audio cutting
+  otherwise uses `src/audio.py`.
 - Persistence: `src/database.py` updates record duration/transcription metadata after successful edit/transcription.
 - Workers/integrations: `src/worker_components/transcriber_thread.py` performs retranscription and must respect configured backend/device/compute policy.
 - Platform constraints: preserve Windows/Ubuntu compatibility and keep CUDA cleanup behavior in transcription paths.
 
 ## Test Plan
 
-- Unit: waveform selection, chunk boundaries, split/cut/reorder behavior.
-- Integration: editor tab opens from a recording and edited audio triggers retranscription.
+- Unit: waveform selection, chunk boundaries, split/cut/reorder behavior, undo/redo,
+  and retranscription runtime under `tests/ui/audio_editor/`.
+- Integration: `tests/integration/test_audio_editor_persistence.py` covers edited
+  audio → backup → real SQLite duration/transcription persistence using a
+  deterministic worker; editor tab opening remains covered by main-window tests.
 - UI: basic widget state transitions for load, edit, preview, and apply.
 - Manual: verify real audio playback and waveform rendering on Ubuntu and Windows.
 
@@ -49,6 +58,12 @@ Users need to inspect and edit recordings before continuing with transcription, 
 
 - README: audio editing feature listed in English, Spanish, and Asturian variants.
 - Architecture: registered in `docs/ARCHITECTURE.md`.
+
+## Refactor Notes
+
+- 2026-09-08: extracted deterministic segment editing into `editing_state.py`, and
+  isolated safe file persistence plus retranscription worker lifecycle while keeping
+  `AudioEditorWidget` as the visible shell.
 
 ## Open Questions
 
