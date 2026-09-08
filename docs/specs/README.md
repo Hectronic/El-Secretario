@@ -93,7 +93,7 @@ What user or product problem is being solved?
 | SPEC-011 | Summaries: recording, daily, weekly, queueing | Implemented | `src/summary_generator.py`, `src/persistence/summaries.py`, `src/ui/summary_task_queue.py`, `src/app/summary_queue/`, `src/ui/main_window/summary_queue_status.py`, `src/ui/main_window/runtime_startup.py`, `src/ui/summary_viewer.py`, `src/ui/summary_batch_widget.py` | `tests/test_summary_generator_logic.py`, `tests/test_summary_queue.py`, `tests/test_summary_task_queue_integration.py`, `tests/ui/main_window/test_summary_queue_status.py`, `tests/ui/main_window/test_runtime_startup.py`, `tests/app/summary_queue/` |
 | SPEC-012 | Task extraction and task board/sidebar | Implemented | `src/ui/tasks_list_widget.py`, `src/ui/tasks/`, `src/ui/task_batch_widget.py`, `src/ui/summary_task_queue.py`, `src/persistence/tasks.py` | `tests/test_tasks_list_widget.py`, `tests/ui/tasks/`, `tests/integration/test_tasks_board_persistence.py`, `tests/test_pending_summary_counts.py`, `tests/test_tasks_sidebar_calendar_sync.py`, `tests/persistence/` |
 | [SPEC-013](SPEC-013-settings-secrets-prompts-theme-and-rag-config.md) | Settings, secrets, prompts, theme, RAG config | Implemented | `src/ui/settings/`, `src/ui/secret_field_widget.py`, `src/ui/styles.py` | `tests/test_settings.py`, `tests/ui/settings/`, `tests/ui/test_secret_field_widget.py`, `tests/worker_components/test_settings.py` |
-| SPEC-014 | Export/import and maintenance tools | Implemented | `src/data_export.py`, `src/ui/tools_widget.py`, `src/ui/maintenance_widget.py` | `tests/test_data_export.py`, `tests/test_export_transcription_logs.py`, `tests/test_maintenance.py` |
+| [SPEC-014](SPEC-014-export-import-maintenance-tools.md) | Export/import and maintenance tools | Implemented | `src/data_export.py`, `src/ui/tools_widget.py`, `src/ui/tools/`, `src/ui/maintenance_widget.py` | `tests/test_data_export.py`, `tests/test_export_transcription_logs.py`, `tests/test_maintenance.py`, `tests/ui/tools/`, `tests/integration/test_tools_widget_ports.py` |
 
 ## Refactor Records
 
@@ -128,6 +128,7 @@ What user or product problem is being solved?
 | REFACTOR-2026-09-BATCH-PROCESS | Implemented | Transcription-batch queue state and request construction extraction | SPEC-011 |
 | REFACTOR-2026-09-SUMMARY-BATCH | Implemented | Summary-batch counts, payload construction, and queue submission extraction | SPEC-011 |
 | REFACTOR-2026-09-CONTEXT-MANAGER | Implemented | Context-panel state serialization and entry-resolution extraction | SPEC-008, SPEC-007 |
+| REFACTOR-2026-09-TOOLS | Implemented | Tools RAG/data actions and shared batch persistence injection | SPEC-014 |
 
 ## Spec Granularity Rules
 
