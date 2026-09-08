@@ -90,6 +90,9 @@ Reduce large flat modules and create expansion points for future product work wi
   `tests/ui/chat/test_conversation_runtime.py`; its real Qt UI → deterministic
   worker → SQLite session/restoration contract is covered in
   `tests/integration/test_chat_session_persistence.py`.
+- Task-board filter/query policy and persistence mutations are owned by
+  `src/ui/tasks/`; `tests/integration/test_tasks_board_persistence.py` covers the
+  real Qt board → SQLite completion and global-filter contract.
 - Full suite status for this refactor was validated after the code change.
 
 ## Remaining Hotspots

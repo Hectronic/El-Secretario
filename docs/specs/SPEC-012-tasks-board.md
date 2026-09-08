@@ -2,7 +2,7 @@
 
 Status: Implemented
 Owner: TBD
-Last updated: 2026-05-27
+Last updated: 2026-09-08
 
 ## Problem
 
@@ -32,21 +32,32 @@ Users need a reliable task board and sidebar that show actionable items from rec
 ## Architecture Notes
 
 - Main tab lifecycle: `src/ui/main_window/content_tabs.py` owns opening and reusing the full Tasks tab.
-- Task board UI: `src/ui/tasks_list_widget.py` owns task listing, filters, bulk actions, create/edit dialogs, and source navigation signals.
+- Task board UI: `src/ui/tasks_list_widget.py` owns visual composition, selection,
+  dialogs, and source-navigation signals. `src/ui/tasks/filters.py` owns date/tag
+  normalization and board queries; `src/ui/tasks/actions.py` owns board-initiated
+  task creation, completion, and deletion persistence calls.
 - Sidebar actions: `src/ui/main_window/tasks_sidebar_actions.py` owns compact sidebar task refresh and context actions.
 - Queue integration: `src/ui/summary_task_queue.py` and `src/app/summary_queue/` persist AI-generated tasks after extraction.
 - Persistence: `src/database.py` owns task CRUD, date/week filtering, ordering, and completion state.
 
 ## Test Plan
 
-- Unit: task board filter normalization, task CRUD callbacks, reorder persistence, and snapshot modes.
-- Integration: summary queue task extraction persistence and duplicate/skip behavior.
+- Unit: task board filter normalization, task CRUD callbacks, reorder persistence,
+  snapshot modes, and focused filter helpers under `tests/ui/tasks/`.
+- Integration: summary queue task extraction persistence and duplicate/skip behavior;
+  `tests/integration/test_tasks_board_persistence.py` covers real SQLite task-board
+  filtering plus completion persistence and its UI signal.
 - UI: main window content-tab coordinator opens/reuses Tasks and sidebar actions refresh compact tasks.
 - Manual: open Tasks from the sidebar with no filter, day filter, week filter, and tag filter.
 
 ## Documentation
 
 - Feature registry: `docs/specs/README.md`.
+
+## Refactor Notes
+
+- 2026-09-08: separated task-board query/filter policy and persistence mutations
+  from the widget shell into `src/ui/tasks/`, retaining the existing widget API.
 
 ## Open Questions
 
