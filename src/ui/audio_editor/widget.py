@@ -16,13 +16,11 @@ from __future__ import annotations
 
 import logging
 import os
-import shutil
 import tempfile
-from dataclasses import dataclass
 
 import soundfile as sf
 import numpy as np
-from PyQt6.QtCore import Qt, QSettings, QUrl, pyqtSignal
+from PyQt6.QtCore import Qt, QUrl, pyqtSignal
 from PyQt6.QtGui import QShortcut, QKeySequence
 from PyQt6.QtMultimedia import QAudioOutput, QMediaPlayer
 from PyQt6.QtWidgets import (
@@ -43,20 +41,16 @@ from PyQt6.QtWidgets import QStyle
 
 from src.audio import Recorder
 from src.database import DBManager
-from src.transcription_options import get_saved_transcription_model
+from src.ui.audio_editor.editing_state import (
+    AudioChunk,
+    ChunkEditHistory,
+    adjust_chunk_boundary,
+    build_preview_ranges,
+    split_chunk,
+)
+from src.ui.audio_editor.persistence import apply_edited_audio
+from src.ui.audio_editor.transcription_runtime import AudioEditorTranscriptionRuntime
 from src.ui.audio_editor.waveform import AudioWaveformWidget
-from src.worker_components.transcriber_thread import TranscriberThread
-from src.stt_providers.sherpa_onnx.model_manager import get_transcription_preflight_error
-
-
-@dataclass
-class AudioChunk:
-    source_start: float
-    source_end: float
-
-    @property
-    def duration(self) -> float:
-        return max(0.0, self.source_end - self.source_start)
 
 
 class AudioEditorWidget(QWidget):
@@ -66,10 +60,19 @@ class AudioEditorWidget(QWidget):
     status_changed = pyqtSignal(str)
     progress_changed = pyqtSignal(int)
 
-    def __init__(self, rag_engine, recorder=None, record_id=None, task_queue=None, parent=None):
+    def __init__(
+        self,
+        rag_engine,
+        recorder=None,
+        record_id=None,
+        task_queue=None,
+        parent=None,
+        persistence=None,
+        transcription_runtime=None,
+    ):
         super().__init__(parent)
         self.rag = rag_engine
-        self.db = DBManager()
+        self.db = persistence if persistence is not None else DBManager()
         self.recorder = recorder if recorder is not None else Recorder()
         self.summary_task_queue = task_queue
         self.current_record_id = record_id
@@ -86,11 +89,9 @@ class AudioEditorWidget(QWidget):
         self.selection_end = 0.0
         self._suppress_signals = False
         self._has_unsaved_changes = False
-        self._undo_stack = []
-        self._redo_stack = []
-        self._history_limit = 200
+        self._history = ChunkEditHistory()
         self._boundary_drag_history_pending = False
-        self.transcriber_thread = None
+        self.transcription_runtime = transcription_runtime or AudioEditorTranscriptionRuntime()
         self.player = QMediaPlayer()
         self.audio_output = QAudioOutput()
         self.player.setAudioOutput(self.audio_output)
@@ -328,8 +329,7 @@ class AudioEditorWidget(QWidget):
             return
 
         parts = []
-        preview_ranges = []
-        cursor = 0.0
+        preview_ranges = build_preview_ranges(self.chunks)
         for idx, chunk in enumerate(self.chunks):
             start_frame = int(round(chunk.source_start * self.current_sample_rate))
             end_frame = int(round(chunk.source_end * self.current_sample_rate))
@@ -338,17 +338,6 @@ class AudioEditorWidget(QWidget):
             part = self.current_audio[start_frame:end_frame]
             if len(part):
                 parts.append(part)
-            output_start = cursor
-            cursor += chunk.duration
-            preview_ranges.append(
-                {
-                    "output_start": output_start,
-                    "output_end": cursor,
-                    "source_start": chunk.source_start,
-                    "source_end": chunk.source_end,
-                    "chunk_index": idx,
-                }
-            )
 
         if parts:
             self.preview_audio = np.concatenate(parts, axis=0)
@@ -488,7 +477,9 @@ class AudioEditorWidget(QWidget):
 
         self._push_undo_state()
         chunk = self.chunks[self.active_chunk_index]
-        left, middle, right = self._split_chunk(chunk, active, keep_middle=True)
+        left, middle, right = split_chunk(
+            chunk, active, self.selection_start, self.selection_end, keep_middle=True
+        )
         new_chunks = []
         if left:
             new_chunks.append(left)
@@ -510,7 +501,9 @@ class AudioEditorWidget(QWidget):
 
         self._push_undo_state()
         chunk = self.chunks[self.active_chunk_index]
-        left, _, right = self._split_chunk(chunk, active, keep_middle=False)
+        left, _, right = split_chunk(
+            chunk, active, self.selection_start, self.selection_end, keep_middle=False
+        )
         new_chunks = []
         if left:
             new_chunks.append(left)
@@ -554,55 +547,14 @@ class AudioEditorWidget(QWidget):
             self._push_undo_state()
             self._boundary_drag_history_pending = False
 
-        active_range = self.preview_ranges[self.active_chunk_index]
-        boundary_time = float(boundary_time)
-        if side == "left":
-            min_time = active_range["output_start"]
-            max_time = active_range["output_end"] - 0.001
-            if self.active_chunk_index > 0:
-                prev_range = self.preview_ranges[self.active_chunk_index - 1]
-                min_time = prev_range["output_start"] + 0.001
-                max_time = active_range["output_end"] - 0.001
-                if boundary_time < min_time:
-                    boundary_time = min_time
-                if boundary_time > max_time:
-                    boundary_time = max_time
-                prev_chunk = self.chunks[self.active_chunk_index - 1]
-                current_chunk = self.chunks[self.active_chunk_index]
-                total = prev_chunk.duration + current_chunk.duration
-                left_duration = max(0.001, boundary_time - prev_range["output_start"])
-                right_duration = max(0.001, total - left_duration)
-                prev_chunk.source_end = prev_chunk.source_start + left_duration
-                current_chunk.source_start = current_chunk.source_end - right_duration
-            else:
-                current_chunk = self.chunks[self.active_chunk_index]
-                max_start = current_chunk.source_end - 0.001
-                new_start = max(0.0, min(boundary_time, max_start))
-                current_chunk.source_start = new_start
-        elif side == "right":
-            min_time = active_range["output_start"] + 0.001
-            max_time = active_range["output_end"]
-            if self.active_chunk_index < len(self.chunks) - 1:
-                next_range = self.preview_ranges[self.active_chunk_index + 1]
-                min_time = active_range["output_start"] + 0.001
-                max_time = next_range["output_end"] - 0.001
-                if boundary_time < min_time:
-                    boundary_time = min_time
-                if boundary_time > max_time:
-                    boundary_time = max_time
-                current_chunk = self.chunks[self.active_chunk_index]
-                next_chunk = self.chunks[self.active_chunk_index + 1]
-                total = current_chunk.duration + next_chunk.duration
-                left_duration = max(0.001, boundary_time - active_range["output_start"])
-                right_duration = max(0.001, total - left_duration)
-                current_chunk.source_end = current_chunk.source_start + left_duration
-                next_chunk.source_start = next_chunk.source_end - right_duration
-            else:
-                current_chunk = self.chunks[self.active_chunk_index]
-                min_end = current_chunk.source_start + 0.001
-                new_end = max(min_end, min(boundary_time, self.current_duration))
-                current_chunk.source_end = new_end
-        else:
+        if not adjust_chunk_boundary(
+            self.chunks,
+            self.active_chunk_index,
+            self.preview_ranges,
+            side,
+            boundary_time,
+            self.current_duration,
+        ):
             return False
 
         self._rebuild_preview()
@@ -618,27 +570,6 @@ class AudioEditorWidget(QWidget):
         self._rebuild_preview()
         self._mark_dirty()
 
-    def _split_chunk(self, chunk: AudioChunk, active_range: dict, keep_middle: bool):
-        # Split the currently selected chunk by mapping the output selection back to source coordinates.
-        chunk_duration = chunk.duration
-        output_start = active_range["output_start"]
-        sel_start = max(output_start, self.selection_start)
-        sel_end = min(active_range["output_end"], self.selection_end)
-        if sel_end <= sel_start:
-            raise ValueError("The selection must have a positive duration.")
-
-        left_duration = sel_start - output_start
-        middle_duration = sel_end - sel_start
-        right_duration = active_range["output_end"] - sel_end
-
-        left = AudioChunk(chunk.source_start, chunk.source_start + left_duration) if left_duration > 0.001 else None
-        middle = AudioChunk(chunk.source_start + left_duration, chunk.source_start + left_duration + middle_duration) if middle_duration > 0.001 else None
-        right = AudioChunk(chunk.source_end - right_duration, chunk.source_end) if right_duration > 0.001 else None
-
-        if keep_middle:
-            return left, middle, right
-        return left, None, right
-
     def _mark_dirty(self):
         self._has_unsaved_changes = True
 
@@ -648,47 +579,29 @@ class AudioEditorWidget(QWidget):
     def has_unsaved_changes(self):
         return self._has_unsaved_changes
 
-    def _chunk_snapshot(self):
-        return ([(c.source_start, c.source_end) for c in self.chunks], int(self.active_chunk_index))
-
-    def _restore_snapshot(self, snapshot):
-        chunk_pairs, active_idx = snapshot
-        self.chunks = [AudioChunk(float(start), float(end)) for start, end in chunk_pairs]
-        self.active_chunk_index = max(-1, min(int(active_idx), len(self.chunks) - 1))
-        self._rebuild_preview()
-
     def _clear_history(self):
-        self._undo_stack.clear()
-        self._redo_stack.clear()
+        self._history.clear()
         self._boundary_drag_history_pending = False
 
     def _push_undo_state(self):
-        snapshot = self._chunk_snapshot()
-        if self._undo_stack and self._undo_stack[-1] == snapshot:
-            return
-        self._undo_stack.append(snapshot)
-        if len(self._undo_stack) > self._history_limit:
-            self._undo_stack.pop(0)
-        self._redo_stack.clear()
+        self._history.push(self.chunks, self.active_chunk_index)
 
     def undo(self):
-        if not self._undo_stack:
+        restored = self._history.undo(self.chunks, self.active_chunk_index)
+        if restored is None:
             return False
-        current = self._chunk_snapshot()
-        previous = self._undo_stack.pop()
-        self._redo_stack.append(current)
-        self._restore_snapshot(previous)
+        self.chunks, self.active_chunk_index = restored
+        self._rebuild_preview()
         self._mark_dirty()
         self.status_changed.emit("Undo")
         return True
 
     def redo(self):
-        if not self._redo_stack:
+        restored = self._history.redo(self.chunks, self.active_chunk_index)
+        if restored is None:
             return False
-        current = self._chunk_snapshot()
-        next_snapshot = self._redo_stack.pop()
-        self._undo_stack.append(current)
-        self._restore_snapshot(next_snapshot)
+        self.chunks, self.active_chunk_index = restored
+        self._rebuild_preview()
         self._mark_dirty()
         self.status_changed.emit("Redo")
         return True
@@ -708,13 +621,14 @@ class AudioEditorWidget(QWidget):
             return False
 
         try:
-            backup_path = f"{self.current_recording_path}.orig"
-            if not os.path.exists(backup_path):
-                shutil.copy2(self.current_recording_path, backup_path)
-            sf.write(self.current_recording_path, self.preview_audio, self.current_sample_rate)
+            self.current_duration = apply_edited_audio(
+                self.current_recording_path,
+                self.preview_audio,
+                self.current_sample_rate,
+                self.db,
+                self.current_record_id,
+            )
             self.current_audio = self.preview_audio
-            self.current_duration = float(len(self.preview_audio) / self.current_sample_rate)
-            self.db.update_duration(self.current_record_id, self.current_duration)
             self.status_changed.emit("Audio updated.")
             self.recording_saved.emit()
             self._mark_clean()
@@ -732,40 +646,15 @@ class AudioEditorWidget(QWidget):
     def _retranscribe_current_audio(self):
         if not self.current_recording_path:
             return
-        settings = QSettings("Hectronic", "Secretario")
-        model_size = get_saved_transcription_model(settings)
-        language = settings.value("rec_config/language", "Auto")
-        lang_map = {"Auto": None, "Spanish": "es", "English": "en"}
-        language_code = lang_map.get(language, None)
-        hf_token = settings.value("hf_token", "")
-        force_cpu = settings.value("force_cpu", False, type=bool)
-        compute_type = settings.value("compute_type", "auto")
-        transcription_backend = settings.value("transcription_backend", "auto")
-        enable_diarization = settings.value("rec_config/diarization", False, type=bool)
-        preflight_error = get_transcription_preflight_error(model_size, settings)
-        if preflight_error:
-            QMessageBox.critical(self, "Transcription Error", preflight_error)
-            return
-        if compute_type == "auto":
-            compute_type = None
-        duration = self.current_duration
-        self.transcriber_thread = TranscriberThread(
+        result = self.transcription_runtime.start(
             self.current_recording_path,
-            model_size=model_size,
-            compute_type=compute_type,
-            language=language_code,
-            hf_token=hf_token,
-            enable_diarization=enable_diarization,
-            total_duration=duration,
-            force_cpu=force_cpu,
-            backend_preference=transcription_backend,
+            self.current_duration,
+            self._on_transcription_finished,
+            self._on_transcription_error,
+            lambda: self.progress_changed.emit(0),
         )
-        self.transcriber_thread.finished.connect(self._on_transcription_finished)
-        self.transcriber_thread.error.connect(self._on_transcription_error)
-        self.transcriber_thread.finished.connect(self._clear_transcriber_thread_ref)
-        self.transcriber_thread.error.connect(self._clear_transcriber_thread_ref)
-        self.transcriber_thread.start()
-        self.progress_changed.emit(0)
+        if result.preflight_error:
+            QMessageBox.critical(self, "Transcription Error", result.preflight_error)
 
     def _on_transcription_finished(self, result):
         self.progress_changed.emit(-2)
@@ -790,12 +679,6 @@ class AudioEditorWidget(QWidget):
     def _on_transcription_error(self, err):
         self.progress_changed.emit(-2)
         QMessageBox.critical(self, "Error", err)
-
-    def _clear_transcriber_thread_ref(self, *args):
-        thread = self.transcriber_thread
-        self.transcriber_thread = None
-        if thread:
-            thread.deleteLater()
 
     def mark_start_from_playhead(self):
         self.selection_start_spin.setValue(self._current_playhead_seconds())
@@ -856,19 +739,7 @@ class AudioEditorWidget(QWidget):
             except Exception:
                 pass
             self.preview_temp_path = None
-        if self.transcriber_thread and self.transcriber_thread.isRunning():
-            try:
-                self.transcriber_thread.requestInterruption()
-                self.transcriber_thread.quit()
-                self.transcriber_thread.wait(3000)
-            except Exception:
-                pass
-        if self.transcriber_thread:
-            try:
-                self.transcriber_thread.deleteLater()
-            except Exception:
-                pass
-            self.transcriber_thread = None
+        self.transcription_runtime.cleanup()
 
     def closeEvent(self, event):
         self.cleanup()
