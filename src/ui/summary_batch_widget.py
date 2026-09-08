@@ -17,6 +17,12 @@ from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QPushButton,
 from PyQt6.QtCore import Qt
 from src.database import DBManager
 from src.summary_generator import SummaryGenerator
+from src.ui.summary_batch.actions import (
+    SummaryBatchOptions,
+    enqueue_missing_summaries,
+    pending_counts,
+    week_dates,
+)
 
 class SummaryBatchWidget(QWidget):
     """
@@ -133,17 +139,9 @@ class SummaryBatchWidget(QWidget):
         if self.is_processing:
             return
             
-        exclude_today = self.chk_exclude_today.isChecked()
-        exclude_curr_week = self.chk_exclude_curr_week.isChecked()
-        
-        # TODO: Thread this if it becomes slow
-        recs = self.db.get_records_without_summary()
-        dates = self.db.get_dates_without_summary(exclude_today=exclude_today)
-        weeks = self.db.get_weeks_without_summary(exclude_current_week=exclude_curr_week)
-        
-        self.pending_rec_count = len(recs)
-        self.pending_day_count = len(dates)
-        self.pending_week_count = len(weeks)
+        self.pending_rec_count, self.pending_day_count, self.pending_week_count = pending_counts(
+            self.db, self._batch_options()
+        )
         
         self.refresh_stats_display()
         self.log("Stats refreshed.")
@@ -236,70 +234,19 @@ class SummaryBatchWidget(QWidget):
     def _enqueue_summary_tasks_via_queue(self) -> int:
         if not self.task_queue:
             return 0
+        return enqueue_missing_summaries(self.db, self.task_queue, self._batch_options())
 
-        enqueued = 0
-        exclude_today = self.chk_exclude_today.isChecked()
-        exclude_curr_week = self.chk_exclude_curr_week.isChecked()
-        include_recordings = self.chk_recordings.isChecked()
-        include_daily = self.chk_daily.isChecked()
-        include_weekly = self.chk_weekly.isChecked()
-        tags_filter = ""
-
-        if include_recordings:
-            recs = self.db.get_records_without_summary()
-            for rec in recs:
-                text = self.db.compose_ai_text(rec.get("transcription", ""), rec.get("recording_notes", ""))
-                if not text.strip():
-                    continue
-                if self.task_queue.enqueue_recording_summary(
-                    int(rec["id"]),
-                    text,
-                    rec.get("title") or f"Recording {rec['id']}",
-                    source="batch_summary",
-                ):
-                    enqueued += 1
-
-        if include_daily:
-            dates = self.db.get_dates_without_summary(exclude_today=exclude_today)
-            for date in dates:
-                recordings = self.db.fetch_by_dates([date], None)
-                if not recordings:
-                    continue
-                if self.task_queue.enqueue_daily_summary(
-                    {
-                        "date": date,
-                        "tags_filter": "",
-                        "source": "batch_summary",
-                    }
-                ):
-                    enqueued += 1
-
-        if include_weekly:
-            weeks = self.db.get_weeks_without_summary(exclude_current_week=exclude_curr_week)
-            for week_date in weeks:
-                week_dates = self._get_week_dates(week_date)
-                recordings = self.db.fetch_by_dates(week_dates, None)
-                if not recordings:
-                    continue
-                full_text = self._prepare_recordings_text(recordings)
-                if not full_text.strip():
-                    continue
-                if self.task_queue.enqueue_weekly_summary(
-                    week_date,
-                    full_text,
-                    tags_filter,
-                    source="batch_summary",
-                ):
-                    enqueued += 1
-
-        return enqueued
+    def _batch_options(self):
+        return SummaryBatchOptions(
+            include_recordings=self.chk_recordings.isChecked(),
+            include_daily=self.chk_daily.isChecked(),
+            include_weekly=self.chk_weekly.isChecked(),
+            exclude_today=self.chk_exclude_today.isChecked(),
+            exclude_current_week=self.chk_exclude_curr_week.isChecked(),
+        )
 
     def _get_week_dates(self, week_sunday: str):
-        from datetime import datetime, timedelta
-
-        sunday = datetime.strptime(week_sunday, "%Y-%m-%d").date()
-        monday = sunday - timedelta(days=6)
-        return [(monday + timedelta(days=i)).isoformat() for i in range(7)]
+        return week_dates(week_sunday)
         
     def stop_processing(self):
         if self.task_queue:
