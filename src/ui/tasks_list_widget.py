@@ -11,25 +11,34 @@ from PyQt6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QListWidget,
-    QListWidgetItem,
     QPushButton,
     QCheckBox,
     QComboBox,
     QMessageBox,
     QDialog,
-    QDialogButtonBox,
-    QTextEdit,
-    QFrame,
     QMenu,
     QAbstractItemView,
     QApplication,
 )
-from src.ui.components import TaskRowWidget, TagsLineEdit
-from src.ui.tasks.actions import create_manual_task, delete_tasks, set_task_completion
+from src.ui.tasks.actions import (
+    create_manual_task,
+    delete_tasks,
+    save_custom_order,
+    set_task_completion,
+    update_task_details,
+)
+from src.ui.tasks.edit_dialog import TaskEditDialog
 from src.ui.tasks.filters import (
     fetch_task_board_tasks,
     resolve_effective_tags_filter,
     resolve_global_date_range,
+)
+from src.ui.tasks.presentation import (
+    apply_completion_state,
+    ordered_task_ids,
+    render_task_rows,
+    selected_or_current_task_items,
+    selected_task_items,
 )
 
 
@@ -39,74 +48,6 @@ class ReorderableTasksList(QListWidget):
     def dropEvent(self, event):
         super().dropEvent(event)
         self.reordered.emit()
-
-
-class TaskEditDialog(QDialog):
-    """Unified modal for creating and editing tasks."""
-
-    def __init__(self, db, parent=None, title="Task", task_data=None):
-        super().__init__(parent)
-        self.db = db
-        self.task_data = task_data or {}
-        self.setWindowTitle(title)
-        self.setModal(True)
-        self.resize(560, 360)
-        self._build_ui()
-
-    def _build_ui(self):
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(12, 12, 12, 12)
-        layout.setSpacing(10)
-
-        layout.addWidget(QLabel("Task content"))
-        self.content_input = QTextEdit()
-        self.content_input.setPlaceholderText("Describe the task...")
-        self.content_input.setMinimumHeight(110)
-        self.content_input.setPlainText((self.task_data.get("content") or "").strip())
-        layout.addWidget(self.content_input)
-
-        layout.addWidget(QLabel("Notes (optional)"))
-        self.notes_input = QTextEdit()
-        self.notes_input.setPlaceholderText("Extra context, links, blockers...")
-        self.notes_input.setMinimumHeight(90)
-        self.notes_input.setPlainText((self.task_data.get("notes") or "").strip())
-        layout.addWidget(self.notes_input)
-
-        layout.addWidget(QLabel("Tags"))
-        self.tags_input = TagsLineEdit()
-        self.tags_input.set_tags(self.db.get_all_tags() if hasattr(self.db, "get_all_tags") else [])
-        initial_tags = (self.task_data.get("tags") or "").strip()
-        if not initial_tags and isinstance(self.task_data.get("record_id"), int):
-            initial_tags = (self.task_data.get("record_tags") or "").strip()
-        self.tags_input.setText(initial_tags)
-        layout.addWidget(self.tags_input)
-
-        self.error_label = QLabel("")
-        self.error_label.setStyleSheet("color: #f44336; font-size: 12px;")
-        layout.addWidget(self.error_label)
-
-        buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Cancel | QDialogButtonBox.StandardButton.Save)
-        buttons.accepted.connect(self._on_accept)
-        buttons.rejected.connect(self.reject)
-        layout.addWidget(buttons)
-
-    def _on_accept(self):
-        if not self.get_content():
-            self.error_label.setText("Task content is required.")
-            self.content_input.setFocus()
-            return
-        self.accept()
-
-    def get_content(self):
-        return self.content_input.toPlainText().strip()
-
-    def get_notes(self):
-        notes = self.notes_input.toPlainText().strip()
-        return notes or None
-
-    def get_tags(self):
-        tags = self.tags_input.text().strip()
-        return tags or None
 
 
 class TasksListWidget(QWidget):
@@ -361,28 +302,10 @@ class TasksListWidget(QWidget):
             order_mode=self._current_order_mode(),
             include_completed=self.show_completed_cb.isChecked(),
         )
-        self.tasks_list.clear()
-        self.count_label.setText(f"{len(tasks)} task(s)")
-
-        if not tasks:
-            self.tasks_list.addItem("No tasks.")
-            self._update_button_states()
-            return
-
-        for task in tasks:
-            item = QListWidgetItem()
-            # Ensure consistency with components metadata names
-            task['source_type'] = task.get('record_type')
-            
-            item.setData(Qt.ItemDataRole.UserRole, task)
-            self.tasks_list.addItem(item)
-
-            row_widget = TaskRowWidget(task)
-            row_widget.status_changed.connect(self._on_single_complete_toggle)
-            
-            item.setSizeHint(row_widget.sizeHint())
-            self.tasks_list.setItemWidget(item, row_widget)
-        
+        task_count = render_task_rows(
+            self.tasks_list, tasks, self._on_single_complete_toggle
+        )
+        self.count_label.setText(f"{task_count} task(s)")
         self._update_button_states()
 
     def _update_button_states(self):
@@ -394,12 +317,7 @@ class TasksListWidget(QWidget):
         self.complete_btn.setEnabled(selected_count > 0)
 
     def _selected_task_items(self):
-        task_items = []
-        for item in self.tasks_list.selectedItems():
-            task = item.data(Qt.ItemDataRole.UserRole)
-            if isinstance(task, dict) and isinstance(task.get("id"), int):
-                task_items.append(item)
-        return task_items
+        return selected_task_items(self.tasks_list)
 
     def _show_context_menu(self, pos):
         clicked_item = self.tasks_list.itemAt(pos)
@@ -442,16 +360,13 @@ class TasksListWidget(QWidget):
             self.open_recording_requested.emit(record_id)
 
     def _set_completion_for_items(self, items, completed_state: bool):
-        for item in items:
-            task = item.data(Qt.ItemDataRole.UserRole)
-            if not task:
-                continue
-            set_task_completion(self.db, [task["id"]], completed_state)
-            widget = self.tasks_list.itemWidget(item)
-            if isinstance(widget, TaskRowWidget):
-                widget.set_completed(completed_state)
-            task['is_completed'] = completed_state
-            item.setData(Qt.ItemDataRole.UserRole, task)
+        task_ids = [
+            task["id"]
+            for item in items
+            if isinstance((task := item.data(Qt.ItemDataRole.UserRole)), dict)
+        ]
+        set_task_completion(self.db, task_ids, completed_state)
+        apply_completion_state(self.tasks_list, items, completed_state)
         self._emit_tasks_mutated(refresh_self=True)
 
     def _edit_task_item(self, item):
@@ -460,7 +375,8 @@ class TasksListWidget(QWidget):
             return
         dialog = TaskEditDialog(self.db, self, title="Edit Task", task_data=task)
         if dialog.exec() == QDialog.DialogCode.Accepted:
-            self.db.update_task_details(
+            update_task_details(
+                self.db,
                 task["id"],
                 dialog.get_content(),
                 dialog.get_notes(),
@@ -493,47 +409,27 @@ class TasksListWidget(QWidget):
                 widget.refresh_tasks_sidebar()
 
     def _complete_selected(self):
-        selected_items = self._selected_task_items()
+        selected_items = selected_or_current_task_items(self.tasks_list)
         if not selected_items:
-            item = self.tasks_list.currentItem()
-            if not item: return
-            task = item.data(Qt.ItemDataRole.UserRole)
-            if not isinstance(task, dict):
-                return
-            selected_items = [item]
+            return
         selected_tasks = [it.data(Qt.ItemDataRole.UserRole) for it in selected_items]
         all_completed = all(bool(t.get("is_completed")) for t in selected_tasks if isinstance(t, dict))
         self._set_completion_for_items(selected_items, not all_completed)
 
     def _edit_selected(self):
-        selected_items = self._selected_task_items()
+        selected_items = selected_or_current_task_items(self.tasks_list)
         if not selected_items:
-            item = self.tasks_list.currentItem()
-            if not item: return
-            task = item.data(Qt.ItemDataRole.UserRole)
-            if not isinstance(task, dict):
-                return
-            selected_items = [item]
+            return
         self._edit_task_item(selected_items[0])
 
     def _delete_selected(self):
-        selected_items = self._selected_task_items()
+        selected_items = selected_or_current_task_items(self.tasks_list)
         if not selected_items:
-            item = self.tasks_list.currentItem()
-            if not item: return
-            task = item.data(Qt.ItemDataRole.UserRole)
-            if not isinstance(task, dict):
-                return
-            selected_items = [item]
+            return
         self._delete_items(selected_items)
 
     def _ordered_task_ids(self):
-        ids = []
-        for i in range(self.tasks_list.count()):
-            task = self.tasks_list.item(i).data(Qt.ItemDataRole.UserRole)
-            if isinstance(task, dict) and isinstance(task.get("id"), int):
-                ids.append(int(task["id"]))
-        return ids
+        return ordered_task_ids(self.tasks_list)
 
     def _on_list_reordered(self):
         # Force custom mode if they reordered
@@ -546,7 +442,7 @@ class TasksListWidget(QWidget):
 
         ordered_ids = self._ordered_task_ids()
         if ordered_ids:
-            self.db.set_tasks_custom_order(ordered_ids)
+            save_custom_order(self.db, ordered_ids)
             # Crucial: restore widgets that were lost during drag-drop move
             self._emit_tasks_mutated(refresh_self=True)
 

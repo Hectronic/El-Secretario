@@ -32,21 +32,22 @@ Users need a reliable task board and sidebar that show actionable items from rec
 ## Architecture Notes
 
 - Main tab lifecycle: `src/ui/main_window/content_tabs.py` owns opening and reusing the full Tasks tab.
-- Task board UI: `src/ui/tasks_list_widget.py` owns visual composition, selection,
-  dialogs, and source-navigation signals. `src/ui/tasks/filters.py` owns date/tag
-  normalization and board queries; `src/ui/tasks/actions.py` owns board-initiated
-  task creation, completion, and deletion persistence calls.
+- Task board UI: `src/ui/tasks_list_widget.py` is the public visual shell and owns
+  source-navigation signals. `src/ui/tasks/edit_dialog.py` owns the shared editor;
+  `src/ui/tasks/presentation.py` owns task-row rendering and selection/order UI
+  policy; `src/ui/tasks/filters.py` owns date/tag normalization and board queries;
+  `src/ui/tasks/actions.py` owns all board-initiated persistence mutations.
 - Sidebar actions: `src/ui/main_window/tasks_sidebar_actions.py` owns compact sidebar task refresh and context actions.
 - Queue integration: `src/ui/summary_task_queue.py` and `src/app/summary_queue/` persist AI-generated tasks after extraction.
 - Persistence: `src/database.py` owns task CRUD, date/week filtering, ordering, and completion state.
 
 ## Test Plan
 
-- Unit: task board filter normalization, task CRUD callbacks, reorder persistence,
-  snapshot modes, and focused filter helpers under `tests/ui/tasks/`.
+- Unit: task board filter normalization, persistence callbacks, row rendering,
+  selection/order policy, snapshot modes, and focused helpers under `tests/ui/tasks/`.
 - Integration: summary queue task extraction persistence and duplicate/skip behavior;
   `tests/integration/test_tasks_board_persistence.py` covers real SQLite task-board
-  filtering plus completion persistence and its UI signal.
+  filtering, creation, completion, custom order persistence, and UI signals.
 - UI: main window content-tab coordinator opens/reuses Tasks and sidebar actions refresh compact tasks.
 - Manual: open Tasks from the sidebar with no filter, day filter, week filter, and tag filter.
 
@@ -58,6 +59,8 @@ Users need a reliable task board and sidebar that show actionable items from rec
 
 - 2026-09-08: separated task-board query/filter policy and persistence mutations
   from the widget shell into `src/ui/tasks/`, retaining the existing widget API.
+- 2026-09-08: extracted the shared edit dialog plus row rendering and
+  selection/reordering policy, leaving `TasksListWidget` as the compatible shell.
 
 ## Open Questions
 
