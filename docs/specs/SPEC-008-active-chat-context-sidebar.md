@@ -2,7 +2,7 @@
 
 Status: Implemented
 Owner: TBD
-Last updated: 2026-06-27
+Last updated: 2026-09-08
 
 ## Problem
 
@@ -36,7 +36,7 @@ Users need the right sidebar to reflect the context of the currently active chat
 
 ## Architecture Notes
 
-- Reusable panel: `src/ui/context_manager_panel.py` owns context display, notebook check state, forced records, date/week/tag labels, sync checkbox state, collapse/expand state, serialization, application, and restoration from another panel.
+- Reusable panel: `src/ui/context_manager_panel.py` is the Qt display and signal façade. `src/ui/context_manager/state.py` owns serializable state parsing and status labels; `src/ui/context_manager/entries.py` owns filter queries, deduplication, and visible entry descriptors.
 - Main-window sync: `src/ui/main_window/sidebar_sync.py` owns active chat detection, right-sidebar chat-context visibility, fallback section selection, panel mirroring, and propagation of global date/week/tag filters to tabbed and floating widgets.
 - Sidebar construction: `src/ui/main_window/chat_context_sidebar.py` creates and registers the `chat_context` right-sidebar section with a non-interactive `ContextManagerPanel`; `src/ui/main_window/__init__.py` remains the layout shell and delegates sync through `_sync_chat_context_section`.
 - Sidebar content refresh: `src/ui/main_window/sidebar_content.py` refreshes history/tags/tasks and indirectly keeps welcome/history-driven context sources current after sidebar reloads.
@@ -47,9 +47,9 @@ Users need the right sidebar to reflect the context of the currently active chat
 
 ## Test Plan
 
-- Unit: `ContextManagerPanel` serialize/apply/restore state, notebook check-state restoration, forced-record display, collapsed state, and no-op restore from `None`.
+- Unit: `ContextManagerPanel` serialize/apply/restore state, normalized context-state parsing, entry deduplication, notebook check-state restoration, forced-record display, collapsed state, and no-op restore from `None`.
 - Main-window sync: active chat detection, chat-context sidebar visibility, fallback behavior, panel restoration, and global filter propagation to calendar, chat, task, and floating chat widgets.
-- Integration: current-tab changes, tab close, floating chat float/dock/minimize/restore, and chat context section visibility from main-window tests.
+- Integration: current-tab changes, tab close, floating chat float/dock/minimize/restore, chat context section visibility from main-window tests, and real SQLite context transfer between two Qt panels in `tests/integration/test_context_manager_panel_sync.py`.
 - Manual: open two chat tabs with different context, switch between them, float/dock one chat, minimize/restore floating chat, change date/week/tag filters, and verify the right sidebar mirrors the active chat only.
 
 ## Documentation
@@ -63,6 +63,7 @@ Users need the right sidebar to reflect the context of the currently active chat
 - 2026-06-27: created the dedicated active chat context sidebar spec for `ContextManagerPanel` and `SidebarSyncCoordinator` behavior.
 - 2026-06-27: recorded `src/ui/main_window/sidebar_sync.py` as the focused owner for right-sidebar chat-context synchronization while `MainWindow` remains the delegation shell.
 - 2026-06-27: extracted active chat context section construction into `src/ui/main_window/chat_context_sidebar.py`.
+- 2026-09-08: extracted context-state serialization/status policy and entry resolution to `src/ui/context_manager/`, retaining `ContextManagerPanel` as the compatible Qt façade.
 
 ## Open Questions
 
