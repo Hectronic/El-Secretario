@@ -84,7 +84,11 @@ def test_calendar_daily_summary_reaches_queue_and_persists(qtbot, tmp_path, monk
     widget.on_generate_daily_summary_clicked()
 
     qtbot.waitUntil(
-        lambda: db.get_daily_summary("2026-09-07", "planning") == "Generated daily summary",
+        lambda: (
+            db.get_daily_summary("2026-09-07", "planning") == "Generated daily summary"
+            and queue.pending_count == 0
+            and not queue.is_running
+        ),
         timeout=3000,
     )
     assert queue.pending_count == 0
