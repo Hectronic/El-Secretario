@@ -102,6 +102,8 @@ Users need to ask questions over selected recordings, notes, notebooks, tags, da
 - 2026-09-08: moved provider validation, `ChatThread` signal wiring, and active
   worker cleanup into `src/ui/chat/conversation_runtime.py`; `ChatWidget` remains
   the visible shell and session-persistence owner.
+- 2026-09-08: moved initial-context application and tab/floating presentation
+  policy into `src/ui/chat/context_actions.py` and `src/ui/chat/display_mode.py`.
 
 ## Open Questions
 

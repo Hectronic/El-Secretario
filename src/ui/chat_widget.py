@@ -32,6 +32,8 @@ from src.ui.chat.busy_state import build_chat_busy_state
 from src.ui.chat.session_loader import load_chat_session_state
 from src.ui.chat.session_applier import apply_loaded_chat_session
 from src.ui.chat.header_state import build_chat_header_state
+from src.ui.chat.context_actions import apply_initial_contexts
+from src.ui.chat.display_mode import apply_context_panel_visibility, apply_display_mode
 from src.ui.chat.session_state import (
     persist_chat_session,
     resolve_chat_display_title,
@@ -119,29 +121,7 @@ class ChatWidget(QWidget):
             self._context_panel_saved_sizes = list(sizes)
 
     def _apply_context_panel_visibility(self):
-        is_floating = self.display_mode == "floating"
-        visible = not is_floating and not self.floating_minimized
-
-        self.context_panel.setVisible(visible)
-        if not visible:
-            self.context_panel.setMinimumWidth(0)
-            self.context_panel.setMaximumWidth(16777215)
-            return
-
-        self.context_panel.set_collapsed(self.context_panel_collapsed)
-        if self.context_panel_collapsed:
-            width = self.context_panel.COLLAPSED_WIDTH
-            self.context_panel.setMinimumWidth(width)
-            self.context_panel.setMaximumWidth(width)
-            self.splitter.setSizes([max(1, self.width() - width), width])
-            return
-
-        self.context_panel.setMinimumWidth(280)
-        self.context_panel.setMaximumWidth(16777215)
-        if len(self._context_panel_saved_sizes) == 2 and sum(self._context_panel_saved_sizes) > 0:
-            self.splitter.setSizes(self._context_panel_saved_sizes)
-        else:
-            self.splitter.setSizes([900, 350])
+        apply_context_panel_visibility(self)
 
     def clear_history(self):
         reply = QMessageBox.question(self, "Clear History", "Are you sure you want to clear this chat history?",
@@ -273,74 +253,10 @@ class ChatWidget(QWidget):
         super().closeEvent(event)
 
     def _apply_contexts(self, contexts):
-        self.context_panel.reset_all()
-        parsed = parse_chat_context_state(contexts)
-        self.context_panel.current_week_monday = parsed["current_week_monday"]
-        self.context_panel.current_date_filter = parsed["current_date_filter"]
-        self.context_panel.active_global_tags = list(parsed["active_global_tags"])
-        self.forced_record_ids = set(parsed["forced_record_ids"])
-        self.forced_record_labels = list(parsed["forced_record_labels"])
-
-        for i in range(self.context_panel.nb_list.count()):
-            item = self.context_panel.nb_list.item(i)
-            item.setCheckState(
-                Qt.CheckState.Checked
-                if item.data(Qt.ItemDataRole.UserRole) in parsed["notebook_ids"]
-                else Qt.CheckState.Unchecked
-            )
-
-        if parsed["has_recording_context"]:
-            # Prevent global sidebar sync from polluting a "single meeting" chat by default.
-            self.context_panel.sync_cb.setChecked(False)
-
-        forced_records = []
-        for rid in sorted(self.forced_record_ids):
-            rec = self.db.fetch_record(rid)
-            if isinstance(rec, dict):
-                forced_records.append(
-                    {
-                        "id": rid,
-                        "title": rec.get("title") or f"Recording {rid}",
-                        "created_at": rec.get("created_at") or "",
-                    }
-                )
-            else:
-                forced_records.append({"id": rid, "title": f"Recording {rid}", "created_at": ""})
-        self.context_panel.set_forced_records(forced_records)
-        self._refresh_title()
+        apply_initial_contexts(self, contexts)
 
     def set_display_mode(self, mode):
-        self.display_mode = "floating" if mode == "floating" else "tab"
-        state = build_chat_header_state(self.display_mode, self.floating_minimized)
-
-        self.layout().setContentsMargins(
-            state["layout_margin"],
-            state["layout_margin"],
-            state["layout_margin"],
-            state["layout_margin"],
-        )
-        self.header.setVisible(state["header_visible"])
-        self.mode_btn.setText(state["mode_btn_text"])
-        self.mode_btn.setToolTip(state["mode_btn_tooltip"])
-        self.minimize_btn.setVisible(state["minimize_visible"])
-        self.content_container.setVisible(state["content_visible"])
-        self.minimize_btn.setText(state["minimize_btn_text"])
-        self.minimize_btn.setToolTip(state["minimize_btn_tooltip"])
-        cursor_shape = (
-            Qt.CursorShape.PointingHandCursor if state["cursor"] == "pointing" else Qt.CursorShape.ArrowCursor
-        )
-        self.header.setCursor(cursor_shape)
-        self.title_label.setCursor(cursor_shape)
-        self._apply_context_panel_visibility()
-        self.splitter.setSizes(
-            [740, 0]
-            if self.display_mode == "floating"
-            else (
-                self._context_panel_saved_sizes
-                if not self.context_panel_collapsed
-                else [max(1, self.width() - self.context_panel.COLLAPSED_WIDTH), self.context_panel.COLLAPSED_WIDTH]
-            )
-        )
+        apply_display_mode(self, mode)
 
     def _toggle_display_mode(self):
         if self.display_mode == "floating":
