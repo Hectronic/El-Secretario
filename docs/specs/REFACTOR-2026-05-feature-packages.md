@@ -49,7 +49,15 @@ Reduce large flat modules and create expansion points for future product work wi
 - From active chat context sidebar construction in `src/ui/main_window/__init__.py` to `src/ui/main_window/chat_context_sidebar.py`: the helper creates and registers the non-interactive mirrored context panel while `SidebarSyncCoordinator` keeps synchronization behavior.
 - From queue-management widget logic in `src/ui/queue_management_widget.py` to `src/app/summary_queue/`: action orchestration (`actions.py`) and presentation/snapshot mapping (`presentation.py`) now live in app-level modules while the widget primarily applies mapped view state.
 - From worker startup internals in `src/ui/summary_task_queue.py` to `src/app/summary_queue/`: worker construction (`worker_factory.py`), common signal wiring (`worker_signals.py`), and queue-start lifecycle (`worker_lifecycle.py`) now live in focused modules.
+- From the global theme application facade in `src/ui/styles.py` to `src/ui/theme_styles.py`: static dark, light, and SNES sheets plus compatibility style constants now live in a dedicated theme resource module.
 - From the monolithic `src/database.py` to `src/persistence/`: schema/migrations, records/imports, chat sessions/imports, transcription logs, summaries, and tasks now have aggregate-specific repository modules. `DBManager` remains the public compatibility facade so existing callers retain their API.
+- From `CalendarWidget` summary-generation handlers to `src/ui/calendar/summary_actions.py`: daily, weekly, pending, completion, and error actions now have a focused owner while the widget retains its public Qt slots.
+- From direct `DBManager` construction in `RecordingWidget` to an injected persistence port: recording detail actions and loading now share caller-provided persistence when supplied, while retaining the compatible default facade.
+- From direct `DBManager` construction in `SummaryTaskQueueManager` to an injected persistence port: queued daily-summary workers now receive the same persistence boundary as the caller, preserving the compatible default facade.
+- From worker-signal outcome handlers in `SummaryTaskQueueManager` to `src/app/summary_queue/execution.py`: worker completion, failure/skip policy, status traces, retry waits, cleanup, and sequential continuation now have an app-level owner.
+- From inline RAG platform guards in `src/rag_engine.py` to `src/rag/runtime_policy.py`: Windows-safe delete and subprocess modes are resolved in a pure policy while macOS and Ubuntu retain in-process Chroma behavior.
+- From `src/ui/main_window/chat_floating.py` to `src/ui/main_window/floating_chat_host.py`: bounded floating-host resizing and edge interaction now have a focused Qt owner while the coordinator retains chat lifecycle behavior and a compatibility import.
+- From `src/ui/main_window/sidebar_content.py` to `src/ui/main_window/sidebar_history.py`, `sidebar_organization.py`, and `sidebar_sessions.py`: history/filter/deletion, collection/notebook, and saved-session content behaviors now have focused owners while the original coordinator remains a compatible façade.
 
 ## Specs Affected
 
@@ -60,6 +68,7 @@ Reduce large flat modules and create expansion points for future product work wi
 - SPEC-007: chat sessions/context/floating chat now map to `src/ui/chat/`, `src/ui/chat_widget.py`, and `src/ui/main_window/chat_floating.py`.
 - SPEC-008: active chat context sidebar now maps to `src/ui/context_manager_panel.py`, `src/ui/main_window/sidebar_sync.py`, and `src/ui/main_window/sidebar_content.py`.
 - SPEC-013: settings panels now map to `src/ui/settings/`.
+- SPEC-009: calendar visual composition and summary actions now map to `src/ui/calendar/` while `CalendarWidget` remains the public façade.
 
 ## Tests
 
@@ -75,23 +84,24 @@ Reduce large flat modules and create expansion points for future product work wi
   - `tests/ui/main_window/test_history_navigation_actions.py`
   - `tests/ui/main_window/test_summary_actions.py`
 - Representative root-level integration tests still cover cross-feature behavior such as recording flow, chat context sync, settings, summary queue, and Windows bootstrap scripts.
+- `tests/integration/test_calendar_selection_sync.py` covers real SQLite date/tag filtering, sidebar synchronization, and daily-summary queue admission.
+- Recording deletion and calendar-to-queue daily-summary completion are covered with real SQLite in `tests/integration/`, while external dialogs, AI providers, and workers remain controlled test boundaries.
+- Chat completion lifecycle has focused coverage in
+  `tests/ui/chat/test_conversation_runtime.py`; its real Qt UI → deterministic
+  worker → SQLite session/restoration contract is covered in
+  `tests/integration/test_chat_session_persistence.py`.
 - Full suite status for this refactor was validated after the code change.
 
 ## Remaining Hotspots
 
-- `src/ui/main_window/__init__.py` remains a large shell and should keep shrinking through coordinators and focused right-sidebar builders.
-- `src/ui/main_window/bootstrap.py` now isolates the startup sequence, but the shell still owns tab lifecycle and broad app orchestration.
-- `src/ui/main_window/content_tabs.py` now owns note/chat/summary/tools/tasks/collections/calendar tab lifecycle; remaining `MainWindow` shell reduction should focus on cross-feature orchestration and legacy wrappers.
-- `src/ui/main_window/sidebar_actions.py` is now mostly an orchestrator over `tasks_sidebar_actions.py`, `chat_sessions_actions.py`, `calendar_sidebar_actions.py`, and `history_tags_actions.py`; future cuts should target direct wiring from `MainWindow` to those focused coordinators where practical.
-- `src/database.py` is now a thin compatibility facade over `src/persistence/`. Future persistence work should extend the aggregate-specific repository that owns it and retain facade compatibility unless an intentional API migration is planned.
-- `src/ui/recording_widget.py` is now mostly a Qt orchestration shell for the recording detail/audio-edit tab. UI panel construction, controls, state helpers, RAG indexing, record loading, direct transcription flow, AI actions, speaker mapping, and legacy trim helpers have been extracted under `src/ui/recording/`; remaining reductions should target deletion/open-chat/playback adapters and any broad persistence coupling.
-- `src/ui/welcome_widget.py` still mixes landing layout, recorder configuration, microphone tests, favorites, today view, search, and settings persistence.
-- `src/ui/summary_task_queue.py` now acts mostly as a Qt adapter; keep moving any remaining business-only helpers into `src/app/summary_queue/`.
-- `src/rag_engine.py` now owns the public RAG facade and Windows runtime-mode selection; fallback store, Chroma initialization/compatibility, result parsing/ranking, filter composition, and subprocess task handling have moved to `src/rag/`.
-- `src/ui/welcome_widget.py` still mixes landing layout and navigation signals; `src/ui/welcome/` now owns shared button constructors, capture-setting helpers, microphone-test helpers, and landing-list data formatting.
+No structural hotspots are currently confirmed. `MainWindow`,
+`SummaryTaskQueueManager`, `RAGEngine`, and `DBManager` are intentional public
+facades; future work should preserve their compatible APIs while extending the
+smallest owning feature package or aggregate repository.
 
 ## Follow-Ups
 
 - Use the `spec-driven-refactor` skill for future refactors so specs and architecture docs stay aligned.
-- Add individual spec files for the highest-change capabilities before the next major feature: transcription runtime, chat context, summary queue, and settings.
+- Reassess façade boundaries only when a concrete behavior cannot be assigned to an
+  existing feature package or aggregate repository.
 - Prefer moving behavior only after focused tests pin current contracts.

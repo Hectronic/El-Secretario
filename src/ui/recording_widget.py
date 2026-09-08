@@ -28,6 +28,7 @@ from src.worker_components.transcriber_thread import TranscriberThread
 from src.stt_providers.sherpa_onnx.model_manager import get_transcription_preflight_error
 from src.ui.speaker_dialog import SpeakerDialog
 from src.ui.recording.actions_bar import build_actions_bar
+from src.ui.recording import layout as recording_layout
 from src.ui.recording.ai_orchestration import RecordingAiCoordinator
 from src.ui.recording.audio_trim import (
     mark_trim_end,
@@ -60,10 +61,19 @@ class RecordingWidget(QWidget):
     status_changed = pyqtSignal(str)
     progress_changed = pyqtSignal(int)
 
-    def __init__(self, rag_engine, recorder=None, record_id=None, task_queue=None, parent=None, audio_edit_mode=False):
+    def __init__(
+        self,
+        rag_engine,
+        recorder=None,
+        record_id=None,
+        task_queue=None,
+        parent=None,
+        audio_edit_mode=False,
+        persistence=None,
+    ):
         super().__init__(parent)
         self.rag = rag_engine
-        self.db = DBManager()
+        self.db = persistence if persistence is not None else DBManager()
         if recorder is not None:
             self.recorder = recorder
         else:
@@ -112,208 +122,28 @@ class RecordingWidget(QWidget):
             self._set_audio_edit_enabled(False)
 
     def init_ui(self):
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(10, 10, 10, 10)
-
-        if self.audio_edit_mode:
-            self._build_audio_editor_ui(layout)
-            return
-
-        self._build_transcription_controls(layout)
-        self._build_playback_controls(layout)
-        self._build_separator(layout)
-        self._build_metadata_panel(layout)
-        self._build_content_tabs(layout)
-        self._build_bottom_actions(layout)
+        recording_layout.init_ui(self)
 
     def _build_transcription_controls(self, layout):
-        panel = build_transcription_panel(self, self.retranscribe_recording)
-        self.model_combo = panel.model_combo
-        self.lang_combo = panel.lang_combo
-        self.diarization_check = panel.diarization_check
-        self.retranscribe_btn = panel.retranscribe_btn
-        layout.addLayout(panel.layout)
+        recording_layout._build_transcription_controls(self, layout)
 
     def _build_playback_controls(self, layout):
-        playback_controls = create_playback_controls(
-            self,
-            on_play=self.play_audio,
-            on_pause=self.pause_audio,
-            on_stop=self.stop_audio,
-            on_slider_moved=self.set_position,
-            on_volume_changed=self.audio_output.setVolume,
-        )
-        playback_layout = playback_controls.layout
-        self.play_btn = playback_controls.play_btn
-        self.pause_btn = playback_controls.pause_btn
-        self.stop_btn = playback_controls.stop_btn
-        self.slider = playback_controls.slider
-        self.time_label = playback_controls.time_label
-        self.volume_slider = playback_controls.volume_slider
-
-        self.edit_audio_btn = create_primary_action(
-            "Edit Audio in New Tab",
-            self.open_audio_editor,
-            min_height=38,
-            enabled=False,
-            parent=self,
-        )
-        playback_layout.insertWidget(3, self.edit_audio_btn)
-        layout.addLayout(playback_layout)
-
-        self.audio_edit_group = None
-        self.trim_start_spin = None
-        self.trim_end_spin = None
-        self.mark_start_btn = None
-        self.mark_end_btn = None
-        self.trim_btn = None
+        recording_layout._build_playback_controls(self, layout)
 
     def _build_separator(self, layout):
-        line = QFrame()
-        line.setFrameShape(QFrame.Shape.HLine)
-        line.setFrameShadow(QFrame.Shadow.Sunken)
-        layout.addWidget(line)
+        recording_layout._build_separator(self, layout)
 
     def _build_metadata_panel(self, layout):
-        panel = build_metadata_panel(self.db.get_all_tags())
-        self.title_input = panel.title_input
-        self.date_label = panel.date_label
-        self.duration_label = panel.duration_label
-        self.tags_input = panel.tags_input
-        self.is_diarized_check_meta = panel.is_diarized_check
-        layout.addWidget(panel.group)
+        recording_layout._build_metadata_panel(self, layout)
 
     def _build_content_tabs(self, layout):
-        panel = build_content_tabs(
-            self,
-            self.db,
-            self.current_record_id,
-            open_speaker_manager=self.open_speaker_manager,
-            copy_transcription=self.copy_transcription_to_clipboard,
-            on_transcription_text_changed=self._update_transcription_actions,
-        )
-        self.tabs = panel.tabs
-        self.text_display = panel.text_display
-        self.notes_display = panel.notes_display
-        self.summary_display = panel.summary_display
-        self.tasks_widget = panel.tasks_widget
-        self.rename_speakers_btn = panel.rename_speakers_btn
-        self.copy_transcription_btn = panel.copy_transcription_btn
-        layout.addWidget(panel.tabs)
+        recording_layout._build_content_tabs(self, layout)
 
     def _build_bottom_actions(self, layout):
-        actions = build_actions_bar(
-            self,
-            summarize_slot=lambda: self.run_ai_task("summary"),
-            extract_tasks_slot=lambda: self.run_ai_task("task_extraction"),
-            save_slot=self.save_all_changes,
-            ask_slot=self.open_chat_for_recording,
-            delete_slot=self.delete_recording,
-        )
-        self.summarize_btn = actions.summarize_btn
-        self.extract_tasks_btn = actions.extract_tasks_btn
-        self.save_all_btn = actions.save_all_btn
-        self.ask_meeting_btn = actions.ask_meeting_btn
-        self.delete_btn = actions.delete_btn
-        layout.addLayout(actions.layout)
+        recording_layout._build_bottom_actions(self, layout)
 
     def _build_audio_editor_ui(self, layout):
-        playback_controls = create_playback_controls(
-            self,
-            on_play=self.play_audio,
-            on_pause=self.pause_audio,
-            on_stop=self.stop_audio,
-            on_slider_moved=self.set_position,
-            on_volume_changed=self.audio_output.setVolume,
-        )
-        self.play_btn = playback_controls.play_btn
-        self.pause_btn = playback_controls.pause_btn
-        self.stop_btn = playback_controls.stop_btn
-        self.slider = playback_controls.slider
-        self.time_label = playback_controls.time_label
-        self.volume_slider = playback_controls.volume_slider
-        layout.addLayout(playback_controls.layout)
-
-        edit_group = QGroupBox("Audio Edit")
-        edit_layout = QVBoxLayout(edit_group)
-        edit_layout.setSpacing(8)
-
-        edit_row = QHBoxLayout()
-        self.trim_start_spin = QDoubleSpinBox()
-        self.trim_start_spin.setDecimals(2)
-        self.trim_start_spin.setSingleStep(0.5)
-        self.trim_start_spin.setMinimum(0.0)
-        self.trim_start_spin.setMaximum(0.0)
-        self.trim_start_spin.setSuffix(" s")
-        edit_row.addWidget(QLabel("Start:"))
-        edit_row.addWidget(self.trim_start_spin)
-
-        self.trim_end_spin = QDoubleSpinBox()
-        self.trim_end_spin.setDecimals(2)
-        self.trim_end_spin.setSingleStep(0.5)
-        self.trim_end_spin.setMinimum(0.0)
-        self.trim_end_spin.setMaximum(0.0)
-        self.trim_end_spin.setSuffix(" s")
-        edit_row.addWidget(QLabel("End:"))
-        edit_row.addWidget(self.trim_end_spin)
-
-        self.mark_start_btn = create_action_button(
-            "Mark Start",
-            self.mark_trim_start_from_playhead,
-            parent=self,
-        )
-        edit_row.addWidget(self.mark_start_btn)
-
-        self.mark_end_btn = create_action_button(
-            "Mark End",
-            self.mark_trim_end_from_playhead,
-            parent=self,
-        )
-        edit_row.addWidget(self.mark_end_btn)
-        edit_row.addStretch()
-        edit_layout.addLayout(edit_row)
-
-        trim_row = QHBoxLayout()
-        self.trim_btn = create_primary_action(
-            "Trim and Retranscribe",
-            self.trim_audio_selection,
-            parent=self,
-        )
-        trim_row.addWidget(self.trim_btn)
-        trim_row.addStretch()
-        edit_layout.addLayout(trim_row)
-
-        layout.addWidget(edit_group)
-        self.audio_edit_group = edit_group
-
-        line = QFrame()
-        line.setFrameShape(QFrame.Shape.HLine)
-        line.setFrameShadow(QFrame.Shadow.Sunken)
-        layout.addWidget(line)
-
-        self.duration_label = None
-        self.model_combo = None
-        self.lang_combo = None
-        self.diarization_check = None
-        self.title_input = None
-        self.save_all_btn = None
-        self.date_label = None
-        self.duration_label = None
-        self.tags_input = None
-        self.is_diarized_check_meta = None
-        self.tabs = None
-        self.text_display = None
-        self.notes_display = None
-        self.summary_display = None
-        self.tasks_widget = None
-        self.summarize_btn = None
-        self.extract_tasks_btn = None
-        self.retranscribe_btn = None
-        self.ask_meeting_btn = None
-        self.delete_btn = None
-        self.rename_speakers_btn = None
-        self.copy_transcription_btn = None
-        return
+        recording_layout._build_audio_editor_ui(self, layout)
 
     def _connect_dirty_tracking(self):
         self.widget_support.connect_dirty_tracking()

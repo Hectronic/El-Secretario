@@ -32,15 +32,17 @@ Users need a fast landing surface to start a recording, import audio, search, an
 
 ## Architecture Notes
 
-- UI: `src/ui/welcome_widget.py` owns the landing widget composition and user-facing signals.
+- UI: `src/ui/welcome_widget.py` owns the landing widget façade and user-facing signals; `src/ui/welcome/layout.py` owns its visual composition and responsive sizing.
 - UI helpers: `src/ui/welcome/button_factory.py` owns the reusable button constructors used by the welcome screen.
 - Capture helpers: `src/ui/welcome/capture_state.py` owns capture-setting persistence, microphone list hydration, and recording config mapping.
-- Mic test helpers: `src/ui/welcome/mic_test.py` owns stream startup/cleanup, RMS calculation, and VU meter state updates.
+- Capture runtime: `src/ui/welcome/capture_runtime.py` owns welcome-widget preference wiring and recording/import capture requests.
+- Mic test helpers: `src/ui/welcome/mic_test.py` owns stream startup/cleanup, RMS calculation, and VU meter state updates; `src/ui/welcome/mic_runtime.py` owns the welcome-widget microphone discovery and test-session orchestration.
 - Landing data helpers: `src/ui/welcome/landing_data.py` owns search-result, favorites, and today-list query formatting for the welcome screen.
+- Landing actions: `src/ui/welcome/landing_actions.py` owns welcome search, favorites pagination, today-list population, and record navigation signals.
 - Main window: `src/ui/main_window/shell_actions.py` wires welcome-screen signals; `src/ui/main_window/recording_tabs.py` owns the capture-tab lifecycle from that signal through completed-capture persistence and transcription handoff. `MainWindow` keeps compatibility delegates.
 - Persistence: `QSettings` stores capture preferences and the welcome widget reads them back on startup.
 - Workers/integrations: recorder startup, import flow, and search all route into downstream capture/search services rather than implementing heavy logic inside the widget.
-- Platform constraints: preserve Ubuntu and Windows behavior, including resource-path lookup and mic/test handling.
+- Platform constraints: preserve Windows, Ubuntu, and macOS behavior, including resource-path lookup and mic/test handling.
 
 ## Test Plan
 
@@ -63,8 +65,9 @@ Users need a fast landing surface to start a recording, import audio, search, an
 - 2026-06-27: extracted welcome search-result, favorites, and today-list data formatting into `src/ui/welcome/landing_data.py`.
 - 2026-08-30: consolidated the in-progress recording tab, completed-capture persistence, and transcription handoff in `src/ui/main_window/recording_tabs.py`.
 - 2026-08-31: moved welcome-screen signal wiring from `MainWindow` to `src/ui/main_window/shell_actions.py`.
+- 2026-09-05: moved welcome-screen visual composition and responsive density rules into `src/ui/welcome/layout.py`.
 
 ## Open Questions
 
 - Should microphone scanning move from the widget wrapper into a fuller device-discovery helper once audio-device behavior has broader tests?
-- Should the remaining welcome layout construction be split into focused panel builders once UI layout coverage is broader?
+- None for the current WelcomeWidget boundary.

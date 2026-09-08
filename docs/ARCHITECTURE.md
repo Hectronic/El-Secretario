@@ -70,10 +70,10 @@ Use these boundaries when adding new features:
 - `src/ui/main_window/window_lifecycle.py` owns cancellation of background work, tab cleanup, recorder stop, floating-chat disposal, and palette/resize reactions. Its callers must preserve the early-Qt-event guards in `MainWindow` and the shutdown ordering covered by stress tests.
 - `src/database.py` is now a thin compatibility facade over `src/persistence/`; preserve this public import path while callers are migrated incrementally to aggregate-specific repositories where appropriate.
 - `src/ui/recording_widget.py` is now a Qt composition shell for recording detail and legacy audio-edit tabs. Focused modules own UI builders, controls, state/trim/cleanup support, detail loading/persistence, transcription and AI orchestration, speaker mapping, and RAG indexing; public widget methods remain compatible delegates.
-- `src/ui/welcome_widget.py` mixes landing page layout, recorder configuration, microphone testing, favorites, search, today view, and settings persistence.
+- `src/ui/welcome_widget.py` is a thin signal façade. Its layout, capture runtime, microphone runtime, and landing actions live in `src/ui/welcome/`; retain its public delegates while callers migrate.
 - `src/ui/summary_task_queue.py` still carries queue orchestration and signal wiring complexity, but most non-Qt queue logic already lives in `src/app/summary_queue/`.
 - `src/rag_engine.py` combines vector store adapter, in-memory fallback, subprocess entrypoints, keyword fallback, Chroma compatibility, and Windows safety policy.
-- `src/ui/styles.py` is a large shared stylesheet module. It is useful centrally, but feature-specific styling should not keep growing there by default.
+- `src/ui/styles.py` is the theme-application and compatibility façade; static global theme sheets live in `src/ui/theme_styles.py`. Feature-specific styling should not grow in either shared module by default.
 
 ## Target Direction
 
@@ -96,7 +96,7 @@ Recommended next cuts:
 
 1. Move RAG subprocess/keyword/vector-store adapter logic out of `RAGEngine` into smaller adapter modules.
 2. Continue shrinking `RecordingWidget` by moving dirty-state and legacy audio-edit coordination into focused modules; detail loading/persistence, deletion, open-chat, playback adapters, UI builders, shared controls, direct-transcription and AI orchestration, speaker mapping, audio trim helpers, and RAG indexing helpers already live under `src/ui/recording/`.
-3. Move `WelcomeWidget` recorder configuration and microphone test behavior into a separate component/service.
+3. Continue reducing `src/ui/summary_task_queue.py` by moving signal wiring and Qt-specific coordination into focused UI helpers.
 4. Migrate selected application services to the repositories in `src/persistence/` only when doing so reduces coupling; retain `DBManager` as the compatibility boundary for existing UI code.
 
 ## Testing Expectations

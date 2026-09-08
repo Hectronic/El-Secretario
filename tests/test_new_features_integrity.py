@@ -102,6 +102,23 @@ class TestNewFeaturesIntegrity(unittest.TestCase):
         
         widget.deleteLater()
 
+    def test_batch_widgets_accept_injected_persistence(self):
+        persistence = MagicMock()
+        persistence.get_records_without_tasks.return_value = []
+        persistence.get_records_without_summary.return_value = []
+        persistence.get_dates_without_summary.return_value = []
+        persistence.get_weeks_without_summary.return_value = []
+
+        task_widget = TaskBatchWidget(task_queue=self.task_queue, persistence=persistence)
+        from src.ui.summary_batch_widget import SummaryBatchWidget
+        summary_widget = SummaryBatchWidget(task_queue=self.task_queue, persistence=persistence)
+        try:
+            self.assertIs(task_widget.db, persistence)
+            self.assertIs(summary_widget.db, persistence)
+        finally:
+            task_widget.deleteLater()
+            summary_widget.deleteLater()
+
     def test_summary_task_queue_signals(self):
         """Verify SummaryTaskQueueManager has the expected new signals/methods."""
         queue = SummaryTaskQueueManager()

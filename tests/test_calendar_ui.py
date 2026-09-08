@@ -44,7 +44,7 @@ class TestCalendarUI(unittest.TestCase):
         self.mock_db.get_weekly_summary.return_value = None
         
         # Patch QSettings to return auto for compute_type
-        self.settings_patcher = patch('src.ui.calendar_widget.QSettings')
+        self.settings_patcher = patch('src.ui.calendar.summary_actions.QSettings')
         self.mock_settings = self.settings_patcher.start().return_value
         self.mock_settings.value.return_value = "auto"
         
@@ -119,8 +119,8 @@ class TestCalendarUI(unittest.TestCase):
         self.assertEqual(self.widget.current_anchor_date.toString("yyyy-MM-dd"), "2026-01-07")
         self.assertEqual(len(self.widget.selected_dates), 3)
 
-    @patch('src.ui.calendar_widget.QProgressDialog')
-    @patch('src.ui.calendar_widget.QMessageBox')
+    @patch('src.ui.calendar.summary_actions.QProgressDialog')
+    @patch('src.ui.calendar.summary_actions.QMessageBox')
     def test_generate_summary(self, mock_msg, mock_progress):
         # Setup selection
         monday = QDate(2026, 1, 5)
@@ -142,7 +142,7 @@ class TestCalendarUI(unittest.TestCase):
         
         self.assertEqual(self.widget.summary_text.toPlainText().strip(), "Summary Result")
 
-    @patch('src.ui.calendar_widget.QMessageBox')
+    @patch('src.ui.calendar.summary_actions.QMessageBox')
     def test_autonomous_popups(self, mock_msg):
         # Test that click without selection doesn't block (just calls QMessageBox.warning)
         self.widget.selected_dates = set()

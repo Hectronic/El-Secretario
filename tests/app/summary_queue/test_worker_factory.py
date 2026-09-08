@@ -57,7 +57,7 @@ def test_build_worker_daily_summary_connects_callbacks():
     worker = build_queue_worker(
         {"type": "daily_summary", "date": "2026-05-13"},
         parent=object(),
-        db=None,
+        db="persistence-port",
         rag_engine=None,
         on_worker_completed=lambda *args: done.append("done"),
         on_generator_recording_summary_completed=lambda *args: done.append("record"),
@@ -68,6 +68,7 @@ def test_build_worker_daily_summary_connects_callbacks():
     )
 
     assert isinstance(worker, _DailyWorker)
+    assert worker.kwargs["persistence"] == "persistence-port"
     assert len(worker.recording_summary_completed.callbacks) == 1
     assert len(worker.all_tasks_finished.callbacks) == 1
     assert len(worker.progress.callbacks) == 1

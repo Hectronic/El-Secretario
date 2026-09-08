@@ -2,7 +2,7 @@
 
 Status: Implemented
 Owner: TBD
-Last updated: 2026-08-31
+Last updated: 2026-09-05
 
 ## Problem
 
@@ -40,20 +40,28 @@ Users need long-running AI and transcription work to run sequentially, visibly, 
 - Qt adapter: `src/ui/summary_task_queue.py` owns Qt signals, `QThread` wiring, worker lifecycle, cancellation, and UI-facing queue state.
 - Application helpers: `src/app/summary_queue/helpers.py` owns non-Qt helper logic for task extraction parsing and audio duration probing.
 - Task factories: `src/app/summary_queue/tasks.py` owns queue task payload construction, source normalization, and dedupe key calculation.
+- Task admission: `src/app/summary_queue/admission.py` owns task validation, extraction-title resolution, and submission policy without depending on Qt.
 - Queue history: `src/app/summary_queue/history.py` owns session history storage, newest-first projection, and consecutive status-trace deduplication.
+- Queue execution state: `src/app/summary_queue/state.py` owns pending ordering, deduplication, and active-task transitions without depending on Qt.
 - RAG reindexing: `src/app/summary_queue/rag_reindex.py` owns candidate selection, existing-index checks, metadata building, and the indexing loop.
 - Runtime/thread helpers: `src/app/summary_queue/runtime.py` owns worker stop/cleanup utilities, retry-wait message shaping, and runtime stats aggregation.
+- Retry wait state: `src/app/summary_queue/wait_state.py` owns retry countdown transitions while the Qt adapter owns timer scheduling and signals.
 - Qt thread wrappers: `src/app/summary_queue/threads.py` owns `RAGReindexThread` so `src/ui/summary_task_queue.py` stays focused on adapter orchestration.
 - Completion handling: `src/app/summary_queue/completion.py` owns post-worker persistence and returns actions for the Qt adapter to apply.
+- Completion-action policy: `src/app/summary_queue/completion_actions.py` dispatches normalized follow-ups and the recording-summary-to-task-extraction chain without depending on Qt.
 - Worker config: `src/app/summary_queue/workers.py` owns transcription worker kwargs preparation from settings and queued task data.
 - Worker creation: `src/app/summary_queue/worker_factory.py` owns per-task worker construction and task-type specific signal hookups.
 - Worker signal wiring: `src/app/summary_queue/worker_signals.py` owns common worker signal wiring (`error`, `finished`, optional status/retry).
 - Worker start lifecycle: `src/app/summary_queue/worker_lifecycle.py` owns the queue-start lifecycle for current-worker set, started events, history append, queue-state emit, and start.
+- Worker outcomes: `src/app/summary_queue/execution.py` owns worker completion,
+  fatal-error skip policy, status traces, retry-wait state, completion cleanup, and
+  sequential continuation. `SummaryTaskQueueManager` remains the Qt-signal façade.
 - Queue widget presentation/actions: `src/app/summary_queue/presentation.py` and `src/app/summary_queue/actions.py` own UI-facing formatting/snapshots and queue action orchestration extracted from `QueueManagementWidget`.
 - Main-window queue presentation: `src/ui/main_window/summary_queue_status.py` owns the status bar, queue-tab opening, queue-signal subscriptions, progress/status rendering, and refresh of affected open views. `MainWindow` keeps compatibility delegates for existing callers.
 - Startup scheduling: `src/ui/main_window/runtime_startup.py` owns opt-in scheduling of the prior weekly or latest missing daily summary. `MainWindow` keeps compatibility delegates used by bootstrap.
 - Daily summary shortcut: `src/ui/main_window/runtime_startup.py` also owns the current-day summary queue request emitted by the welcome screen.
-- Persistence: `src/database.py` owns summary, transcription, and task persistence.
+- Persistence: summary workflows accept an injected aggregate persistence port; `src/database.py` remains the compatible default facade while repositories under `src/persistence/` own the aggregate implementations.
+- Batch UI: `SummaryBatchWidget` and `TaskBatchWidget` accept the same injected persistence port, allowing their summary/task queries to migrate incrementally without changing their UI API.
 - Workers/integrations: `src/summary_generator.py`, `src/ai_assistant.py`, `src/ai_provider.py`, `src/worker_components/transcriber_thread.py`, and RAG engine integrations provide the actual work.
 - AI provider retry policy: `src/ai_provider.py` retries cloud-provider transient failures conservatively and treats Gemini quota/rate-limit errors as terminal for the current operation.
 - Platform constraints: queued transcription must preserve backend, device, compute type, `force_cpu`, diarization, and CUDA cleanup policy.
@@ -62,6 +70,7 @@ Users need long-running AI and transcription work to run sequentially, visibly, 
 
 - Unit: helper parsing, audio-duration fallback, dedupe keys, queue history, skip behavior, AI provider retry policy.
 - Integration: summary-to-task chaining, queued transcription persistence, queue widget updates, RAG reindex worker.
+- Integration contracts: `tests/test_summary_task_queue_integration.py` covers queued transcription and summary/task chaining with real SQLite and fake worker boundaries; `tests/test_recording_flow.py` covers capture-tab handoff; `tests/integration/test_persistence_ports.py` covers injected persistence across batch widgets; and `tests/integration/test_calendar_selection_sync.py` covers calendar admission through the queue to a persisted daily summary.
 - UI: queue management widget reflects current/pending/history state.
 - Manual: run a real queued summary, task extraction, transcription, and RAG reindex on Ubuntu and Windows before release.
 
@@ -93,8 +102,20 @@ Users need long-running AI and transcription work to run sequentially, visibly, 
 - 2026-08-29: moved summary queue status and completion-view synchronization from `src/ui/main_window/__init__.py` to `src/ui/main_window/summary_queue_status.py`, preserving the `MainWindow` API used by startup and existing UI integrations.
 - 2026-08-30: moved startup summary scheduling from `src/ui/main_window/__init__.py` to `src/ui/main_window/runtime_startup.py`, preserving its opt-in settings and bootstrap order.
 - 2026-08-31: moved the welcome-screen current-day summary request to `src/ui/main_window/runtime_startup.py` while preserving its queue payload.
+- 2026-09-05: moved completion follow-up dispatch and the recording-summary task-extraction chain out of `SummaryTaskQueueManager` into `src/app/summary_queue/completion_actions.py`.
+- 2026-09-05: moved sequential queue state and deduplication out of `SummaryTaskQueueManager` into `src/app/summary_queue/state.py`, retaining compatible private views for existing integrations.
+- 2026-09-05: moved retry-wait countdown transitions out of `SummaryTaskQueueManager` into `src/app/summary_queue/wait_state.py`.
+- 2026-09-05: moved queue task admission and validation out of `SummaryTaskQueueManager` into `src/app/summary_queue/admission.py`.
+- 2026-09-06: made `SummaryGenerator` accept injected persistence so summary workflows can migrate incrementally away from direct `DBManager` construction.
+- 2026-09-07: moved worker outcome orchestration from `SummaryTaskQueueManager` to
+  `src/app/summary_queue/execution.py`, retaining the manager's public signals and
+  compatible private hooks.
 
 ## Open Questions
 
-- Should task payloads become dataclasses before moving more queue logic out of Qt?
+- Follow-up candidate: define a dedicated queue-task contract (`SPEC-015` or the
+  next available spec) to migrate worker-facing task dictionaries to dataclasses.
+  This must be an explicit compatibility migration covering queue admission,
+  workers, completion handling, persistence actions, and external integrations;
+  do not fold it into maintenance changes to the Qt adapter.
 - Should RAG reindexing eventually move from `src/app/summary_queue/rag_reindex.py` to a broader RAG service package if non-queue callers need it?

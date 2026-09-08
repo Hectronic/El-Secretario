@@ -22,9 +22,9 @@ class TaskBatchWidget(QWidget):
     Widget for batch extracting tasks from recordings that are missing them.
     """
     
-    def __init__(self, task_queue=None, parent=None):
+    def __init__(self, task_queue=None, parent=None, persistence=None):
         super().__init__(parent)
-        self.db = DBManager()
+        self.db = persistence if persistence is not None else DBManager()
         self.task_queue = task_queue
         self.is_processing = False
         self.pending_records = []

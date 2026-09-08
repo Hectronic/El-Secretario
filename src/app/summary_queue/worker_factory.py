@@ -51,6 +51,7 @@ def build_queue_worker(
             specific_dates=[task["date"]],
             exclude_today=False,
             parent=parent,
+            persistence=db,
         )
         worker.recording_summary_completed.connect(on_generator_recording_summary_completed)
         worker.all_tasks_finished.connect(lambda *args: on_worker_completed())

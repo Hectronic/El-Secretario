@@ -18,9 +18,8 @@ from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QTextEdit,
                              QFrame, QDialog, QScrollArea, QSplitter,
                              QGroupBox, QCheckBox, QCalendarWidget, QToolButton,
                              QMessageBox)
-from PyQt6.QtCore import Qt, QSettings, pyqtSignal, QSize, QEvent
+from PyQt6.QtCore import Qt, pyqtSignal, QSize, QEvent
 from PyQt6.QtGui import QCursor, QIcon, QTextCharFormat, QColor, QPalette
-from src.worker_components.threads import ChatThread
 from src.database import DBManager
 from src.ui.styles import TEXT_EDIT_STYLE, BUTTON_PRIMARY_STYLE
 from src.notebook_database import NotebookDBManager
@@ -37,7 +36,8 @@ from src.ui.chat.session_state import (
     persist_chat_session,
     resolve_chat_display_title,
 )
-from src.ui.chat.theme_styles import build_chat_widget_theme
+from src.ui.chat.conversation_runtime import ChatConversationRuntime
+from src.ui.chat import layout as chat_layout
 
 class ChatWidget(QWidget):
     session_updated = pyqtSignal()
@@ -48,13 +48,24 @@ class ChatWidget(QWidget):
     close_requested = pyqtSignal(object)
     title_changed = pyqtSignal(object, str)
 
-    def __init__(self, rag_engine, session_id=None, parent=None, initial_contexts=None):
+    def __init__(
+        self,
+        rag_engine,
+        session_id=None,
+        parent=None,
+        initial_contexts=None,
+        persistence=None,
+        notebook_persistence=None,
+        conversation_runtime=None,
+    ):
         super().__init__(parent)
         self.rag = rag_engine
-        self.db = DBManager()
-        self.notebook_db = NotebookDBManager()
+        self.db = persistence if persistence is not None else DBManager()
+        self.notebook_db = (
+            notebook_persistence if notebook_persistence is not None else NotebookDBManager()
+        )
         self.chat_history = [] 
-        self.chat_thread = None
+        self.conversation_runtime = conversation_runtime or ChatConversationRuntime()
         self.current_session_id = session_id
         self.forced_record_ids = set()
         self.forced_record_labels = []
@@ -82,175 +93,10 @@ class ChatWidget(QWidget):
         return self.palette().color(QPalette.ColorRole.Window).lightness() < 128
 
     def init_ui(self):
-        root_layout = QVBoxLayout(self)
-        root_layout.setContentsMargins(0, 0, 0, 0)
-        root_layout.setSpacing(0)
-
-        self.header = QFrame()
-        self.header.setObjectName("chatWidgetHeader")
-        self.header.setFixedHeight(32)
-        header_layout = QHBoxLayout(self.header)
-        header_layout.setContentsMargins(8, 3, 6, 3)
-        header_layout.setSpacing(4)
-
-        self.title_label = QLabel("New Chat")
-        header_layout.addWidget(self.title_label, 1)
-        self.header.installEventFilter(self)
-        self.title_label.installEventFilter(self)
-
-        self.mode_btn = QToolButton()
-        self.mode_btn.setAutoRaise(True)
-        self.mode_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.mode_btn.setFixedSize(20, 20)
-        self.mode_btn.clicked.connect(self._toggle_display_mode)
-        header_layout.addWidget(self.mode_btn)
-
-        self.minimize_btn = QToolButton()
-        self.minimize_btn.setText("_")
-        self.minimize_btn.setToolTip("Minimize to compact chip")
-        self.minimize_btn.setAutoRaise(True)
-        self.minimize_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.minimize_btn.setFixedSize(20, 20)
-        self.minimize_btn.clicked.connect(self._toggle_minimized_state)
-        header_layout.addWidget(self.minimize_btn)
-
-        self.close_btn = QToolButton()
-        self.close_btn.setText("×")
-        self.close_btn.setToolTip("Close chat")
-        self.close_btn.setAutoRaise(True)
-        self.close_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.close_btn.setFixedSize(20, 20)
-        self.close_btn.clicked.connect(lambda: self.close_requested.emit(self))
-        header_layout.addWidget(self.close_btn)
-
-        root_layout.addWidget(self.header)
-
-        self.content_container = QWidget()
-        main_layout = QHBoxLayout(self.content_container)
-        main_layout.setContentsMargins(0, 0, 0, 0)
-        main_layout.setSpacing(0)
-        
-        self.splitter = QSplitter(Qt.Orientation.Horizontal)
-        
-        # --- Left Side: Chat ---
-        chat_container = QWidget()
-        chat_layout = QVBoxLayout(chat_container)
-
-        # Chat Display
-        self.display = QTextEdit()
-        self.display.setReadOnly(True)
-        self.display.setPlaceholderText("Pregunta cualquier cosa sobre tus notas...")
-        chat_layout.addWidget(self.display)
-
-        # Input Area
-        input_layout = QHBoxLayout()
-        self.input_field = QLineEdit()
-        self.input_field.setPlaceholderText("Escribe tu pregunta aquí...")
-        self.input_field.returnPressed.connect(self.send_message)
-        input_layout.addWidget(self.input_field)
-
-        self.send_btn = QPushButton("Enviar")
-        self.send_btn.clicked.connect(self.send_message)
-        self.send_btn.setProperty("class", "calendar-primary-btn")
-        self.send_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.send_btn.setFixedHeight(36)
-        input_layout.addWidget(self.send_btn)
-
-        chat_layout.addLayout(input_layout)
-        
-        self.splitter.addWidget(chat_container)
-        
-        # --- Right Side: Context Manager Panel ---
-        self.context_panel = ContextManagerPanel(self.db, self.notebook_db, self)
-        self.context_panel.toggle_requested.connect(self.toggle_context_panel)
-        self.context_panel.add_context_requested.connect(self.add_context)
-        self.context_panel.reset_extra_context_requested.connect(self.reset_extra_context)
-        self.context_panel.clear_chat_requested.connect(self.clear_history)
-        self.splitter.addWidget(self.context_panel)
-        self.splitter.splitterMoved.connect(self._remember_context_panel_sizes)
-        
-        self.splitter.setSizes([900, 350])
-        main_layout.addWidget(self.splitter)
-        root_layout.addWidget(self.content_container)
-        self._apply_theme_styles()
-        self.set_display_mode("tab")
-        self._refresh_title()
+        chat_layout.build_chat_layout(self)
 
     def _apply_theme_styles(self):
-        theme = build_chat_widget_theme(self._is_dark_theme())
-        header_bg = theme["header_bg"]
-        header_border = theme["header_border"]
-        title_color = theme["title_color"]
-        btn_color = theme["btn_color"]
-        btn_hover = theme["btn_hover"]
-        display_bg = theme["display_bg"]
-        display_text = theme["display_text"]
-        input_bg = theme["input_bg"]
-        input_border = theme["input_border"]
-        display_border = theme["display_border"]
-
-        self.header.setStyleSheet(f"""
-            QFrame#chatWidgetHeader {{
-                background-color: {header_bg};
-                border-bottom: 1px solid {header_border};
-                border-top-left-radius: 11px;
-                border-top-right-radius: 11px;
-            }}
-        """)
-        self.title_label.setStyleSheet(
-            f"font-weight: 600; font-size: 12px; color: {title_color};"
-        )
-
-        action_btn_style = f"""
-            QToolButton {{
-                border: none;
-                border-radius: 6px;
-                padding: 1px;
-                background: transparent;
-                color: {btn_color};
-                font-size: 11px;
-                font-weight: 700;
-            }}
-            QToolButton:hover {{
-                background-color: {btn_hover};
-                color: #2196F3;
-            }}
-        """
-        self.mode_btn.setStyleSheet(action_btn_style)
-        self.minimize_btn.setStyleSheet(action_btn_style)
-        self.close_btn.setStyleSheet(
-            action_btn_style
-            + """
-            QToolButton:hover {
-                background-color: rgba(244, 67, 54, 0.15);
-                color: #f44336;
-            }
-            """
-        )
-        self.display.setStyleSheet(f"""
-            QTextEdit {{
-                background-color: {display_bg};
-                color: {display_text};
-                border: 1px solid {display_border};
-                border-radius: 8px;
-                font-size: 14px;
-                padding: 10px;
-                line-height: 1.5;
-            }}
-        """)
-        self.display.document().setDefaultStyleSheet(
-            f"body {{ color: {display_text}; }} a {{ color: #64b5f6; }}"
-        )
-        self.input_field.setStyleSheet(f"""
-            QLineEdit {{
-                background-color: {input_bg};
-                color: {display_text};
-                border: 1px solid {input_border};
-                border-radius: 18px;
-                padding: 8px 15px;
-                font-size: 13px;
-            }}
-        """)
+        chat_layout.apply_chat_theme(self)
 
     def changeEvent(self, event):
         if event.type() in (
@@ -359,24 +205,17 @@ class ChatWidget(QWidget):
             forced_record_ids=self.forced_record_ids,
         )
 
-        # Start Chat Thread
-        settings = QSettings("Hectronic", "Secretario")
-        from src.ai_provider import validate_ai_provider_config
-        is_valid, error_msg = validate_ai_provider_config(settings)
-        
-        if not is_valid:
-            self.append_to_chat("System", f"Error: {error_msg}")
+        result = self.conversation_runtime.start(
+            query,
+            context_text,
+            self.chat_history,
+            self.on_chat_finished,
+            self.on_chat_error,
+            lambda: self.set_busy(True),
+        )
+        if result.validation_error:
+            self.append_to_chat("System", f"Error: {result.validation_error}")
             return
-
-        if self.chat_thread and self.chat_thread.isRunning():
-            return
-        self.set_busy(True)
-        self.chat_thread = ChatThread("", query, context_text, self.chat_history)
-        self.chat_thread.finished.connect(self.on_chat_finished)
-        self.chat_thread.error.connect(self.on_chat_error)
-        self.chat_thread.finished.connect(self._clear_chat_thread_ref)
-        self.chat_thread.error.connect(self._clear_chat_thread_ref)
-        self.chat_thread.start()
 
     def on_chat_finished(self, response):
         self.set_busy(False)
@@ -425,26 +264,8 @@ class ChatWidget(QWidget):
         else:
             QApplication.restoreOverrideCursor()
 
-    def _clear_chat_thread_ref(self, *args):
-        thread = self.chat_thread
-        self.chat_thread = None
-        if thread:
-            thread.deleteLater()
-
     def cleanup(self):
-        if self.chat_thread and self.chat_thread.isRunning():
-            try:
-                self.chat_thread.requestInterruption()
-                self.chat_thread.quit()
-                self.chat_thread.wait(3000)
-            except Exception:
-                pass
-        if self.chat_thread:
-            try:
-                self.chat_thread.deleteLater()
-            except Exception:
-                pass
-        self.chat_thread = None
+        self.conversation_runtime.cleanup()
         QApplication.restoreOverrideCursor()
 
     def closeEvent(self, event):

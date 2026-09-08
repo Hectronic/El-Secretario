@@ -28,10 +28,10 @@ class NoteWidget(QWidget):
     status_changed = pyqtSignal(str)
     progress_changed = pyqtSignal(int)
 
-    def __init__(self, rag_engine, record_id=None, task_queue=None, parent=None):
+    def __init__(self, rag_engine, record_id=None, task_queue=None, parent=None, persistence=None):
         super().__init__(parent)
         self.rag = rag_engine
-        self.db = DBManager()
+        self.db = persistence if persistence is not None else DBManager()
         self.current_record_id = record_id
         self.summary_task_queue = task_queue
         self.ai_thread = None
