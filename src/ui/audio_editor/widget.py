@@ -18,7 +18,6 @@ import logging
 import os
 import shutil
 import tempfile
-from dataclasses import dataclass
 
 import soundfile as sf
 import numpy as np
@@ -44,19 +43,16 @@ from PyQt6.QtWidgets import QStyle
 from src.audio import Recorder
 from src.database import DBManager
 from src.transcription_options import get_saved_transcription_model
+from src.ui.audio_editor.editing_state import (
+    AudioChunk,
+    ChunkEditHistory,
+    adjust_chunk_boundary,
+    build_preview_ranges,
+    split_chunk,
+)
 from src.ui.audio_editor.waveform import AudioWaveformWidget
 from src.worker_components.transcriber_thread import TranscriberThread
 from src.stt_providers.sherpa_onnx.model_manager import get_transcription_preflight_error
-
-
-@dataclass
-class AudioChunk:
-    source_start: float
-    source_end: float
-
-    @property
-    def duration(self) -> float:
-        return max(0.0, self.source_end - self.source_start)
 
 
 class AudioEditorWidget(QWidget):
@@ -86,9 +82,7 @@ class AudioEditorWidget(QWidget):
         self.selection_end = 0.0
         self._suppress_signals = False
         self._has_unsaved_changes = False
-        self._undo_stack = []
-        self._redo_stack = []
-        self._history_limit = 200
+        self._history = ChunkEditHistory()
         self._boundary_drag_history_pending = False
         self.transcriber_thread = None
         self.player = QMediaPlayer()
@@ -328,8 +322,7 @@ class AudioEditorWidget(QWidget):
             return
 
         parts = []
-        preview_ranges = []
-        cursor = 0.0
+        preview_ranges = build_preview_ranges(self.chunks)
         for idx, chunk in enumerate(self.chunks):
             start_frame = int(round(chunk.source_start * self.current_sample_rate))
             end_frame = int(round(chunk.source_end * self.current_sample_rate))
@@ -338,17 +331,6 @@ class AudioEditorWidget(QWidget):
             part = self.current_audio[start_frame:end_frame]
             if len(part):
                 parts.append(part)
-            output_start = cursor
-            cursor += chunk.duration
-            preview_ranges.append(
-                {
-                    "output_start": output_start,
-                    "output_end": cursor,
-                    "source_start": chunk.source_start,
-                    "source_end": chunk.source_end,
-                    "chunk_index": idx,
-                }
-            )
 
         if parts:
             self.preview_audio = np.concatenate(parts, axis=0)
@@ -488,7 +470,9 @@ class AudioEditorWidget(QWidget):
 
         self._push_undo_state()
         chunk = self.chunks[self.active_chunk_index]
-        left, middle, right = self._split_chunk(chunk, active, keep_middle=True)
+        left, middle, right = split_chunk(
+            chunk, active, self.selection_start, self.selection_end, keep_middle=True
+        )
         new_chunks = []
         if left:
             new_chunks.append(left)
@@ -510,7 +494,9 @@ class AudioEditorWidget(QWidget):
 
         self._push_undo_state()
         chunk = self.chunks[self.active_chunk_index]
-        left, _, right = self._split_chunk(chunk, active, keep_middle=False)
+        left, _, right = split_chunk(
+            chunk, active, self.selection_start, self.selection_end, keep_middle=False
+        )
         new_chunks = []
         if left:
             new_chunks.append(left)
@@ -554,55 +540,14 @@ class AudioEditorWidget(QWidget):
             self._push_undo_state()
             self._boundary_drag_history_pending = False
 
-        active_range = self.preview_ranges[self.active_chunk_index]
-        boundary_time = float(boundary_time)
-        if side == "left":
-            min_time = active_range["output_start"]
-            max_time = active_range["output_end"] - 0.001
-            if self.active_chunk_index > 0:
-                prev_range = self.preview_ranges[self.active_chunk_index - 1]
-                min_time = prev_range["output_start"] + 0.001
-                max_time = active_range["output_end"] - 0.001
-                if boundary_time < min_time:
-                    boundary_time = min_time
-                if boundary_time > max_time:
-                    boundary_time = max_time
-                prev_chunk = self.chunks[self.active_chunk_index - 1]
-                current_chunk = self.chunks[self.active_chunk_index]
-                total = prev_chunk.duration + current_chunk.duration
-                left_duration = max(0.001, boundary_time - prev_range["output_start"])
-                right_duration = max(0.001, total - left_duration)
-                prev_chunk.source_end = prev_chunk.source_start + left_duration
-                current_chunk.source_start = current_chunk.source_end - right_duration
-            else:
-                current_chunk = self.chunks[self.active_chunk_index]
-                max_start = current_chunk.source_end - 0.001
-                new_start = max(0.0, min(boundary_time, max_start))
-                current_chunk.source_start = new_start
-        elif side == "right":
-            min_time = active_range["output_start"] + 0.001
-            max_time = active_range["output_end"]
-            if self.active_chunk_index < len(self.chunks) - 1:
-                next_range = self.preview_ranges[self.active_chunk_index + 1]
-                min_time = active_range["output_start"] + 0.001
-                max_time = next_range["output_end"] - 0.001
-                if boundary_time < min_time:
-                    boundary_time = min_time
-                if boundary_time > max_time:
-                    boundary_time = max_time
-                current_chunk = self.chunks[self.active_chunk_index]
-                next_chunk = self.chunks[self.active_chunk_index + 1]
-                total = current_chunk.duration + next_chunk.duration
-                left_duration = max(0.001, boundary_time - active_range["output_start"])
-                right_duration = max(0.001, total - left_duration)
-                current_chunk.source_end = current_chunk.source_start + left_duration
-                next_chunk.source_start = next_chunk.source_end - right_duration
-            else:
-                current_chunk = self.chunks[self.active_chunk_index]
-                min_end = current_chunk.source_start + 0.001
-                new_end = max(min_end, min(boundary_time, self.current_duration))
-                current_chunk.source_end = new_end
-        else:
+        if not adjust_chunk_boundary(
+            self.chunks,
+            self.active_chunk_index,
+            self.preview_ranges,
+            side,
+            boundary_time,
+            self.current_duration,
+        ):
             return False
 
         self._rebuild_preview()
@@ -618,27 +563,6 @@ class AudioEditorWidget(QWidget):
         self._rebuild_preview()
         self._mark_dirty()
 
-    def _split_chunk(self, chunk: AudioChunk, active_range: dict, keep_middle: bool):
-        # Split the currently selected chunk by mapping the output selection back to source coordinates.
-        chunk_duration = chunk.duration
-        output_start = active_range["output_start"]
-        sel_start = max(output_start, self.selection_start)
-        sel_end = min(active_range["output_end"], self.selection_end)
-        if sel_end <= sel_start:
-            raise ValueError("The selection must have a positive duration.")
-
-        left_duration = sel_start - output_start
-        middle_duration = sel_end - sel_start
-        right_duration = active_range["output_end"] - sel_end
-
-        left = AudioChunk(chunk.source_start, chunk.source_start + left_duration) if left_duration > 0.001 else None
-        middle = AudioChunk(chunk.source_start + left_duration, chunk.source_start + left_duration + middle_duration) if middle_duration > 0.001 else None
-        right = AudioChunk(chunk.source_end - right_duration, chunk.source_end) if right_duration > 0.001 else None
-
-        if keep_middle:
-            return left, middle, right
-        return left, None, right
-
     def _mark_dirty(self):
         self._has_unsaved_changes = True
 
@@ -648,47 +572,29 @@ class AudioEditorWidget(QWidget):
     def has_unsaved_changes(self):
         return self._has_unsaved_changes
 
-    def _chunk_snapshot(self):
-        return ([(c.source_start, c.source_end) for c in self.chunks], int(self.active_chunk_index))
-
-    def _restore_snapshot(self, snapshot):
-        chunk_pairs, active_idx = snapshot
-        self.chunks = [AudioChunk(float(start), float(end)) for start, end in chunk_pairs]
-        self.active_chunk_index = max(-1, min(int(active_idx), len(self.chunks) - 1))
-        self._rebuild_preview()
-
     def _clear_history(self):
-        self._undo_stack.clear()
-        self._redo_stack.clear()
+        self._history.clear()
         self._boundary_drag_history_pending = False
 
     def _push_undo_state(self):
-        snapshot = self._chunk_snapshot()
-        if self._undo_stack and self._undo_stack[-1] == snapshot:
-            return
-        self._undo_stack.append(snapshot)
-        if len(self._undo_stack) > self._history_limit:
-            self._undo_stack.pop(0)
-        self._redo_stack.clear()
+        self._history.push(self.chunks, self.active_chunk_index)
 
     def undo(self):
-        if not self._undo_stack:
+        restored = self._history.undo(self.chunks, self.active_chunk_index)
+        if restored is None:
             return False
-        current = self._chunk_snapshot()
-        previous = self._undo_stack.pop()
-        self._redo_stack.append(current)
-        self._restore_snapshot(previous)
+        self.chunks, self.active_chunk_index = restored
+        self._rebuild_preview()
         self._mark_dirty()
         self.status_changed.emit("Undo")
         return True
 
     def redo(self):
-        if not self._redo_stack:
+        restored = self._history.redo(self.chunks, self.active_chunk_index)
+        if restored is None:
             return False
-        current = self._chunk_snapshot()
-        next_snapshot = self._redo_stack.pop()
-        self._undo_stack.append(current)
-        self._restore_snapshot(next_snapshot)
+        self.chunks, self.active_chunk_index = restored
+        self._rebuild_preview()
         self._mark_dirty()
         self.status_changed.emit("Redo")
         return True
