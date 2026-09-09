@@ -13,6 +13,8 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 from src.ui.audio_editor.waveform import AudioWaveformWidget
-from src.ui.audio_editor.widget import AudioChunk, AudioEditorWidget
+from src.ui.audio_editor.session import AudioEditorSession
+from src.ui.audio_editor.editing_state import AudioChunk
+from src.ui.audio_editor.widget import AudioEditorWidget
 
-__all__ = ["AudioChunk", "AudioEditorWidget", "AudioWaveformWidget"]
+__all__ = ["AudioChunk", "AudioEditorSession", "AudioEditorWidget", "AudioWaveformWidget"]

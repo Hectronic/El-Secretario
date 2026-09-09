@@ -2,7 +2,6 @@ import numpy as np
 import soundfile as sf
 
 from src.database import DBManager
-from src.ui.audio_editor.editing_state import AudioChunk
 from src.ui.audio_editor.transcription_runtime import AudioEditorTranscriptionRuntime
 from src.ui.audio_editor.widget import AudioEditorWidget
 
@@ -113,12 +112,10 @@ def test_audio_editor_apply_persists_backup_duration_and_transcription(qtbot, tm
     qtbot.addWidget(widget)
     widget.current_record_id = record_id
     widget.current_recording_path = str(path)
-    widget.current_audio = audio.reshape(-1, 1)
-    widget.preview_audio = audio[:2].reshape(-1, 1)
-    widget.current_sample_rate = 4
-    widget.current_duration = 1.0
-    widget.chunks = [AudioChunk(0.0, 0.5)]
-    widget.active_chunk_index = 0
+    widget._load_audio_buffer(str(path))
+    widget.selection_start_spin.setValue(0.5)
+    widget.selection_end_spin.setValue(1.0)
+    widget.cut_selection()
     saved = []
     widget.recording_saved.connect(lambda: saved.append(True))
 

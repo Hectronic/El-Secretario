@@ -19,7 +19,6 @@ import os
 import tempfile
 
 import soundfile as sf
-import numpy as np
 from PyQt6.QtCore import Qt, QUrl, pyqtSignal
 from PyQt6.QtGui import QShortcut, QKeySequence
 from PyQt6.QtMultimedia import QAudioOutput, QMediaPlayer
@@ -41,14 +40,9 @@ from PyQt6.QtWidgets import QStyle
 
 from src.audio import Recorder
 from src.database import DBManager
-from src.ui.audio_editor.editing_state import (
-    AudioChunk,
-    ChunkEditHistory,
-    adjust_chunk_boundary,
-    build_preview_ranges,
-    split_chunk,
-)
+from src.ui.audio_editor.editing_state import AudioChunk
 from src.ui.audio_editor.persistence import apply_edited_audio
+from src.ui.audio_editor.session import AudioEditorSession
 from src.ui.audio_editor.transcription_runtime import AudioEditorTranscriptionRuntime
 from src.ui.audio_editor.waveform import AudioWaveformWidget
 
@@ -59,6 +53,20 @@ class AudioEditorWidget(QWidget):
     close_requested = pyqtSignal()
     status_changed = pyqtSignal(str)
     progress_changed = pyqtSignal(int)
+
+    # Compatibility proxies keep the established widget state observable while the
+    # non-Qt session owns it. Existing integrations may inspect these attributes.
+    current_audio = property(lambda self: self.session.current_audio, lambda self, value: setattr(self.session, "current_audio", value))
+    current_sample_rate = property(lambda self: self.session.sample_rate, lambda self, value: setattr(self.session, "sample_rate", value))
+    current_duration = property(lambda self: self.session.duration, lambda self, value: setattr(self.session, "duration", value))
+    preview_audio = property(lambda self: self.session.preview_audio, lambda self, value: setattr(self.session, "preview_audio", value))
+    preview_ranges = property(lambda self: self.session.preview_ranges, lambda self, value: setattr(self.session, "preview_ranges", value))
+    chunks = property(lambda self: self.session.chunks, lambda self, value: setattr(self.session, "chunks", value))
+    active_chunk_index = property(lambda self: self.session.active_chunk_index, lambda self, value: setattr(self.session, "active_chunk_index", value))
+    selection_start = property(lambda self: self.session.selection_start, lambda self, value: setattr(self.session, "selection_start", value))
+    selection_end = property(lambda self: self.session.selection_end, lambda self, value: setattr(self.session, "selection_end", value))
+    _has_unsaved_changes = property(lambda self: self.session.has_unsaved_changes, lambda self, value: setattr(self.session, "has_unsaved_changes", value))
+    _boundary_drag_history_pending = property(lambda self: self.session.boundary_drag_history_pending, lambda self, value: setattr(self.session, "boundary_drag_history_pending", value))
 
     def __init__(
         self,
@@ -75,6 +83,7 @@ class AudioEditorWidget(QWidget):
         self.db = persistence if persistence is not None else DBManager()
         self.recorder = recorder if recorder is not None else Recorder()
         self.summary_task_queue = task_queue
+        self.session = AudioEditorSession()
         self.current_record_id = record_id
         self.current_recording_path = None
         self.current_audio = None
@@ -83,14 +92,12 @@ class AudioEditorWidget(QWidget):
         self.preview_audio = None
         self.preview_temp_path = None
         self.preview_ranges = []
-        self.chunks: list[AudioChunk] = []
+        self.chunks = []
         self.active_chunk_index = -1
         self.selection_start = 0.0
         self.selection_end = 0.0
         self._suppress_signals = False
         self._has_unsaved_changes = False
-        self._history = ChunkEditHistory()
-        self._boundary_drag_history_pending = False
         self.transcription_runtime = transcription_runtime or AudioEditorTranscriptionRuntime()
         self.player = QMediaPlayer()
         self.audio_output = QAudioOutput()
@@ -311,11 +318,7 @@ class AudioEditorWidget(QWidget):
 
     def _load_audio_buffer(self, path: str):
         audio, sample_rate = sf.read(path, always_2d=True, dtype="float32")
-        self.current_audio = audio
-        self.current_sample_rate = int(sample_rate)
-        self.current_duration = float(audio.shape[0] / sample_rate) if len(audio) else 0.0
-        self.chunks = [AudioChunk(0.0, self.current_duration)] if self.current_duration > 0 else []
-        self.active_chunk_index = 0 if self.chunks else -1
+        self.session.load_audio(audio, sample_rate)
         self._rebuild_preview()
 
     def _rebuild_preview(self):
@@ -328,22 +331,7 @@ class AudioEditorWidget(QWidget):
             self._update_time_label()
             return
 
-        parts = []
-        preview_ranges = build_preview_ranges(self.chunks)
-        for idx, chunk in enumerate(self.chunks):
-            start_frame = int(round(chunk.source_start * self.current_sample_rate))
-            end_frame = int(round(chunk.source_end * self.current_sample_rate))
-            start_frame = max(0, min(start_frame, len(self.current_audio)))
-            end_frame = max(start_frame, min(end_frame, len(self.current_audio)))
-            part = self.current_audio[start_frame:end_frame]
-            if len(part):
-                parts.append(part)
-
-        if parts:
-            self.preview_audio = np.concatenate(parts, axis=0)
-        else:
-            self.preview_audio = np.zeros((0, self.current_audio.shape[1]), dtype=np.float32)
-        self.preview_ranges = preview_ranges
+        self.session.rebuild_preview()
         self.waveform.set_audio(self.preview_audio, self.current_sample_rate)
         self.waveform.set_chunk_ranges(self.preview_ranges, self.active_chunk_index)
         self._refresh_chunk_list()
@@ -453,14 +441,10 @@ class AudioEditorWidget(QWidget):
         self._boundary_drag_history_pending = False
 
     def _chunk_for_selection(self):
-        if not (0 <= self.active_chunk_index < len(self.preview_ranges)):
-            return None, None
-        active = self.preview_ranges[self.active_chunk_index]
-        if self.selection_end <= self.selection_start:
-            return None, "Select a range first."
-        if self.selection_start < active["output_start"] or self.selection_end > active["output_end"]:
-            return None, "The selection must stay inside the active chunk."
-        return active, None
+        try:
+            return self.session.selection_range(), None
+        except ValueError as exc:
+            return None, str(exc)
 
     def _selection_to_chunk(self):
         active, error = self._chunk_for_selection()
@@ -475,22 +459,8 @@ class AudioEditorWidget(QWidget):
             QMessageBox.warning(self, "Split", str(exc))
             return
 
-        self._push_undo_state()
-        chunk = self.chunks[self.active_chunk_index]
-        left, middle, right = split_chunk(
-            chunk, active, self.selection_start, self.selection_end, keep_middle=True
-        )
-        new_chunks = []
-        if left:
-            new_chunks.append(left)
-        if middle:
-            new_chunks.append(middle)
-        if right:
-            new_chunks.append(right)
-        self.chunks[self.active_chunk_index:self.active_chunk_index + 1] = new_chunks
-        self.active_chunk_index = min(self.active_chunk_index + (1 if left else 0), len(self.chunks) - 1)
+        self.session.split_selection()
         self._rebuild_preview()
-        self._mark_dirty()
 
     def cut_selection(self):
         try:
@@ -499,110 +469,61 @@ class AudioEditorWidget(QWidget):
             QMessageBox.warning(self, "Cut", str(exc))
             return
 
-        self._push_undo_state()
-        chunk = self.chunks[self.active_chunk_index]
-        left, _, right = split_chunk(
-            chunk, active, self.selection_start, self.selection_end, keep_middle=False
-        )
-        new_chunks = []
-        if left:
-            new_chunks.append(left)
-        if right:
-            new_chunks.append(right)
-        self.chunks[self.active_chunk_index:self.active_chunk_index + 1] = new_chunks
-        self.active_chunk_index = min(self.active_chunk_index, max(0, len(self.chunks) - 1))
+        self.session.cut_selection()
         self._rebuild_preview()
-        self._mark_dirty()
 
     def delete_chunk(self):
-        if not (0 <= self.active_chunk_index < len(self.chunks)):
+        try:
+            changed = self.session.delete_active_chunk()
+        except ValueError as exc:
+            QMessageBox.warning(self, "Delete Chunk", str(exc))
             return
-        if len(self.chunks) == 1:
-            QMessageBox.warning(self, "Delete Chunk", "You need at least one chunk.")
+        if not changed:
             return
-        self._push_undo_state()
-        del self.chunks[self.active_chunk_index]
-        self.active_chunk_index = min(self.active_chunk_index, len(self.chunks) - 1)
         self._rebuild_preview()
-        self._mark_dirty()
 
     def move_chunk(self, offset: int):
-        if not (0 <= self.active_chunk_index < len(self.chunks)):
+        if not self.session.move_active_chunk(offset):
             return
-        target = self.active_chunk_index + offset
-        if target < 0 or target >= len(self.chunks):
-            return
-        self._push_undo_state()
-        self.chunks[self.active_chunk_index], self.chunks[target] = self.chunks[target], self.chunks[self.active_chunk_index]
-        self.active_chunk_index = target
         self._rebuild_preview()
-        self._mark_dirty()
 
     def adjust_active_chunk_boundary(self, side: str, boundary_time: float):
-        if not (0 <= self.active_chunk_index < len(self.chunks)):
+        if not self.session.adjust_active_boundary(side, boundary_time):
             return False
-        if not self.preview_ranges:
-            return False
-        if self._boundary_drag_history_pending:
-            self._push_undo_state()
-            self._boundary_drag_history_pending = False
-
-        if not adjust_chunk_boundary(
-            self.chunks,
-            self.active_chunk_index,
-            self.preview_ranges,
-            side,
-            boundary_time,
-            self.current_duration,
-        ):
-            return False
-
         self._rebuild_preview()
-        self._mark_dirty()
         return True
 
     def reset_edits(self):
-        if self.current_duration <= 0:
+        if not self.session.reset():
             return
-        self._push_undo_state()
-        self.chunks = [AudioChunk(0.0, self.current_duration)]
-        self.active_chunk_index = 0
         self._rebuild_preview()
-        self._mark_dirty()
 
     def _mark_dirty(self):
-        self._has_unsaved_changes = True
+        self.session.mark_dirty()
 
     def _mark_clean(self):
-        self._has_unsaved_changes = False
+        self.session.mark_clean()
 
     def has_unsaved_changes(self):
-        return self._has_unsaved_changes
+        return self.session.has_unsaved_changes
 
     def _clear_history(self):
-        self._history.clear()
-        self._boundary_drag_history_pending = False
+        self.session.clear_history()
 
     def _push_undo_state(self):
-        self._history.push(self.chunks, self.active_chunk_index)
+        self.session.history.push(self.chunks, self.active_chunk_index)
 
     def undo(self):
-        restored = self._history.undo(self.chunks, self.active_chunk_index)
-        if restored is None:
+        if not self.session.undo():
             return False
-        self.chunks, self.active_chunk_index = restored
         self._rebuild_preview()
-        self._mark_dirty()
         self.status_changed.emit("Undo")
         return True
 
     def redo(self):
-        restored = self._history.redo(self.chunks, self.active_chunk_index)
-        if restored is None:
+        if not self.session.redo():
             return False
-        self.chunks, self.active_chunk_index = restored
         self._rebuild_preview()
-        self._mark_dirty()
         self.status_changed.emit("Redo")
         return True
 
@@ -628,13 +549,9 @@ class AudioEditorWidget(QWidget):
                 self.db,
                 self.current_record_id,
             )
-            self.current_audio = self.preview_audio
             self.status_changed.emit("Audio updated.")
             self.recording_saved.emit()
-            self._mark_clean()
-            self._clear_history()
-            self.chunks = [AudioChunk(0.0, self.current_duration)]
-            self.active_chunk_index = 0
+            self.session.accept_saved_preview(self.current_duration)
             self._rebuild_preview()
             self._retranscribe_current_audio()
             return True

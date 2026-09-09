@@ -31,10 +31,10 @@ Users need to inspect and edit recordings before continuing with transcription, 
 
 ## Architecture Notes
 
-- UI: `src/ui/audio_editor/widget.py` owns visual editor interaction;
-  `src/ui/audio_editor/editing_state.py` owns pure chunk ranges, edits, and
-  undo/redo state; `src/ui/audio_editor/waveform.py` owns waveform rendering and
-  waveform input events.
+- UI: `src/ui/audio_editor/widget.py` is the Qt presentation shell;
+  `src/ui/audio_editor/session.py` owns loaded-audio state, preview reconstruction,
+  chunk commands, selection validation, and undo/redo. `editing_state.py` remains
+  the pure range math, while `waveform.py` owns waveform rendering and input events.
 - Main window: `src/ui/main_window/recording_tabs.py` owns opening editor tabs and integrating them with tab lifecycle.
 - Services: `src/ui/audio_editor/persistence.py` owns backup-safe edited audio
   writes and duration persistence; `src/ui/audio_editor/transcription_runtime.py`
@@ -64,6 +64,8 @@ Users need to inspect and edit recordings before continuing with transcription, 
 - 2026-09-08: extracted deterministic segment editing into `editing_state.py`, and
   isolated safe file persistence plus retranscription worker lifecycle while keeping
   `AudioEditorWidget` as the visible shell.
+- 2026-09-09: extracted the non-Qt `AudioEditorSession`; the widget keeps its
+  observable state aliases for tab-lifecycle and extension compatibility.
 
 ## Open Questions
 
