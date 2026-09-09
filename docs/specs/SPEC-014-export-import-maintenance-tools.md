@@ -21,7 +21,8 @@ Users need one safe place to maintain stored data, run batch workflows, move dat
 
 ## Architecture Notes
 
-- `src/ui/tools_widget.py` is the tabbed Qt façade.
+- `src/ui/tools_widget.py` is the action façade; `src/ui/tools/view.py` owns the
+  tabbed Qt composition.
 - `src/ui/tools/rag.py` owns reindex submission status policy; `src/ui/tools/data_transfer.py` owns exporter/importer invocation and success-message formatting.
 - Batch subwidgets receive the same injected persistence port supplied to `ToolsWidget`.
 
@@ -33,3 +34,5 @@ Users need one safe place to maintain stored data, run batch workflows, move dat
 ## Refactor Notes
 
 - 2026-09-08: extracted RAG and data-transfer actions to `src/ui/tools/` and corrected batch-tab persistence injection.
+- 2026-09-09: extracted the tabbed Qt composition to `src/ui/tools/view.py`; the
+  façade keeps action and tab-factory ownership.

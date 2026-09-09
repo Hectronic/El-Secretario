@@ -128,7 +128,7 @@ What user or product problem is being solved?
 | REFACTOR-2026-09-BATCH-PROCESS | Implemented | Transcription-batch queue state and request construction extraction | SPEC-011 |
 | REFACTOR-2026-09-SUMMARY-BATCH | Implemented | Summary-batch counts, payload construction, and queue submission extraction | SPEC-011 |
 | REFACTOR-2026-09-CONTEXT-MANAGER | Implemented | Context-panel Qt composition, state serialization, and entry-resolution extraction | SPEC-008, SPEC-007 |
-| REFACTOR-2026-09-TOOLS | Implemented | Tools RAG/data actions and shared batch persistence injection | SPEC-014 |
+| REFACTOR-2026-09-TOOLS | Implemented | Tools tab composition, RAG/data actions, and shared batch persistence injection | SPEC-014 |
 | REFACTOR-2026-09-CHAT-WIDGET | Implemented | Chat initial-context and display-mode policy extraction | SPEC-007, SPEC-008 |
 | REFACTOR-2026-09-COMPONENT-WIDGETS | Implemented | Reusable tag, sidebar, recording, summary, and task-row widgets split into focused families; `components.py` retained as a compatibility facade | SPEC-004, SPEC-007, SPEC-011, SPEC-012 |
 

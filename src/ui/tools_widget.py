@@ -16,16 +16,14 @@
 Unified Tools Widget combining Maintenance and Batch Processing functionality.
 """
 
-from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QTabWidget, QLabel, QPushButton, QHBoxLayout, QComboBox)
+from PyQt6.QtWidgets import QWidget, QVBoxLayout, QLabel, QPushButton, QHBoxLayout, QComboBox
 from PyQt6.QtGui import QPalette
 from PyQt6.QtCore import Qt
 
 from src.ui.maintenance_widget import MaintenanceWidget
-from src.ui.batch_process_widget import BatchProcessWidget
-from src.ui.summary_batch_widget import SummaryBatchWidget
-from src.ui.task_batch_widget import TaskBatchWidget
 from src.ui.tools.data_transfer import export_all_data, import_all_data
 from src.ui.tools.rag import queue_rag_reindex
+from src.ui.tools.view import build_tools_view
 
 
 class ToolsWidget(QWidget):
@@ -57,43 +55,8 @@ class ToolsWidget(QWidget):
         self.init_ui()
 
     def init_ui(self):
-        """Initialize the unified tools interface."""
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(0, 0, 0, 0)
-
-        # Title
-        title = QLabel("⚙️ Tools")
-        title.setStyleSheet("font-size: 28px; font-weight: bold; color: #607D8B; padding: 20px;")
-        layout.addWidget(title)
-
-        # Create tab widget for sub-sections
-        self.tabs = QTabWidget()
-
-        # Storage Tab (from MaintenanceWidget - cleanup functionality)
-        self.storage_widget = self._create_storage_tab()
-        self.tabs.addTab(self.storage_widget, "🗄️ Storage")
-
-        # Processing Tab (from BatchProcessWidget)
-        self.processing_widget = BatchProcessWidget(task_queue=self.task_queue, persistence=self.db)
-        self.tabs.addTab(self.processing_widget, "⏳ Processing")
-
-        # Summary Tab
-        self.summary_widget = SummaryBatchWidget(task_queue=self.task_queue, persistence=self.db)
-        self.tabs.addTab(self.summary_widget, "📝 Summaries")
-
-        # Tasks Tab (New)
-        self.tasks_batch_widget = TaskBatchWidget(task_queue=self.task_queue, persistence=self.db)
-        self.tabs.addTab(self.tasks_batch_widget, "✅ Tasks")
-
-        # Data Tab (from MaintenanceWidget - export/import)
-        self.data_widget = self._create_data_tab()
-        self.tabs.addTab(self.data_widget, "📦 Data")
-
-        # RAG Tab
-        self.rag_widget = self._create_rag_tab()
-        self.tabs.addTab(self.rag_widget, "🧠 RAG")
-
-        layout.addWidget(self.tabs)
+        """Build the tabbed Qt shell through the focused tools view owner."""
+        build_tools_view(self)
 
     def _create_storage_tab(self):
         """Create the Storage tab with cleanup functionality."""
