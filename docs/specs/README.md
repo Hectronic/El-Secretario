@@ -122,7 +122,7 @@ What user or product problem is being solved?
 | REFACTOR-2026-09-CHAT-RUNTIME | Implemented | Chat provider validation and completion-worker lifecycle extraction | SPEC-007, SPEC-013 |
 | REFACTOR-2026-09-TASK-BOARD | Implemented | Task-board Qt composition, filters, mutations, shared editor, and row/selection presentation extraction | SPEC-012 |
 | REFACTOR-2026-09-AUDIO-EDITOR | Implemented | Audio-editor session state, segment commands, persistence, and retranscription runtime extraction | SPEC-005, SPEC-002 |
-| REFACTOR-2026-09-NOTEBOOK-WIDGET | Implemented | Notebook entry presentation, actions, and transcription-runtime extraction | SPEC-010, SPEC-002 |
+| REFACTOR-2026-09-NOTEBOOK-WIDGET | Implemented | Notebook Qt composition, entry presentation/actions, dialog, and transcription-runtime extraction | SPEC-010, SPEC-002 |
 | REFACTOR-2026-09-SUMMARY-VIEWER | Implemented | Summary-viewer composition, reusable widgets, refresh, and chat-context policy extraction | SPEC-011, SPEC-007 |
 | REFACTOR-2026-09-RECORDING-IN-PROGRESS | Implemented | Active-capture runtime, session payload, workspace, and responsive layout extraction | SPEC-001 |
 | REFACTOR-2026-09-BATCH-PROCESS | Implemented | Transcription-batch queue state and request construction extraction | SPEC-011 |

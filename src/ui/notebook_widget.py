@@ -28,6 +28,8 @@ from src.ui.notebooks.actions import (
 )
 from src.ui.notebooks.entry_widget import NoteEntryWidget
 from src.ui.notebooks.transcription_runtime import NotebookTranscriptionRuntime
+from src.ui.notebooks.detail_dialog import NoteDetailDialog
+from src.ui.notebooks.view import build_notebook_view
 
 class NotebookWidget(QWidget):
     chat_requested = pyqtSignal(int, str) # id, name
@@ -56,85 +58,10 @@ class NotebookWidget(QWidget):
         self.load_entries()
 
     def init_ui(self):
-        layout = QVBoxLayout(self)
-        
-        # Header
-        header = QHBoxLayout()
-        title = QLabel(f"Notebook: {self.notebook_name}")
-        title.setStyleSheet("font-size: 20px; font-weight: bold;")
-        header.addWidget(title)
-        header.addStretch()
-        
-        add_note_btn = QPushButton("📝 Add Note")
-        add_note_btn.clicked.connect(self.add_text_note)
-        header.addWidget(add_note_btn)
-        
-        self.record_btn = QPushButton("🎤 Record Voice Note")
-        self.record_btn.clicked.connect(self.toggle_recording)
-        self.record_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #f44336;
-                color: white;
-                font-weight: bold;
-                padding: 5px 10px;
-                border-radius: 5px;
-            }
-        """)
-        header.addWidget(self.record_btn)
-        
-        chat_btn = QPushButton("💬 Chat")
-        chat_btn.clicked.connect(lambda: self.chat_requested.emit(self.notebook_id, self.notebook_name))
-        header.addWidget(chat_btn)
-        
-        layout.addLayout(header)
-        
-        # Recording Status (Hidden by default)
-        status_layout = QHBoxLayout()
-        status_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        
-        self.rec_indicator = QLabel()
-        self.rec_indicator.setFixedSize(16, 16)
-        self.rec_indicator.setStyleSheet("background-color: red; border-radius: 8px;")
-        self.rec_indicator.hide()
-        status_layout.addWidget(self.rec_indicator)
-        
-        self.rec_status = QLabel("Recording: 00:00")
-        self.rec_status.setStyleSheet("color: #f44336; font-weight: bold; font-size: 14px;")
-        self.rec_status.hide()
-        status_layout.addWidget(self.rec_status)
-        
-        # VU Meter
-        self.vu_meter = QProgressBar()
-        self.vu_meter.setRange(0, 100)
-        self.vu_meter.setTextVisible(False)
-        self.vu_meter.setFixedWidth(150)
-        self.vu_meter.setFixedHeight(10)
-        self.vu_meter.setStyleSheet("""
-            QProgressBar {
-                border: 1px solid #555;
-                border-radius: 5px;
-                background-color: #333;
-            }
-            QProgressBar::chunk {
-                background-color: #4CAF50;
-            }
-        """)
-        self.vu_meter.hide()
-        status_layout.addWidget(self.vu_meter)
-        
-        layout.addLayout(status_layout)
-        
-        # Connect recorder amplitude signal
+        """Build the visual shell through the focused notebooks view owner."""
+        build_notebook_view(self)
         self.recorder.amplitude_changed.connect(self.update_vu_meter)
         self._amplitude_connected = True
-        
-        # Entries List
-        self.entries_list = QListWidget()
-        self.entries_list.setStyleSheet(LIST_WIDGET_STYLE)
-        self.entries_list.itemDoubleClicked.connect(self.on_item_double_clicked)
-        self.entries_list.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
-        self.entries_list.customContextMenuRequested.connect(self.show_context_menu)
-        layout.addWidget(self.entries_list)
 
     def load_entries(self):
         self.entries_list.clear()
@@ -324,27 +251,3 @@ class NotebookWidget(QWidget):
     def closeEvent(self, event):
         self.cleanup()
         super().closeEvent(event)
-
-class NoteDetailDialog(QDialog):
-    def __init__(self, entry, parent=None):
-        super().__init__(parent)
-        self.setWindowTitle(entry['title'] if entry['title'] else "Note Details")
-        self.resize(600, 400)
-        
-        layout = QVBoxLayout(self)
-        
-        # Title (Editable if needed, but let's stick to content for now as per request "appear larger")
-        # Actually user might want to edit title too, but let's focus on content.
-        
-        self.text_edit = QTextEdit()
-        self.text_edit.setPlainText(entry['content'])
-        self.text_edit.setStyleSheet("font-size: 14px;")
-        layout.addWidget(self.text_edit)
-        
-        buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
-        buttons.accepted.connect(self.accept)
-        buttons.rejected.connect(self.reject)
-        layout.addWidget(buttons)
-        
-    def get_content(self):
-        return self.text_edit.toPlainText()

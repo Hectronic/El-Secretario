@@ -75,6 +75,9 @@ then open those groups as focused views or chat contexts.
 - 2026-09-08: moved entry rendering, entry/file actions, and notebook audio-note
   transcription lifecycle to `src/ui/notebooks/`; `NotebookWidget` retains UI,
   dialog, recording-control, and navigation ownership.
+- 2026-09-09: moved notebook Qt composition and entry-detail dialog to
+  `src/ui/notebooks/view.py` and `detail_dialog.py`; `NotebookWidget` now
+  coordinates recording, persistence refresh, transcription, and signals only.
 
 ## Open Questions
 
