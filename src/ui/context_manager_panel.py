@@ -29,6 +29,7 @@ from PyQt6.QtWidgets import (
 )
 from src.ui.context_manager.entries import entry_descriptors, fetch_context_records
 from src.ui.context_manager.state import ContextPanelState, state_from_dict, status_labels
+from src.ui.context_manager.view import build_context_panel_view
 
 
 class ContextManagerPanel(QWidget):
@@ -59,123 +60,8 @@ class ContextManagerPanel(QWidget):
         self.load_notebooks()
 
     def init_ui(self):
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(10, 10, 10, 10)
-        layout.setSpacing(12)
-
-        is_dark = self.palette().color(self.backgroundRole()).lightness() < 128
-        panel_bg = "#262b33" if is_dark else "#ffffff"
-        panel_border = "#4a5463" if is_dark else "#c6d2e2"
-        panel_text = "#e8eef7" if is_dark else "#2b3b52"
-        meta_text = "#b8c1cf" if is_dark else "#666666"
-
-        header = QWidget()
-        self.header = header
-        header_layout = QHBoxLayout(header)
-        header_layout.setContentsMargins(0, 0, 0, 0)
-        header_layout.setSpacing(6)
-
-        self.header_label = QLabel("Chat Context")
-        self.header_label.setStyleSheet("font-size: 14px; font-weight: 700;")
-        header_layout.addWidget(self.header_label, 1)
-
-        self.toggle_btn = QToolButton()
-        self.toggle_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.toggle_btn.setAutoRaise(True)
-        self.toggle_btn.setFixedSize(24, 24)
-        self.toggle_btn.setToolTip("Collapse context panel")
-        self.toggle_btn.clicked.connect(self.toggle_requested.emit)
-        self.toggle_btn.setText("⟩")
-        self.toggle_btn.setStyleSheet(
-            """
-            QToolButton {
-                border: none;
-                border-radius: 6px;
-                padding: 0px;
-                background: transparent;
-                color: #607D8B;
-                font-size: 15px;
-                font-weight: 700;
-            }
-            QToolButton:hover {
-                background-color: rgba(33, 150, 243, 0.14);
-                color: #2196F3;
-            }
-            """
-        )
-        header_layout.addWidget(self.toggle_btn, 0, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-        layout.addWidget(header)
-
-        self.content_widget = QWidget()
-        content_layout = QVBoxLayout(self.content_widget)
-        content_layout.setContentsMargins(0, 0, 0, 0)
-        content_layout.setSpacing(12)
-
-        entries_group = QGroupBox("Detected Context Entries")
-        entries_layout = QVBoxLayout(entries_group)
-
-        self.entries_list = QListWidget()
-        self.entries_list.setStyleSheet(
-            f"font-size: 11px; background-color: {panel_bg}; color: {panel_text}; "
-            f"border: 1px solid {panel_border}; border-radius: 8px;"
-        )
-        entries_layout.addWidget(self.entries_list)
-
-        self.entries_count_lbl = QLabel("0 entries found")
-        self.entries_count_lbl.setStyleSheet(f"color: {meta_text}; font-size: 11px;")
-        entries_layout.addWidget(self.entries_count_lbl)
-
-        content_layout.addWidget(entries_group)
-
-        status_group = QGroupBox("Selection Context")
-        status_layout = QVBoxLayout(status_group)
-
-        self.sync_cb = QCheckBox("Sync with App")
-        self.sync_cb.setChecked(True)
-        self.sync_cb.setStyleSheet("font-weight: bold; color: #2196F3;")
-        status_layout.addWidget(self.sync_cb)
-
-        self.date_lbl = QLabel("Dates: all history")
-        date_color = "#8fb8ff" if is_dark else "#1565C0"
-        self.date_lbl.setStyleSheet(f"font-size: 11px; color: {date_color}; font-weight: bold;")
-        self.date_lbl.setWordWrap(True)
-        status_layout.addWidget(self.date_lbl)
-
-        self.tags_lbl = QLabel("Tags: all")
-        self.tags_lbl.setStyleSheet(f"font-size: 11px; color: {meta_text};")
-        self.tags_lbl.setWordWrap(True)
-        status_layout.addWidget(self.tags_lbl)
-
-        content_layout.addWidget(status_group)
-
-        nb_group = QGroupBox("Include Notebooks")
-        nb_layout = QVBoxLayout(nb_group)
-        self.nb_list = QListWidget()
-        self.nb_list.setFixedHeight(120)
-        self.nb_list.itemChanged.connect(self.on_metadata_changed)
-        nb_layout.addWidget(self.nb_list)
-        content_layout.addWidget(nb_group)
-
-        self.add_context_btn = QPushButton("Add Context")
-        self.add_context_btn.clicked.connect(self.add_context_requested.emit)
-        content_layout.addWidget(self.add_context_btn)
-
-        self.reset_context_btn = QPushButton("Reset Extra Context")
-        self.reset_context_btn.clicked.connect(self.reset_extra_context_requested.emit)
-        content_layout.addWidget(self.reset_context_btn)
-
-        self.clear_chat_btn = QPushButton("Clear Chat History")
-        self.clear_chat_btn.clicked.connect(self.clear_chat_requested.emit)
-        content_layout.addWidget(self.clear_chat_btn)
-
-        layout.addWidget(self.content_widget)
-        layout.addStretch()
-
-        self.set_interactive(self._interactive)
-        self.header.setVisible(self._show_header)
-        self.toggle_btn.setVisible(self._show_header)
-        if not self._show_header:
-            self.content_widget.setVisible(True)
+        """Build the Qt shell through the focused context-manager view owner."""
+        build_context_panel_view(self)
 
     def load_notebooks(self):
         self.nb_list.clear()
