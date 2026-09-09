@@ -20,7 +20,9 @@ Main runtime areas:
 - `src/database.py`: backwards-compatible `DBManager` facade. Aggregate-specific SQLite operations live in `src/persistence/`.
 - `src/persistence/`: schema/migrations plus repositories for records, chat sessions, transcription logs, summaries, and tasks.
 - `src/notebook_database.py`: notebook-specific persistence.
-- `src/rag_engine.py`: Chroma-backed RAG indexing/search with Windows-safe subprocess fallbacks.
+- `src/rag_engine.py`: backwards-compatible `RAGEngine` import; the focused
+  implementation, document mutations, search orchestration, store adapters, and
+  Windows-safe subprocess fallbacks live under `src/rag/`.
 - `src/ai_provider.py`, `src/ai_assistant.py`, `src/summary_generator.py`: AI provider abstraction and summary/chat generation flows.
 
 ## Refactor Baseline
@@ -72,7 +74,9 @@ Use these boundaries when adding new features:
 - `src/ui/recording_widget.py` is now a Qt composition shell for recording detail and legacy audio-edit tabs. Focused modules own UI builders, controls, state/trim/cleanup support, detail loading/persistence, transcription and AI orchestration, speaker mapping, and RAG indexing; public widget methods remain compatible delegates.
 - `src/ui/welcome_widget.py` is a thin signal façade. Its layout, capture runtime, microphone runtime, and landing actions live in `src/ui/welcome/`; retain its public delegates while callers migrate.
 - `src/ui/summary_task_queue.py` still carries queue orchestration and signal wiring complexity, but most non-Qt queue logic already lives in `src/app/summary_queue/`.
-- `src/rag_engine.py` combines vector store adapter, in-memory fallback, subprocess entrypoints, keyword fallback, Chroma compatibility, and Windows safety policy.
+- `src/rag_engine.py` is an intentional compatibility import. `src/rag/engine.py`
+  is a thin public facade over focused store, document, search, runtime-policy,
+  and subprocess modules; retain that boundary for existing callers.
 - `src/ui/styles.py` is the theme-application and compatibility façade; static global theme sheets live in `src/ui/theme_styles.py`. Feature-specific styling should not grow in either shared module by default.
 
 ## Target Direction
@@ -94,10 +98,9 @@ Do not move everything at once. Move code when a spec or change touches that are
 
 Recommended next cuts:
 
-1. Move RAG subprocess/keyword/vector-store adapter logic out of `RAGEngine` into smaller adapter modules.
-2. Continue shrinking `RecordingWidget` by moving dirty-state and legacy audio-edit coordination into focused modules; detail loading/persistence, deletion, open-chat, playback adapters, UI builders, shared controls, direct-transcription and AI orchestration, speaker mapping, audio trim helpers, and RAG indexing helpers already live under `src/ui/recording/`.
-3. Continue reducing `src/ui/summary_task_queue.py` by moving signal wiring and Qt-specific coordination into focused UI helpers.
-4. Migrate selected application services to the repositories in `src/persistence/` only when doing so reduces coupling; retain `DBManager` as the compatibility boundary for existing UI code.
+1. Continue shrinking `RecordingWidget` by moving dirty-state and legacy audio-edit coordination into focused modules; detail loading/persistence, deletion, open-chat, playback adapters, UI builders, shared controls, direct-transcription and AI orchestration, speaker mapping, audio trim helpers, and RAG indexing helpers already live under `src/ui/recording/`.
+2. Continue reducing `src/ui/summary_task_queue.py` by moving signal wiring and Qt-specific coordination into focused UI helpers.
+3. Migrate selected application services to the repositories in `src/persistence/` only when doing so reduces coupling; retain `DBManager` as the compatibility boundary for existing UI code.
 
 ## Testing Expectations
 

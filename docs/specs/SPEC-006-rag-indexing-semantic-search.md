@@ -2,7 +2,7 @@
 
 Status: Implemented
 Owner: TBD
-Last updated: 2026-08-30
+Last updated: 2026-09-09
 
 ## Problem
 
@@ -37,7 +37,12 @@ Users need recordings, notes, summaries, and generated AI text to be searchable 
 
 ## Architecture Notes
 
-- Public service: `src/rag_engine.py` keeps the public `RAGEngine` API used by UI, queue, and search integrations. `src/rag/runtime_policy.py` owns Windows-safe delete and subprocess-mode selection, keeping macOS and Ubuntu on in-process Chroma execution.
+- Public service: `src/rag_engine.py` is a backwards-compatible import for the
+  `RAGEngine` API used by UI, queue, and search integrations. The implementation
+  lives in `src/rag/engine.py`; `src/rag/documents.py` owns index/delete
+  operations and `src/rag/search.py` owns semantic/keyword search switching.
+  `src/rag/runtime_policy.py` owns Windows-safe delete and subprocess-mode
+  selection, keeping macOS and Ubuntu on in-process Chroma execution.
 - Fallback store: `src/rag/fallback_store.py` owns the in-memory Chroma-compatible collection/client used when persistent Chroma cannot initialize.
 - Result mapping: `src/rag/results.py` owns semantic result parsing and keyword fallback ranking.
 - Filters: `src/rag/filters.py` owns deleted-content exclusion and ID/metadata filter composition.
@@ -52,7 +57,11 @@ Users need recordings, notes, summaries, and generated AI text to be searchable 
 ## Test Plan
 
 - Unit: filter composition, semantic result parsing, keyword ranking, in-memory collection matching/ranking, Chroma compatibility retry.
-- Integration: `RAGEngine` initialization, add/search, restricted search, where-clause search, empty input, soft delete, hard delete, and fallback behavior.
+- Integration: `tests/integration/test_rag_engine_contract.py` covers facade
+  initialization, add/search, restricted search, metadata filtering, deletion,
+  fallback storage, and the one-way Windows semantic-to-keyword fallback using a
+  deterministic adapter. The legacy real-Chroma checks remain in
+  `tests/test_rag_engine.py` and `tests/test_rag_fallback.py`.
 - UI: search action opens search results without blocking the main window.
 - Manual: index and search real recordings on Ubuntu and Windows, including Windows safe-delete and subprocess-query paths.
 
@@ -68,6 +77,9 @@ Users need recordings, notes, summaries, and generated AI text to be searchable 
 - 2026-06-10: extracted Chroma client, embedding, fallback, and collection initialization from `RAGEngine.__init__` to `src/rag/chroma_store.py`, leaving `RAGEngine` as the public search/index/delete facade.
 - 2026-06-10: removed private helper compatibility aliases from `src/rag_engine.py` after migrating legacy fallback tests to import helpers from their owning `src/rag/` modules.
 - 2026-08-30: moved RAG runtime initialization and configuration propagation from `src/ui/main_window/__init__.py` to `src/ui/main_window/runtime_startup.py` without changing settings or platform safety flags.
+- 2026-09-09: moved the implementation of the public RAG facade to
+  `src/rag/engine.py`, with focused document mutation and search orchestration
+  modules. `src/rag_engine.py` now preserves only the historic import path.
 
 ## Open Questions
 
