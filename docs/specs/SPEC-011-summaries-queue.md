@@ -77,6 +77,9 @@ Users need long-running AI and transcription work to run sequentially, visibly, 
 - Unit: helper parsing, audio-duration fallback, dedupe keys, queue history, skip behavior, AI provider retry policy.
 - Integration: summary-to-task chaining, queued transcription persistence, queue widget updates, RAG reindex worker.
 - Integration contracts: `tests/test_summary_task_queue_integration.py` covers queued transcription and summary/task chaining with real SQLite and fake worker boundaries; `tests/test_recording_flow.py` covers capture-tab handoff; `tests/integration/test_persistence_ports.py` covers injected persistence across batch widgets; `tests/integration/test_batch_process_queue_lifecycle.py` covers a real SQLite transcription batch through Qt queue signals; `tests/integration/test_calendar_selection_sync.py` covers calendar admission through the queue to a persisted daily summary; and `tests/integration/test_summary_viewer_persistence.py` covers persisted weekly recordings/tasks through the viewer into emitted chat context.
+- The summary-viewer integration also covers daily task-snapshot refresh after a
+  viewer content update. GitHub PR CI runs `tests/integration/` as an explicit
+  gate on Windows, Ubuntu, and macOS before the full suite.
 - UI: queue management widget reflects current/pending/history state.
 - Manual: run a real queued summary, task extraction, transcription, and RAG reindex on Ubuntu and Windows before release.
 

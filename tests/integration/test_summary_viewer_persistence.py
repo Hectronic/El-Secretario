@@ -1,3 +1,5 @@
+from PyQt6.QtCore import Qt
+
 from src.database import DBManager
 from src.ui.summary_viewer import SummaryViewerWidget
 
@@ -23,3 +25,21 @@ def test_weekly_summary_viewer_loads_persisted_records_and_emits_chat_context(qt
     assert viewer.weekly_recordings_list.count() == 1
     assert emitted[0][1] is True
     assert {item["type"] for item in emitted[0][0]} == {"date_range", "tag", "recording"}
+
+
+def test_daily_summary_viewer_refreshes_persisted_task_snapshot(qtbot, tmp_path):
+    db = DBManager(str(tmp_path / "daily-summary-viewer.sqlite"))
+    task_id = db.save_task(None, "Capture decision", tags="planning", day_date="2026-09-09")
+    viewer = SummaryViewerWidget(
+        {"type": "daily", "date": "2026-09-09", "tags_filter": "planning", "summary": "Initial"},
+        db=db,
+    )
+    qtbot.addWidget(viewer)
+
+    item = viewer.daily_created_board.tasks_list.item(0)
+    assert item.data(Qt.ItemDataRole.UserRole)["id"] == task_id
+
+    viewer.update_content({"type": "daily", "date": "2026-09-09", "tags_filter": "planning", "summary": "Updated"})
+
+    assert viewer.content_area.toPlainText() == "Updated"
+    assert viewer.daily_created_board.tasks_list.count() == 1
