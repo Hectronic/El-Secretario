@@ -3,7 +3,7 @@
 from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import QListWidgetItem
 
-from src.ui.summary_viewer import WeeklyRecordingRowWidget
+from src.ui.summaries.widgets import WeeklyRecordingRowWidget
 from src.ui.summaries.context import summary_date_range, summary_tags
 
 

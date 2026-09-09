@@ -58,9 +58,11 @@ Users need long-running AI and transcription work to run sequentially, visibly, 
   sequential continuation. `SummaryTaskQueueManager` remains the Qt-signal façade.
 - Queue widget presentation/actions: `src/app/summary_queue/presentation.py` and `src/app/summary_queue/actions.py` own UI-facing formatting/snapshots and queue action orchestration extracted from `QueueManagementWidget`.
 - Main-window queue presentation: `src/ui/main_window/summary_queue_status.py` owns the status bar, queue-tab opening, queue-signal subscriptions, progress/status rendering, and refresh of affected open views. `MainWindow` keeps compatibility delegates for existing callers.
-- Summary view: `src/ui/summary_viewer.py` remains the visual shell, while
-  `src/ui/summaries/context.py` owns date/tag and chat-context construction and
-  `src/ui/summaries/refresh.py` owns daily/weekly task and recording refresh policy.
+- Summary view: `src/ui/summary_viewer.py` remains the compatible Qt shell, while
+  `src/ui/summaries/views.py` owns daily/weekly composition,
+  `src/ui/summaries/widgets.py` owns reusable summary rows/markdown rendering,
+  `context.py` owns date/tag and chat-context construction, and `refresh.py` owns
+  daily/weekly task and recording refresh policy.
 - Startup scheduling: `src/ui/main_window/runtime_startup.py` owns opt-in scheduling of the prior weekly or latest missing daily summary. `MainWindow` keeps compatibility delegates used by bootstrap.
 - Daily summary shortcut: `src/ui/main_window/runtime_startup.py` also owns the current-day summary queue request emitted by the welcome screen.
 - Persistence: summary workflows accept an injected aggregate persistence port; `src/database.py` remains the compatible default facade while repositories under `src/persistence/` own the aggregate implementations.
@@ -116,6 +118,8 @@ Users need long-running AI and transcription work to run sequentially, visibly, 
   compatible private hooks.
 - 2026-09-08: moved summary-viewer query refresh and weekly chat-context policy to
   `src/ui/summaries/`, retaining `SummaryViewerWidget` as the visual façade.
+- 2026-09-09: moved active daily/weekly composition and reusable summary widgets
+  into `src/ui/summaries/`, retaining compatible viewer methods for extensions.
 - 2026-09-08: moved transcription-batch queue lifecycle state and request creation
   to `src/ui/batch_process/`, retaining `BatchProcessWidget` as the Qt façade.
 - 2026-09-08: moved summary-batch counts, weekly payload construction, and queue

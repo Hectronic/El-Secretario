@@ -17,6 +17,7 @@ from PyQt6.QtCore import Qt, pyqtSignal
 from src.ui.tasks_list_widget import TasksListWidget
 from src.ui.component_widgets.tags import create_tag_chip
 from src.ui.summaries.context import build_week_chat_contexts, summary_date_range, summary_tags
+from src.ui.summaries.views import build_daily_tabs, build_weekly_overview
 
 
 class AutoSizingMarkdownView(QTextBrowser):
@@ -187,9 +188,9 @@ class SummaryViewerWidget(QWidget):
 
         # For daily summaries, expose tabs.
         if self.summary_data.get("type") == "daily":
-            self._build_daily_tabs(layout)
+            build_daily_tabs(self, layout)
         else:
-            self._build_weekly_overview(layout)
+            build_weekly_overview(self, layout)
 
         # Actions
         actions_layout = QHBoxLayout()
