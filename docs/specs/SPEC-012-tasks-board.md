@@ -32,8 +32,8 @@ Users need a reliable task board and sidebar that show actionable items from rec
 ## Architecture Notes
 
 - Main tab lifecycle: `src/ui/main_window/content_tabs.py` owns opening and reusing the full Tasks tab.
-- Task board UI: `src/ui/tasks_list_widget.py` is the public visual shell and owns
-  source-navigation signals. `src/ui/tasks/edit_dialog.py` owns the shared editor;
+- Task board UI: `src/ui/tasks_list_widget.py` is the public signal/controller
+  facade; `src/ui/tasks/board_view.py` owns Qt composition. `src/ui/tasks/edit_dialog.py` owns the shared editor;
   `src/ui/tasks/presentation.py` owns task-row rendering and selection/order UI
   policy; `src/ui/tasks/filters.py` owns date/tag normalization and board queries;
   `src/ui/tasks/actions.py` owns all board-initiated persistence mutations.
@@ -61,6 +61,8 @@ Users need a reliable task board and sidebar that show actionable items from rec
   from the widget shell into `src/ui/tasks/`, retaining the existing widget API.
 - 2026-09-08: extracted the shared edit dialog plus row rendering and
   selection/reordering policy, leaving `TasksListWidget` as the compatible shell.
+- 2026-09-09: extracted the task-board Qt composition into `board_view.py`,
+  retaining `TasksListWidget` as the compatible action and signal facade.
 
 ## Open Questions
 

@@ -40,6 +40,7 @@ from src.ui.tasks.presentation import (
     selected_or_current_task_items,
     selected_task_items,
 )
+from src.ui.tasks.board_view import build_task_board_view
 
 
 class ReorderableTasksList(QListWidget):
@@ -86,6 +87,8 @@ class TasksListWidget(QWidget):
         self.refresh()
 
     def _build_ui(self):
+        return build_task_board_view(self, ReorderableTasksList)
+
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0 if self.filter_date else 10, 0 if self.filter_date else 10, 0 if self.filter_date else 10, 0 if self.filter_date else 10)
 
