@@ -6,7 +6,7 @@ import os
 from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import QListWidgetItem, QMessageBox
 
-from src.ui.components import RecordingListItemWidget, SummaryListItemWidget
+from src.ui.component_widgets.rows import RecordingListItemWidget, SummaryListItemWidget
 
 
 class SidebarHistoryCoordinator:

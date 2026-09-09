@@ -16,7 +16,7 @@ from dataclasses import dataclass
 
 from PyQt6.QtWidgets import QCheckBox, QFormLayout, QGroupBox, QLabel, QLineEdit
 
-from src.ui.components import TagsLineEdit
+from src.ui.component_widgets.tags import TagsLineEdit
 
 
 @dataclass

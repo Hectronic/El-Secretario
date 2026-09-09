@@ -65,7 +65,7 @@ Reduce large flat modules and create expansion points for future product work wi
 - SPEC-005: waveform audio editor now maps to `src/ui/audio_editor/`.
 - SPEC-006: RAG indexing and semantic search now maps to `src/rag_engine.py` and `src/rag/`.
 - SPEC-001: audio capture and import now maps to `src/ui/welcome_widget.py`, `src/ui/welcome/`, `src/audio.py`, and `src/ui/main_window/`.
-- SPEC-007: chat sessions/context/floating chat now map to `src/ui/chat/`, `src/ui/chat_widget.py`, and `src/ui/main_window/chat_floating.py`.
+- SPEC-007: chat sessions/context/floating chat now map to `src/ui/chat/`, `src/ui/chat_widget.py`, `src/ui/main_window/chat_floating.py`, and the reusable chat sidebar row in `src/ui/component_widgets/sidebar.py`.
 - SPEC-008: active chat context sidebar now maps to `src/ui/context_manager_panel.py`, `src/ui/main_window/sidebar_sync.py`, and `src/ui/main_window/sidebar_content.py`.
 - SPEC-013: settings panels now map to `src/ui/settings/`.
 - SPEC-009: calendar visual composition and summary actions now map to `src/ui/calendar/` while `CalendarWidget` remains the public façade.

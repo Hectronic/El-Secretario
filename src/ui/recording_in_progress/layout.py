@@ -20,7 +20,7 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
-from src.ui.components import TagsLineEdit
+from src.ui.component_widgets.tags import TagsLineEdit
 from src.transcription_options import (
     DEFAULT_TRANSCRIPTION_MODEL,
     get_transcription_model_options,

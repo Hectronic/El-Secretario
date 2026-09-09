@@ -3,7 +3,7 @@
 from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import QListWidgetItem
 
-from src.ui.components import TaskRowWidget
+from src.ui.component_widgets.rows import TaskRowWidget
 
 
 def render_task_rows(tasks_list, tasks, on_status_changed):

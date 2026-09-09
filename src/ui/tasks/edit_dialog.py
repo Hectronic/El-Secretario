@@ -8,7 +8,7 @@ from PyQt6.QtWidgets import (
     QVBoxLayout,
 )
 
-from src.ui.components import TagsLineEdit
+from src.ui.component_widgets.tags import TagsLineEdit
 
 
 class TaskEditDialog(QDialog):

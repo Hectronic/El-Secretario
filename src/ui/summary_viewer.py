@@ -15,7 +15,7 @@ from PyQt6.QtWidgets import (
 )
 from PyQt6.QtCore import Qt, pyqtSignal
 from src.ui.tasks_list_widget import TasksListWidget
-from src.ui.components import create_tag_chip
+from src.ui.component_widgets.tags import create_tag_chip
 from src.ui.summaries.context import build_week_chat_contexts, summary_date_range, summary_tags
 
 
