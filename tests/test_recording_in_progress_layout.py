@@ -49,7 +49,7 @@ class TestRecordingInProgressLayout(unittest.TestCase):
         else:
             cls.app = QApplication.instance()
 
-    @patch("src.ui.recording_in_progress_widget.DBManager")
+    @patch("src.ui.recording_in_progress.widget.DBManager")
     def test_layout_uses_scroll_container(self, mock_db):
         mock_db.return_value.get_all_tags.return_value = []
         widget = RecordingInProgressWidget(recorder=_FakeRecorder(), config={})
@@ -61,7 +61,7 @@ class TestRecordingInProgressLayout(unittest.TestCase):
             widget.cleanup()
             widget.deleteLater()
 
-    @patch("src.ui.recording_in_progress_widget.DBManager")
+    @patch("src.ui.recording_in_progress.widget.DBManager")
     def test_compact_mode_reduces_heights_and_stacks_workspace(self, mock_db):
         mock_db.return_value.get_all_tags.return_value = []
         widget = RecordingInProgressWidget(recorder=_FakeRecorder(), config={})
@@ -85,7 +85,7 @@ class TestRecordingInProgressLayout(unittest.TestCase):
             widget.cleanup()
             widget.deleteLater()
 
-    @patch("src.ui.recording_in_progress_widget.DBManager")
+    @patch("src.ui.recording_in_progress.widget.DBManager")
     def test_model_combo_includes_sherpa_onnx(self, mock_db):
         mock_db.return_value.get_all_tags.return_value = []
         widget = RecordingInProgressWidget(recorder=_FakeRecorder(), config={})
@@ -96,7 +96,7 @@ class TestRecordingInProgressLayout(unittest.TestCase):
             widget.cleanup()
             widget.deleteLater()
 
-    @patch("src.ui.recording_in_progress_widget.DBManager")
+    @patch("src.ui.recording_in_progress.widget.DBManager")
     def test_windows_uses_its_larger_compact_layout_threshold(self, mock_db):
         mock_db.return_value.get_all_tags.return_value = []
         widget = RecordingInProgressWidget(recorder=_FakeRecorder(), config={})

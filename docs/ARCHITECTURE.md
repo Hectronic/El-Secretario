@@ -76,6 +76,10 @@ Use these boundaries when adding new features:
 - `src/database.py` is now a thin compatibility facade over `src/persistence/`; preserve this public import path while callers are migrated incrementally to aggregate-specific repositories where appropriate.
 - `src/ui/recording_widget.py` is now a Qt composition shell for recording detail and legacy audio-edit tabs. Focused modules own UI builders, controls, state/trim/cleanup support, detail loading/persistence, transcription and AI orchestration, speaker mapping, and RAG indexing; public widget methods remain compatible delegates.
 - `src/ui/welcome_widget.py` is a thin signal façade. Its layout, capture runtime, microphone runtime, and landing actions live in `src/ui/welcome/`; retain its public delegates while callers migrate.
+- `src/ui/recording_in_progress_widget.py` is the compatible active-capture
+  import. `src/ui/recording_in_progress/widget.py` owns its Qt facade and receives
+  the caller's persistence port; sibling modules own capture runtime, workspace,
+  session payload, and responsive layout.
 - `src/ui/summary_task_queue.py` is the compatibility import for the Qt queue
   facade. `src/ui/summary_queue/manager.py` owns signals and lifecycle adapters,
   while `worker_runtime.py` owns worker construction/startup; non-Qt logic stays

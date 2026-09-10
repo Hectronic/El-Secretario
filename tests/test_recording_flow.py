@@ -72,7 +72,7 @@ class TestRecordingFlow(unittest.TestCase):
         }
         
         # Patch DBManager for recording_in_progress_widget (for TagsLineEdit)
-        self.db_patcher2 = patch('src.ui.recording_in_progress_widget.DBManager')
+        self.db_patcher2 = patch('src.ui.recording_in_progress.widget.DBManager')
         self.mock_db2 = self.db_patcher2.start().return_value
         self.mock_db2.get_all_tags.return_value = []
         

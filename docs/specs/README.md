@@ -135,6 +135,7 @@ What user or product problem is being solved?
 | REFACTOR-2026-09-SUMMARY-QUEUE-UI | Implemented | Qt queue facade, worker startup/runtime wiring, and compatibility import extraction | SPEC-011 |
 | REFACTOR-2026-09-SUMMARY-GENERATOR | Implemented | Summary planning, provider invocation, persistence workflow, and Qt-thread adapter separation | SPEC-011 |
 | REFACTOR-2026-09-AI-PROVIDERS | Implemented | Provider adapters, configuration factory/validation, retry policy, and compatibility import extraction | SPEC-013, SPEC-011 |
+| REFACTOR-2026-09-RECORDING-IN-PROGRESS | Implemented | Active-capture Qt facade relocation and injected persistence port for tag lookup | SPEC-001 |
 
 ## Spec Granularity Rules
 

@@ -2,7 +2,7 @@
 
 Status: Implemented
 Owner: TBD
-Last updated: 2026-09-08
+Last updated: 2026-09-10
 
 ## Problem
 
@@ -32,7 +32,7 @@ Users need a fast landing surface to start a recording, import audio, search, an
 
 ## Architecture Notes
 
-- UI: `src/ui/welcome_widget.py` owns the landing widget façade and user-facing signals; `src/ui/welcome/layout.py` owns its visual composition and responsive sizing. `src/ui/recording_in_progress_widget.py` is the active-capture façade; `src/ui/recording_in_progress/` owns recorder lifecycle, completion payload/configuration, quick-task workspace, and responsive composition.
+- UI: `src/ui/welcome_widget.py` owns the landing widget façade and user-facing signals; `src/ui/welcome/layout.py` owns its visual composition and responsive sizing. `src/ui/recording_in_progress_widget.py` is the compatible active-capture import; `src/ui/recording_in_progress/widget.py` owns the Qt façade, while its sibling modules own recorder lifecycle, completion payload/configuration, quick-task workspace, and responsive composition. The widget receives the caller's persistence port for tag lookup.
 - UI helpers: `src/ui/welcome/button_factory.py` owns the reusable button constructors used by the welcome screen.
 - Capture helpers: `src/ui/welcome/capture_state.py` owns capture-setting persistence, microphone list hydration, and recording config mapping.
 - Capture runtime: `src/ui/welcome/capture_runtime.py` owns welcome-widget preference wiring and recording/import capture requests.
@@ -67,6 +67,10 @@ Users need a fast landing surface to start a recording, import audio, search, an
 - 2026-08-31: moved welcome-screen signal wiring from `MainWindow` to `src/ui/main_window/shell_actions.py`.
 - 2026-09-05: moved welcome-screen visual composition and responsive density rules into `src/ui/welcome/layout.py`.
 - 2026-09-08: split active recording runtime, completion-session state, quick-task workspace, and platform-responsive layout into `src/ui/recording_in_progress/`, retaining `RecordingInProgressWidget` as the signal-compatible façade.
+- 2026-09-10: moved the active-capture Qt façade into
+  `src/ui/recording_in_progress/widget.py`. The old module is now a compatible
+  import, and `MainWindow` injects its persistence port so tag lookup stays in the
+  same SQLite boundary as the rest of the recording workflow.
 
 ## Open Questions
 

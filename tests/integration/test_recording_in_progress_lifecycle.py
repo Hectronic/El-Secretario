@@ -1,5 +1,6 @@
 from PyQt6.QtCore import QObject, pyqtSignal
 
+from src.database import DBManager
 from src.ui.recording_in_progress_widget import RecordingInProgressWidget
 
 
@@ -40,7 +41,7 @@ class _Recorder(QObject):
 
 
 def test_active_recording_emits_normalized_completion_payload_and_cleans_signal(qtbot, monkeypatch):
-    monkeypatch.setattr("src.ui.recording_in_progress_widget.DBManager", _TagDatabase)
+    monkeypatch.setattr("src.ui.recording_in_progress.widget.DBManager", _TagDatabase)
     recorder = _Recorder()
     widget = RecordingInProgressWidget(
         recorder=recorder,
@@ -69,7 +70,7 @@ def test_active_recording_emits_normalized_completion_payload_and_cleans_signal(
 
 
 def test_active_recording_cancel_stops_capture_and_emits_cancelled(qtbot, monkeypatch):
-    monkeypatch.setattr("src.ui.recording_in_progress_widget.DBManager", _TagDatabase)
+    monkeypatch.setattr("src.ui.recording_in_progress.widget.DBManager", _TagDatabase)
     recorder = _Recorder()
     widget = RecordingInProgressWidget(recorder=recorder)
     qtbot.addWidget(widget)
@@ -79,3 +80,19 @@ def test_active_recording_cancel_stops_capture_and_emits_cancelled(qtbot, monkey
 
     assert recorder.stop_calls == 1
     assert widget.recording_started is False
+
+
+def test_active_recording_uses_injected_sqlite_tags_and_emits_completion(qtbot, tmp_path):
+    db = DBManager(str(tmp_path / "capture.sqlite"))
+    record_id = db.save("earlier.wav", "", 1.0, "Earlier")
+    db.update_tags(record_id, "planning")
+    recorder = _Recorder()
+    widget = RecordingInProgressWidget(recorder=recorder, persistence=db)
+    qtbot.addWidget(widget)
+
+    assert widget.db is db
+    assert widget.tags_input.all_tags == ["planning"]
+    with qtbot.waitSignal(widget.finished, timeout=1000) as emitted:
+        widget.finish_recording()
+
+    assert emitted.args[0] == "capture.wav"
