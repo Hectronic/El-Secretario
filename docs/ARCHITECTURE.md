@@ -23,7 +23,9 @@ Main runtime areas:
 - `src/rag_engine.py`: backwards-compatible `RAGEngine` import; the focused
   implementation, document mutations, search orchestration, store adapters, and
   Windows-safe subprocess fallbacks live under `src/rag/`.
-- `src/ai_provider.py`, `src/ai_assistant.py`, `src/summary_generator.py`: AI provider abstraction and summary/chat generation flows.
+- `src/ai_provider.py`, `src/ai_assistant.py`, `src/summary_generator.py`, and
+  `src/app/summaries/`: AI provider abstraction plus chat and summary-generation
+  flows. The public `SummaryGenerator` is a Qt adapter over the non-Qt workflow.
 
 ## Refactor Baseline
 

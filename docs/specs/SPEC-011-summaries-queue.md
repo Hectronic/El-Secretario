@@ -68,7 +68,13 @@ Users need long-running AI and transcription work to run sequentially, visibly, 
 - Persistence: summary workflows accept an injected aggregate persistence port; `src/database.py` remains the compatible default facade while repositories under `src/persistence/` own the aggregate implementations.
 - Batch UI: `BatchProcessWidget`, `SummaryBatchWidget`, and `TaskBatchWidget` accept the same injected persistence port. `src/ui/batch_process/` owns transcription-batch queue state and request construction while `BatchProcessWidget` remains its Qt façade.
 - Summary batch policy: `src/ui/summary_batch/actions.py` owns pending-count queries, weekly date expansion, recording-text composition, and central-queue submission while `SummaryBatchWidget` remains the UI/generator façade.
-- Workers/integrations: `src/summary_generator.py`, `src/ai_assistant.py`, `src/ai_provider.py`, `src/worker_components/transcriber_thread.py`, and RAG engine integrations provide the actual work.
+- Summary generation: `src/summary_generator.py` is the compatible Qt `QThread`
+  adapter for signals, validation, retries, and cancellation.
+  `src/app/summaries/generation.py` owns date/week planning, prompt composition,
+  provider invocation, and persistence through an injected port.
+- Workers/integrations: `src/ai_assistant.py`, `src/ai_provider.py`,
+  `src/worker_components/transcriber_thread.py`, and RAG engine integrations
+  provide the remaining long-running work.
 - AI provider retry policy: `src/ai_provider.py` retries cloud-provider transient failures conservatively and treats Gemini quota/rate-limit errors as terminal for the current operation.
 - Platform constraints: queued transcription must preserve backend, device, compute type, `force_cpu`, diarization, and CUDA cleanup policy.
 
@@ -132,6 +138,10 @@ Users need long-running AI and transcription work to run sequentially, visibly, 
   `src/ui/summary_queue/manager.py` and extracted worker construction/startup to
   `src/ui/summary_queue/worker_runtime.py`. The former module is now the stable
   compatibility import for `SummaryTaskQueueManager` and its historic helpers.
+- 2026-09-10: moved recording/daily/weekly planning, prompt construction,
+  provider invocation, and persistence from `SummaryGenerator` into
+  `src/app/summaries/generation.py`. `src/summary_generator.py` retains the
+  compatible Qt thread, signals, validation, retry forwarding, and cancellation.
 
 ## Open Questions
 
