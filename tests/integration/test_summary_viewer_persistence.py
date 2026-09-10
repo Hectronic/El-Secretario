@@ -30,6 +30,9 @@ def test_weekly_summary_viewer_loads_persisted_records_and_emits_chat_context(qt
 def test_daily_summary_viewer_refreshes_persisted_task_snapshot(qtbot, tmp_path):
     db = DBManager(str(tmp_path / "daily-summary-viewer.sqlite"))
     task_id = db.save_task(None, "Capture decision", tags="planning", day_date="2026-09-09")
+    with db.get_connection() as conn:
+        conn.execute("UPDATE tasks SET created_at = ? WHERE id = ?", ("2026-09-09 10:00:00", task_id))
+        conn.commit()
     viewer = SummaryViewerWidget(
         {"type": "daily", "date": "2026-09-09", "tags_filter": "planning", "summary": "Initial"},
         db=db,

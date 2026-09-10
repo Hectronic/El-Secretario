@@ -16,7 +16,7 @@ class TestSummaryQueue(unittest.TestCase):
         
         self.db = DBManager(self.db_name)
         # Avoid the real DB init by patching before init
-        with patch('src.ui.summary_task_queue.DBManager') as mock_db_class:
+        with patch('src.ui.summary_queue.manager.DBManager') as mock_db_class:
             self.queue_manager = SummaryTaskQueueManager()
             self.queue_manager.db = self.db
 
@@ -26,7 +26,7 @@ class TestSummaryQueue(unittest.TestCase):
 
     def test_enqueue_recording_summary(self):
         # Mock AIAssistant to avoid actual AI calls
-        with patch('src.ui.summary_task_queue.AIAssistant') as MockAI:
+        with patch('src.ui.summary_queue.worker_runtime.AIAssistant') as MockAI:
             mock_worker = MagicMock()
             MockAI.return_value = mock_worker
             
@@ -46,7 +46,7 @@ class TestSummaryQueue(unittest.TestCase):
         # Create a record in the test DB
         record_id = self.db.save("test.wav", "Transcription", 10.0, "Title")
         
-        with patch('src.ui.summary_task_queue.AIAssistant') as MockAI:
+        with patch('src.ui.summary_queue.worker_runtime.AIAssistant') as MockAI:
             mock_worker = MagicMock()
             MockAI.return_value = mock_worker
             
@@ -66,7 +66,7 @@ class TestSummaryQueue(unittest.TestCase):
             self.assertEqual(record['summary'], "Generated Summary")
 
     def test_deduplication(self):
-        with patch('src.ui.summary_task_queue.AIAssistant'):
+        with patch('src.ui.summary_queue.worker_runtime.AIAssistant'):
             self.queue_manager.enqueue_recording_summary(1, "text 1", "title 1")
             self.assertEqual(self.queue_manager.pending_count, 1)
             
@@ -79,7 +79,7 @@ class TestSummaryQueue(unittest.TestCase):
         record_id = self.db.save("test.wav", "Transcription", 10.0, "Title")
         self.db.update_tags(record_id, "tag1, tag2")
         
-        with patch('src.ui.summary_task_queue.AIAssistant') as MockAI:
+        with patch('src.ui.summary_queue.worker_runtime.AIAssistant') as MockAI:
             mock_worker = MagicMock()
             MockAI.return_value = mock_worker
             
@@ -113,7 +113,7 @@ class TestSummaryQueue(unittest.TestCase):
     def test_task_extraction_result_parser_returns_empty_for_invalid_payload(self):
         self.assertEqual(_parse_task_extraction_result("not json"), [])
 
-    @patch("src.ui.summary_task_queue.logging.warning")
+    @patch("src.app.summary_queue.helpers.logging.warning")
     def test_read_audio_duration_seconds_returns_zero_when_probe_fails(self, mock_warning):
         duration = _read_audio_duration_seconds("/tmp/does-not-exist.wav")
 
@@ -122,7 +122,7 @@ class TestSummaryQueue(unittest.TestCase):
 
     def test_task_extraction_queue_has_title(self):
         record_id = self.db.save("test.wav", "Transcription", 10.0, "My Recording")
-        with patch('src.ui.summary_task_queue.AIAssistant'):
+        with patch('src.ui.summary_queue.worker_runtime.AIAssistant'):
             self.queue_manager.enqueue_task_extraction(record_id, "Transcription", "tag1")
         queued = self.queue_manager.get_current_task() or {}
         self.assertEqual(queued.get("type"), "task_extraction")
@@ -141,7 +141,7 @@ class TestSummaryQueue(unittest.TestCase):
         record_id = self.db.save("test.wav", "Transcription", 10.0, "Title")
         self.db.save_task(record_id=record_id, content="Existing task", tags="tag1", is_ai_generated=True)
 
-        with patch('src.ui.summary_task_queue.AIAssistant') as MockAI:
+        with patch('src.ui.summary_queue.worker_runtime.AIAssistant') as MockAI:
             result = self.queue_manager.enqueue_task_extraction(record_id, "Transcription", "tag1", "Title")
 
         self.assertFalse(result)
@@ -177,14 +177,14 @@ class TestSummaryQueue(unittest.TestCase):
         record_id = self.db.save("test.wav", "Transcription", 10.0, "Title")
         self.db.save_task(record_id=record_id, content="Manual task", tags="tag1", is_ai_generated=False)
 
-        with patch('src.ui.summary_task_queue.AIAssistant') as MockAI:
+        with patch('src.ui.summary_queue.worker_runtime.AIAssistant') as MockAI:
             result = self.queue_manager.enqueue_task_extraction(record_id, "Transcription", "tag1", "Title")
 
         self.assertTrue(result)
         MockAI.assert_called_once()
 
     def test_session_history_records_queue_events(self):
-        with patch('src.ui.summary_task_queue.AIAssistant'):
+        with patch('src.ui.summary_queue.worker_runtime.AIAssistant'):
             self.queue_manager.enqueue_recording_summary(1, "text 1", "title 1")
             history = self.queue_manager.get_session_history()
             events = [entry.get("event") for entry in history]
@@ -352,7 +352,7 @@ class TestSummaryQueue(unittest.TestCase):
 
     def test_on_worker_completed_ignores_none_result(self):
         self.queue_manager._current_task = {"type": "summary", "record_id": 1}
-        with patch("src.ui.summary_task_queue.handle_worker_completion") as completion:
+        with patch("src.ui.summary_queue.manager.handle_worker_completion") as completion:
             self.queue_manager._on_worker_completed(None)
         completion.assert_not_called()
 

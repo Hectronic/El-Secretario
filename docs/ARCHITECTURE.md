@@ -73,7 +73,10 @@ Use these boundaries when adding new features:
 - `src/database.py` is now a thin compatibility facade over `src/persistence/`; preserve this public import path while callers are migrated incrementally to aggregate-specific repositories where appropriate.
 - `src/ui/recording_widget.py` is now a Qt composition shell for recording detail and legacy audio-edit tabs. Focused modules own UI builders, controls, state/trim/cleanup support, detail loading/persistence, transcription and AI orchestration, speaker mapping, and RAG indexing; public widget methods remain compatible delegates.
 - `src/ui/welcome_widget.py` is a thin signal façade. Its layout, capture runtime, microphone runtime, and landing actions live in `src/ui/welcome/`; retain its public delegates while callers migrate.
-- `src/ui/summary_task_queue.py` still carries queue orchestration and signal wiring complexity, but most non-Qt queue logic already lives in `src/app/summary_queue/`.
+- `src/ui/summary_task_queue.py` is the compatibility import for the Qt queue
+  facade. `src/ui/summary_queue/manager.py` owns signals and lifecycle adapters,
+  while `worker_runtime.py` owns worker construction/startup; non-Qt logic stays
+  in `src/app/summary_queue/`.
 - `src/rag_engine.py` is an intentional compatibility import. `src/rag/engine.py`
   is a thin public facade over focused store, document, search, runtime-policy,
   and subprocess modules; retain that boundary for existing callers.
@@ -99,8 +102,7 @@ Do not move everything at once. Move code when a spec or change touches that are
 Recommended next cuts:
 
 1. Continue shrinking `RecordingWidget` by moving dirty-state and legacy audio-edit coordination into focused modules; detail loading/persistence, deletion, open-chat, playback adapters, UI builders, shared controls, direct-transcription and AI orchestration, speaker mapping, audio trim helpers, and RAG indexing helpers already live under `src/ui/recording/`.
-2. Continue reducing `src/ui/summary_task_queue.py` by moving signal wiring and Qt-specific coordination into focused UI helpers.
-3. Migrate selected application services to the repositories in `src/persistence/` only when doing so reduces coupling; retain `DBManager` as the compatibility boundary for existing UI code.
+2. Migrate selected application services to the repositories in `src/persistence/` only when doing so reduces coupling; retain `DBManager` as the compatibility boundary for existing UI code.
 
 ## Testing Expectations
 

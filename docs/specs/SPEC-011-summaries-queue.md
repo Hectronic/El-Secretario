@@ -2,7 +2,7 @@
 
 Status: Implemented
 Owner: TBD
-Last updated: 2026-09-08
+Last updated: 2026-09-10
 
 ## Problem
 
@@ -128,6 +128,10 @@ Users need long-running AI and transcription work to run sequentially, visibly, 
 - 2026-09-08: moved summary-batch counts, weekly payload construction, and queue
   submission to `src/ui/summary_batch/`, retaining `SummaryBatchWidget` as the UI
   and legacy-generator façade.
+- 2026-09-10: moved the Qt queue manager from `src/ui/summary_task_queue.py` to
+  `src/ui/summary_queue/manager.py` and extracted worker construction/startup to
+  `src/ui/summary_queue/worker_runtime.py`. The former module is now the stable
+  compatibility import for `SummaryTaskQueueManager` and its historic helpers.
 
 ## Open Questions
 

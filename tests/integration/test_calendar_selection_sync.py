@@ -76,7 +76,7 @@ def test_calendar_daily_summary_reaches_queue_and_persists(qtbot, tmp_path, monk
         conn.execute("UPDATE records SET created_at = ? WHERE id = ?", ("2026-09-07 10:00:00", record_id))
         conn.commit()
 
-    monkeypatch.setattr("src.ui.summary_task_queue.SummaryGenerator", _FakeDailySummaryGenerator)
+    monkeypatch.setattr("src.ui.summary_queue.worker_runtime.SummaryGenerator", _FakeDailySummaryGenerator)
     queue = SummaryTaskQueueManager(persistence=db)
     widget = CalendarWidget(rag_engine=None, task_queue=queue, persistence=db)
     qtbot.addWidget(widget)
