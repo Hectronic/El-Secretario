@@ -22,6 +22,7 @@ El Secretario es una herramienta inteligente de transcripción y organización d
 ## Arquitectura y Specs
 
 - Notas de arquitectura: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
+- Guía de arquitectura: [docs/ARCHITECTURE_GUIDE.md](docs/ARCHITECTURE_GUIDE.md)
 - Registro de funcionalidades en Spec Kit: [specs/README.md](specs/README.md)
 
 ## Instalación
