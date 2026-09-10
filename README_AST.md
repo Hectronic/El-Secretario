@@ -22,7 +22,7 @@ El Secretario ye una ferramienta intelixente de trescripción y organización d'
 ## Arquitectura y Specs
 
 - Notes d'arquitectura: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
-- Rexistru de funcionalidaes orientáu a spec-driven development: [docs/specs/README.md](docs/specs/README.md)
+- Llinia base de productu en Spec Kit: [specs/000-established-product-baseline/spec.md](specs/000-established-product-baseline/spec.md)
 
 ## Instalación
 

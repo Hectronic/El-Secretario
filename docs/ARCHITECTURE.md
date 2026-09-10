@@ -49,7 +49,8 @@ The repository has already moved several high-growth areas away from older flat 
 - Summary queue logic now lives in `src/app/summary_queue/` (tasks/completion/history/rag_reindex/workers/runtime/threads/worker_factory/worker_signals/worker_lifecycle/actions/presentation), while `src/ui/summary_task_queue.py` remains a thin Qt queue adapter for signals and worker lifecycle wiring.
 - Tests now partially mirror the new feature packages under `tests/ui/main_window/`, `tests/ui/chat/`, `tests/ui/settings/`, `tests/ui/audio_editor/`, `tests/worker_components/`, and `tests/stt_providers/`.
 
-See `docs/specs/REFACTOR-2026-05-feature-packages.md` for the behavior-preserving refactor record.
+See `specs/000-established-product-baseline/` for the converged product baseline,
+architecture plan, and completed Spec Kit task history.
 
 ## Product Capabilities
 
