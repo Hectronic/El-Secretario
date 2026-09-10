@@ -62,18 +62,20 @@ class _MediaPlayer:
         self.positionChanged = _MediaSignal()
         self.durationChanged = _MediaSignal()
         self.playbackStateChanged = _MediaSignal()
+        self.sources = []
+        self.stopped = False
 
     def setAudioOutput(self, _output):
         pass
 
     def setSource(self, _source):
-        pass
+        self.sources.append(_source)
 
     def position(self):
         return 0
 
     def stop(self):
-        pass
+        self.stopped = True
 
 
 class _AudioOutput:
@@ -128,3 +130,8 @@ def test_audio_editor_apply_persists_backup_duration_and_transcription(qtbot, tm
     assert record["transcription"] == "Updated transcription"
     assert saved == [True, True]
     assert runtime.thread is None
+    assert widget.preview_temp_path is not None
+    assert widget.player.sources
+    widget.cleanup()
+    assert widget.preview_temp_path is None
+    assert widget.player.stopped is True

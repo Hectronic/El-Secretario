@@ -2,7 +2,7 @@
 
 Status: Implemented
 Owner: TBD
-Last updated: 2026-09-08
+Last updated: 2026-09-10
 
 ## Problem
 
@@ -31,10 +31,12 @@ Users need to inspect and edit recordings before continuing with transcription, 
 
 ## Architecture Notes
 
-- UI: `src/ui/audio_editor/widget.py` is the Qt presentation shell;
-  `src/ui/audio_editor/session.py` owns loaded-audio state, preview reconstruction,
-  chunk commands, selection validation, and undo/redo. `editing_state.py` remains
-  the pure range math, while `waveform.py` owns waveform rendering and input events.
+- UI: `src/ui/audio_editor/widget.py` is the compatible Qt presentation shell;
+  `layout.py` owns visual composition, `selection.py` owns waveform/chunk-list/spin
+  synchronization, and `playback.py` owns temporary preview files plus media-player
+  cleanup. `session.py` owns loaded-audio state, preview reconstruction, chunk
+  commands, selection validation, and undo/redo. `editing_state.py` remains the
+  pure range math, while `waveform.py` owns waveform rendering and input events.
 - Main window: `src/ui/main_window/recording_tabs.py` owns opening editor tabs and integrating them with tab lifecycle.
 - Services: `src/ui/audio_editor/persistence.py` owns backup-safe edited audio
   writes and duration persistence; `src/ui/audio_editor/transcription_runtime.py`
@@ -47,10 +49,12 @@ Users need to inspect and edit recordings before continuing with transcription, 
 ## Test Plan
 
 - Unit: waveform selection, chunk boundaries, split/cut/reorder behavior, undo/redo,
+  layout-facing widget contracts, selection synchronization, preview-file lifecycle,
   and retranscription runtime under `tests/ui/audio_editor/`.
 - Integration: `tests/integration/test_audio_editor_persistence.py` covers edited
-  audio → backup → real SQLite duration/transcription persistence using a
-  deterministic worker; editor tab opening remains covered by main-window tests.
+  audio → preview player → backup → real SQLite duration/transcription persistence
+  using a deterministic worker, including temporary-preview cleanup; editor tab
+  opening remains covered by main-window tests.
 - UI: basic widget state transitions for load, edit, preview, and apply.
 - Manual: verify real audio playback and waveform rendering on Ubuntu and Windows.
 
@@ -66,6 +70,9 @@ Users need to inspect and edit recordings before continuing with transcription, 
   `AudioEditorWidget` as the visible shell.
 - 2026-09-09: extracted the non-Qt `AudioEditorSession`; the widget keeps its
   observable state aliases for tab-lifecycle and extension compatibility.
+- 2026-09-10: extracted Qt composition, selection synchronization, and preview-media
+  lifecycle into focused helpers while preserving the `AudioEditorWidget` public
+  façade and its signals.
 
 ## Open Questions
 

@@ -40,7 +40,10 @@ The repository has already moved several high-growth areas away from older flat 
   helpers in `src/ui/chat/`; its original flat module is retained only as an
   import-compatible facade.
 - Settings UI has been split into `src/ui/settings/` panels for audio, general, prompts, and RAG configuration.
-- The audio editor has moved from a flat widget into `src/ui/audio_editor/`, with separate widget and waveform modules.
+- The audio editor has moved from a flat widget into `src/ui/audio_editor/`: the
+  compatible widget façade composes focused layout, selection synchronization,
+  preview-media lifecycle, session, waveform, persistence, and retranscription
+  modules.
 - Legacy worker code has moved from `src/worker.py` and `src/whisper_subprocess.py` into `src/worker_components/` plus provider adapters in `src/stt_providers/`.
 - Shared dialogs/components have started moving out of broad modules into targeted files such as `src/ui/filter_dialog.py`, `src/ui/speaker_dialog.py`, `src/ui/secret_field_widget.py`, and `src/ui/context_manager_panel.py`.
 - Summary queue logic now lives in `src/app/summary_queue/` (tasks/completion/history/rag_reindex/workers/runtime/threads/worker_factory/worker_signals/worker_lifecycle/actions/presentation), while `src/ui/summary_task_queue.py` remains a thin Qt queue adapter for signals and worker lifecycle wiring.
