@@ -2,7 +2,7 @@
 
 Status: Implemented
 Owner: TBD
-Last updated: 2026-09-07
+Last updated: 2026-09-10
 
 ## Problem
 
@@ -12,8 +12,9 @@ audio/transcription choices, and RAG behavior without exposing secrets by defaul
 ## Scope
 
 - In scope: settings panels, QSettings load/save, secret-field visibility/copy,
-  prompts, application theme, audio/STT preferences, and RAG configuration.
-- Out of scope: provider request execution, transcription runtime fallback
+  prompts, application theme, audio/STT preferences, RAG configuration, provider
+  selection/validation, and bounded provider retry policy.
+- Out of scope: provider-specific prompt content, transcription runtime fallback
   (SPEC-002), and RAG indexing/search behavior (SPEC-006).
 
 ## User Stories
@@ -42,6 +43,10 @@ audio/transcription choices, and RAG behavior without exposing secrets by defaul
   `src/ui/secret_field_widget.py` owns secret interactions.
 - Services: `src/ui/styles.py` applies the selected theme and
   `src/rag/runtime_policy.py` consumes platform-safe RAG execution flags.
+- Provider adapters: `src/ai_provider.py` preserves the public imports while
+  `src/ai_providers/` owns the Gemini and Ollama adapters, settings factory and
+  validation, and bounded retry policy. Local Ollama remains single-attempt;
+  cloud quota/rate-limit errors are terminal.
 - Persistence: Qt `QSettings` is the durable settings store; worker runtime
   snapshots are written separately by `src/worker_components/settings.py` and do
   not overwrite user preferences.
@@ -56,6 +61,10 @@ audio/transcription choices, and RAG behavior without exposing secrets by defaul
 - Unit: `tests/ui/settings/`, `tests/ui/test_secret_field_widget.py`, and
   `tests/worker_components/test_settings.py` cover focused panels, secret behavior,
   and non-destructive worker snapshots.
+- Provider unit/integration: `tests/ai_providers/`,
+  `tests/test_ai_provider_retry.py`, and
+  `tests/integration/test_ai_provider_contract.py` cover factory selection,
+  validation and deterministic retry behavior without contacting external APIs.
 - Manual: verify settings persistence across restart and theme switching on every
   supported desktop platform.
 
@@ -68,3 +77,9 @@ audio/transcription choices, and RAG behavior without exposing secrets by defaul
 
 - Should secure OS credential storage replace raw QSettings for provider tokens in a
   future security-focused change?
+
+## Refactor Notes
+
+- 2026-09-10: moved provider adapters, factory/configuration validation, and retry
+  policy out of `src/ai_provider.py` into `src/ai_providers/`; the original module
+  remains the compatible import boundary for application callers.
