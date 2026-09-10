@@ -15,6 +15,7 @@ from src.ui.recording_in_progress.layout import (
     apply_layout_density,
     build_recording_in_progress_layout,
 )
+from src.ui.recording_in_progress.guardian import RecordingSafetyGuardian
 from src.ui.recording_in_progress.runtime import RecordingCaptureRuntime
 from src.ui.recording_in_progress.session import (
     build_finished_config,
@@ -36,7 +37,7 @@ class RecordingInProgressWidget(QWidget):
     finished = pyqtSignal(str, dict)
     cancelled = pyqtSignal()
 
-    def __init__(self, recorder=None, config=None, parent=None, persistence=None):
+    def __init__(self, recorder=None, config=None, parent=None, persistence=None, tray_port=None):
         super().__init__(parent)
         self._is_windows = platform.system() == "Windows"
         self._compact_mode_active = False
@@ -46,11 +47,14 @@ class RecordingInProgressWidget(QWidget):
         self._is_finishing = False
         self.db = persistence if persistence is not None else DBManager()
         self.settings = QSettings("Hectronic", "Secretario")
-        self.runtime = RecordingCaptureRuntime(self.recorder, self.update_vu_meter)
+        self.runtime = RecordingCaptureRuntime(self.recorder, self._on_amplitude)
         self.runtime.configure(self.config)
         self.duration_seconds = 0
         self.timer = QTimer(self)
         self.timer.timeout.connect(self.update_timer)
+        self.guardian = RecordingSafetyGuardian(self.settings, tray_port=tray_port, parent=self)
+        self.guardian.status_changed.connect(self._set_guardian_status)
+        self.guardian.stop_requested.connect(self.finish_recording)
         self.init_ui()
         self.start_recording()
 
@@ -87,6 +91,11 @@ class RecordingInProgressWidget(QWidget):
         if error is None:
             self.recording_started = True
             self.timer.start(1000)
+            self.guardian.start(
+                self.finish_recording,
+                self.toggle_pause,
+                self.cancel_recording,
+            )
             logging.info("Recording started: is_recording=%s", self.recorder.is_recording)
             return
         self.recording_started = False
@@ -99,6 +108,7 @@ class RecordingInProgressWidget(QWidget):
         if not self.recording_started:
             return
         paused = self.runtime.toggle_pause()
+        self.guardian.set_paused(paused)
         self.pause_btn.setText("Resume" if paused else "Pause")
         self.status_label.setText("Recording Paused" if paused else "Recording in Progress...")
         if paused:
@@ -140,21 +150,41 @@ class RecordingInProgressWidget(QWidget):
             self._is_finishing = False
 
     def cancel_recording(self):
+        if self._is_finishing:
+            logging.warning("cancel_recording ignored because terminal handling is already in progress.")
+            return
+        if not self.recording_started:
+            logging.warning("cancel_recording ignored because the capture is already terminal.")
+            return
+        self._is_finishing = True
         self.timer.stop()
-        self.runtime.cancel(self.recording_started)
-        self.recording_started = False
-        self.cleanup()
-        self.cancelled.emit()
+        try:
+            self.runtime.cancel(self.recording_started)
+            self.recording_started = False
+            self.cleanup()
+            self.cancelled.emit()
+        finally:
+            self._is_finishing = False
 
     def update_timer(self):
         self.duration_seconds += 1
         self.timer_label.setText(format_elapsed_time(self.duration_seconds))
+        self.guardian.tick(self.duration_seconds)
 
     def update_vu_meter(self, amplitude):
         self.vu_meter.setValue(min(100, int(amplitude * 1000)))
 
+    def _on_amplitude(self, amplitude):
+        self.update_vu_meter(amplitude)
+        self.guardian.record_amplitude(amplitude)
+
+    def _set_guardian_status(self, message):
+        if self.recording_started:
+            self.status_label.setText(message)
+
     def cleanup(self):
         self.timer.stop()
+        self.guardian.cleanup()
         self.runtime.cleanup()
 
     def _save_last_run_config(self, *_args):
@@ -168,4 +198,3 @@ class RecordingInProgressWidget(QWidget):
     def closeEvent(self, event):
         self.cleanup()
         super().closeEvent(event)
-

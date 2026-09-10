@@ -11,6 +11,7 @@ Read this in [Español](README_ES.md) | [Asturianu](README_AST.md)
 ## Features
 
 - **Audio Recording & Import**: Record audio directly within the app or import existing files.
+- **Recording Safety Guardian**: See the branded active-recording indicator in the system tray where supported; pause, resume, stop/save, or cancel it safely; configure duration/silence reminders and optionally opt in to stopping after a silence warning.
 - **Recording Editing**: Open a recording in a second editor tab, trim audio segments, and automatically retranscribe the edited clip. The first trim keeps a `.orig` backup of the original file.
 - **Transcription & Diarization**: Automatically transcribe audio, copy the full transcription with one click, and identify different speakers (diarization) using local Whisper backends, `sherpa-onnx`, and pyannote.audio.
 - **Intelligent Search (RAG)**: Use Retrieval-Augmented Generation (RAG) to chat with your recordings and find specific information. Supports Google Gemini and **Ollama** for local execution.
