@@ -124,13 +124,13 @@ class _FakeRagEngine:
 
 def _queue_with_temp_db(monkeypatch, tmp_path):
     db = DBManager(str(tmp_path / "queue.sqlite"))
-    monkeypatch.setattr("src.ui.summary_task_queue.DBManager", lambda: db)
+    monkeypatch.setattr("src.ui.summary_queue.manager.DBManager", lambda: db)
     queue = SummaryTaskQueueManager()
     return queue, db
 
 
 def test_queue_e2e_summary_chains_task_extraction_and_persists(qtbot, monkeypatch, tmp_path):
-    monkeypatch.setattr("src.ui.summary_task_queue.AIAssistant", _FakeAIAssistantThread)
+    monkeypatch.setattr("src.ui.summary_queue.worker_runtime.AIAssistant", _FakeAIAssistantThread)
     queue, db = _queue_with_temp_db(monkeypatch, tmp_path)
 
     record_id = db.save("meeting.wav", "Transcript", 10.0, "Planning")
@@ -163,9 +163,8 @@ def test_queue_e2e_summary_chains_task_extraction_and_persists(qtbot, monkeypatc
 
 
 def test_queue_component_transcription_updates_widget_and_database(qtbot, monkeypatch, tmp_path):
-    monkeypatch.setattr("src.ui.summary_task_queue.TranscriberThread", _FakeTranscriberThread)
-    monkeypatch.setattr("src.ui.summary_task_queue.QSettings", lambda *_args: _FakeSettings())
-    monkeypatch.setattr("src.ui.summary_task_queue._read_audio_duration_seconds", lambda _path: 12.5)
+    monkeypatch.setattr("src.ui.summary_queue.worker_runtime.TranscriberThread", _FakeTranscriberThread)
+    monkeypatch.setattr("src.ui.summary_queue.worker_runtime.QSettings", lambda *_args: _FakeSettings())
     queue, db = _queue_with_temp_db(monkeypatch, tmp_path)
     widget = QueueManagementWidget(queue)
     qtbot.addWidget(widget)
@@ -203,8 +202,8 @@ def test_queue_component_transcription_updates_widget_and_database(qtbot, monkey
 
 
 def test_queue_component_skips_fatal_transcription_and_continues(qtbot, monkeypatch, tmp_path):
-    monkeypatch.setattr("src.ui.summary_task_queue.TranscriberThread", _FailThenSucceedTranscriberThread)
-    monkeypatch.setattr("src.ui.summary_task_queue.QSettings", lambda *_args: _FakeSettings())
+    monkeypatch.setattr("src.ui.summary_queue.worker_runtime.TranscriberThread", _FailThenSucceedTranscriberThread)
+    monkeypatch.setattr("src.ui.summary_queue.worker_runtime.QSettings", lambda *_args: _FakeSettings())
     monkeypatch.setattr("src.app.summary_queue.workers.read_audio_duration_seconds", lambda _path: 12.5)
     _FailThenSucceedTranscriberThread._instances_started = 0
     queue, db = _queue_with_temp_db(monkeypatch, tmp_path)

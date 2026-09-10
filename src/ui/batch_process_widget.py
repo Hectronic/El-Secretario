@@ -19,21 +19,46 @@ from PyQt6.QtCore import Qt, pyqtSignal, QSettings
 from src.database import DBManager
 from src.worker_components.engine import is_transcription_fatal_failure
 from src.transcription_options import get_saved_transcription_model
+from src.ui.batch_process.actions import pending_records, transcription_request
+from src.ui.batch_process.state import BatchQueueState, is_batch_task
 
 class BatchProcessWidget(QWidget):
     finished = pyqtSignal()
+
+    # Compatibility views retained for callers/tests during the queue-state migration.
+    @property
+    def _queued_record_ids(self):
+        return self.queue_state.queued_record_ids
+
+    @_queued_record_ids.setter
+    def _queued_record_ids(self, value):
+        self.queue_state.queued_record_ids = set(value)
+
+    @property
+    def _active_batch_tasks(self):
+        return self.queue_state.active_tasks
+
+    @_active_batch_tasks.setter
+    def _active_batch_tasks(self, value):
+        self.queue_state.active_tasks = value
+
+    @property
+    def _handled_batch_terminal_tasks(self):
+        return self.queue_state.handled_terminal_tasks
+
+    @_handled_batch_terminal_tasks.setter
+    def _handled_batch_terminal_tasks(self, value):
+        self.queue_state.handled_terminal_tasks = set(value)
     
-    def __init__(self, task_queue=None, parent=None):
+    def __init__(self, task_queue=None, parent=None, persistence=None):
         super().__init__(parent)
-        self.db = DBManager()
+        self.db = persistence if persistence is not None else DBManager()
         self.task_queue = task_queue
         self.queue = []
         self.is_processing = False
         self.total_files = 0
         self.processed_count = 0
-        self._queued_record_ids = set()
-        self._active_batch_tasks = 0
-        self._handled_batch_terminal_tasks = set()
+        self.queue_state = BatchQueueState()
         
         self.init_ui()
         self.load_pending()
@@ -112,7 +137,7 @@ class BatchProcessWidget(QWidget):
         layout.addLayout(btn_layout)
         
     def load_pending(self):
-        self.queue = self.db.fetch_pending_diarization()
+        self.queue = pending_records(self.db)
         self.total_files = len(self.queue)
         self.file_progress_label.setText(f"0/{self.total_files} files processed")
         self.log(f"Found {self.total_files} pending recordings.")
@@ -175,27 +200,24 @@ class BatchProcessWidget(QWidget):
         self.start_btn.setEnabled(False)
         self.stop_btn.setEnabled(True)
         self.processed_count = 0
-        self._queued_record_ids.clear()
-        self._active_batch_tasks = 0
-        self._handled_batch_terminal_tasks.clear()
+        self.queue_state.reset()
 
         enqueued = 0
         for rec in self.queue:
+            request = transcription_request(
+                rec,
+                recordings_dir=os.path.join(os.getcwd(), "recordings"),
+                model=get_saved_transcription_model(QSettings("Hectronic", "Secretario")),
+            )
             success = self.task_queue.enqueue_transcription(
-                rec["id"],
-                os.path.join(os.getcwd(), "recordings", rec["filename"]),
-                model_size=get_saved_transcription_model(QSettings("Hectronic", "Secretario")),
-                language=None,
-                diarization=True,
-                title=rec.get("filename") or f"Recording {rec['id']}",
-                source="batch_process",
+                request.pop("record_id"), request.pop("file_path"), **request
             )
             if success:
                 enqueued += 1
-                self._queued_record_ids.add(rec["id"])
+                self.queue_state.queued_record_ids.add(rec["id"])
                 self._set_current_item_status(rec["id"], f"Queued: {rec['filename']}")
 
-        self.total_files = len(self._queued_record_ids)
+        self.total_files = len(self.queue_state.queued_record_ids)
         self.file_progress_label.setText(f"Queued {self.total_files} files for the central queue")
         self.progress_bar.setRange(0, 0)
         self.progress_bar.setFormat("Queued in central queue")
@@ -211,31 +233,14 @@ class BatchProcessWidget(QWidget):
             self.file_progress_label.setText("0/0 files processed")
 
     def _on_queue_task_enqueued(self, task, _queue_position):
-        if task.get("source") != "batch_process":
-            return
-        if task.get("type") not in {"transcription", "summary", "task_extraction"}:
-            return
-        self._active_batch_tasks += 1
+        self.queue_state.register_enqueued(task)
 
     def _batch_task_token(self, task):
-        return (
-            task.get("type"),
-            task.get("record_id"),
-            task.get("date"),
-            task.get("title"),
-            task.get("source"),
-        )
+        from src.ui.batch_process.state import batch_task_token
+        return batch_task_token(task)
 
     def _register_batch_terminal_task_once(self, task) -> bool:
-        if task.get("source") != "batch_process":
-            return False
-        if task.get("type") not in {"transcription", "summary", "task_extraction"}:
-            return False
-        token = self._batch_task_token(task)
-        if token in self._handled_batch_terminal_tasks:
-            return False
-        self._handled_batch_terminal_tasks.add(token)
-        return True
+        return self.queue_state.register_terminal(task)
 
     def _set_current_item_status(self, record_id, text, background=None):
         item = self._find_item_by_record_id(record_id)
@@ -259,7 +264,7 @@ class BatchProcessWidget(QWidget):
         return None
 
     def _finish_queue_mode_if_done(self):
-        if self._active_batch_tasks > 0:
+        if self.queue_state.active_tasks > 0:
             return
         self.is_processing = False
         self.start_btn.setEnabled(True)
@@ -273,7 +278,7 @@ class BatchProcessWidget(QWidget):
         QMessageBox.information(self, "Done", "Batch processing completed.")
 
     def _on_queue_task_started(self, task, _remaining_pending):
-        if not self.is_processing or task.get("source") != "batch_process" or task.get("type") != "transcription":
+        if not self.is_processing or not is_batch_task(task) or task.get("type") != "transcription":
             return
         record_id = task.get("record_id")
         if record_id is None:
@@ -286,49 +291,40 @@ class BatchProcessWidget(QWidget):
         self.status_label.setText(f"Processing: {self.current_record['filename']}")
 
     def _on_queue_task_finished(self, task):
-        if task.get("source") != "batch_process":
+        if not is_batch_task(task):
             return
         first_terminal_event = self._register_batch_terminal_task_once(task)
-        if first_terminal_event and self._active_batch_tasks > 0:
-            self._active_batch_tasks -= 1
         record_id = task.get("record_id")
-        if first_terminal_event and task.get("type") == "transcription" and record_id in self._queued_record_ids:
-            self._queued_record_ids.discard(record_id)
-            self.processed_count += 1
+        if first_terminal_event and self.queue_state.register_transcription_terminal(task):
+            self.processed_count = self.queue_state.processed_count
             self._update_file_progress()
             self._set_current_item_status(record_id, f"Finished: {task.get('title') or f'Recording {record_id}'}")
         self._finish_queue_mode_if_done()
 
     def _on_queue_task_failed(self, task, error_msg):
-        if task.get("source") != "batch_process":
+        if not is_batch_task(task):
             return
         first_terminal_event = self._register_batch_terminal_task_once(task)
-        if first_terminal_event and self._active_batch_tasks > 0:
-            self._active_batch_tasks -= 1
         record_id = task.get("record_id")
-        if first_terminal_event and task.get("type") == "transcription" and record_id in self._queued_record_ids:
-            self._queued_record_ids.discard(record_id)
+        if first_terminal_event and self.queue_state.register_transcription_terminal(task):
             label = "SKIPPED" if is_transcription_fatal_failure(error_msg) else "FAILED"
             self._set_current_item_status(record_id, f"{label}: {task.get('title') or f'Recording {record_id}'}")
-            self.processed_count += 1
+            self.processed_count = self.queue_state.processed_count
             self._update_file_progress()
         self._finish_queue_mode_if_done()
 
     def _on_queue_task_skipped(self, task, _reason):
-        if task.get("source") != "batch_process":
+        if not is_batch_task(task):
             return
         first_terminal_event = self._register_batch_terminal_task_once(task)
-        if first_terminal_event and self._active_batch_tasks > 0:
-            self._active_batch_tasks -= 1
         record_id = task.get("record_id")
-        if first_terminal_event and task.get("type") == "transcription" and record_id in self._queued_record_ids:
-            self._queued_record_ids.discard(record_id)
+        if first_terminal_event and self.queue_state.register_transcription_terminal(task):
             self._set_current_item_status(
                 record_id,
                 f"SKIPPED: {task.get('title') or f'Recording {record_id}'}",
                 background=Qt.GlobalColor.lightGray,
             )
-            self.processed_count += 1
+            self.processed_count = self.queue_state.processed_count
             self._update_file_progress()
         self._finish_queue_mode_if_done()
         

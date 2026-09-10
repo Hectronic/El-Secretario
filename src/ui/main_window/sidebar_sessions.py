@@ -4,7 +4,7 @@ from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import QListWidgetItem
 
 from src.ui.chat_history_widget import ChatHistoryWidget
-from src.ui.components import SidebarChatSessionWidget
+from src.ui.component_widgets.sidebar import SidebarChatSessionWidget
 
 
 class SidebarSessionsCoordinator:

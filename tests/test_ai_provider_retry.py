@@ -1,6 +1,6 @@
 # Copyright (C) 2026 Héctor Álvarez López <hectoralvarez.me>
 import pytest
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 from src.ai_provider import (
     _extract_retry_delay_seconds, 
     _is_non_retryable_rate_limit_error,
@@ -26,10 +26,7 @@ def test_identifies_rate_limit_errors_as_non_retryable():
     assert _is_non_retryable_rate_limit_error("Rate limit reached")
     assert not _is_non_retryable_rate_limit_error("Temporary network error")
 
-@patch('time.sleep', return_value=None)
-@patch('src.ai_provider._get_provider_type')
-def test_generate_content_with_retry_success_after_failure(mock_get_type, mock_sleep, mock_settings):
-    mock_get_type.return_value = 'gemini'
+def test_generate_content_with_retry_success_after_failure(mock_settings):
     mock_provider = MagicMock(spec=AIProvider)
     mock_provider.generate_content.side_effect = [
         RuntimeError("Temporary error"),
@@ -41,16 +38,15 @@ def test_generate_content_with_retry_success_after_failure(mock_get_type, mock_s
         settings=mock_settings,
         prompt="Hello",
         max_retries=3,
-        base_backoff_seconds=0.1
+        base_backoff_seconds=0.1,
+        provider_type="gemini",
+        sleep=lambda _delay: None,
     )
     
     assert result == "Successful Response"
     assert mock_provider.generate_content.call_count == 2
 
-@patch('time.sleep', return_value=None)
-@patch('src.ai_provider._get_provider_type')
-def test_generate_content_with_retry_all_fails(mock_get_type, mock_sleep, mock_settings):
-    mock_get_type.return_value = 'gemini'
+def test_generate_content_with_retry_all_fails(mock_settings):
     mock_provider = MagicMock(spec=AIProvider)
     mock_provider.generate_content.side_effect = RuntimeError("Persistent Error")
     
@@ -60,16 +56,15 @@ def test_generate_content_with_retry_all_fails(mock_get_type, mock_sleep, mock_s
             settings=mock_settings,
             prompt="Hello",
             max_retries=3,
-            base_backoff_seconds=0.1
+            base_backoff_seconds=0.1,
+            provider_type="gemini",
+            sleep=lambda _delay: None,
         )
     
     assert mock_provider.generate_content.call_count == 3
 
 
-@patch('time.sleep', return_value=None)
-@patch('src.ai_provider._get_provider_type')
-def test_generate_content_with_retry_rate_limit_fails_without_retry(mock_get_type, mock_sleep, mock_settings):
-    mock_get_type.return_value = 'gemini'
+def test_generate_content_with_retry_rate_limit_fails_without_retry(mock_settings):
     mock_provider = MagicMock(spec=AIProvider)
     mock_provider.generate_content.side_effect = RuntimeError(
         "429 RESOURCE_EXHAUSTED: You exceeded your current quota"
@@ -80,14 +75,13 @@ def test_generate_content_with_retry_rate_limit_fails_without_retry(mock_get_typ
             provider=mock_provider,
             settings=mock_settings,
             prompt="Hello",
+            provider_type="gemini",
+            sleep=lambda _delay: None,
         )
 
     assert mock_provider.generate_content.call_count == 1
 
-@patch('time.sleep', return_value=None)
-@patch('src.ai_provider._get_provider_type')
-def test_generate_content_with_retry_ollama_no_retry(mock_get_type, mock_sleep, mock_settings):
-    mock_get_type.return_value = 'ollama'
+def test_generate_content_with_retry_ollama_no_retry(mock_settings):
     mock_provider = MagicMock(spec=AIProvider)
     mock_provider.generate_content.side_effect = RuntimeError("Ollama local error")
     
@@ -96,7 +90,9 @@ def test_generate_content_with_retry_ollama_no_retry(mock_get_type, mock_sleep, 
             provider=mock_provider,
             settings=mock_settings,
             prompt="Hello",
-            max_retries=5
+            max_retries=5,
+            provider_type="ollama",
+            sleep=lambda _delay: None,
         )
     
     assert mock_provider.generate_content.call_count == 1

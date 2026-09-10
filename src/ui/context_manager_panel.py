@@ -27,6 +27,9 @@ from PyQt6.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
+from src.ui.context_manager.entries import entry_descriptors, fetch_context_records
+from src.ui.context_manager.state import ContextPanelState, state_from_dict, status_labels
+from src.ui.context_manager.view import build_context_panel_view
 
 
 class ContextManagerPanel(QWidget):
@@ -57,123 +60,8 @@ class ContextManagerPanel(QWidget):
         self.load_notebooks()
 
     def init_ui(self):
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(10, 10, 10, 10)
-        layout.setSpacing(12)
-
-        is_dark = self.palette().color(self.backgroundRole()).lightness() < 128
-        panel_bg = "#262b33" if is_dark else "#ffffff"
-        panel_border = "#4a5463" if is_dark else "#c6d2e2"
-        panel_text = "#e8eef7" if is_dark else "#2b3b52"
-        meta_text = "#b8c1cf" if is_dark else "#666666"
-
-        header = QWidget()
-        self.header = header
-        header_layout = QHBoxLayout(header)
-        header_layout.setContentsMargins(0, 0, 0, 0)
-        header_layout.setSpacing(6)
-
-        self.header_label = QLabel("Chat Context")
-        self.header_label.setStyleSheet("font-size: 14px; font-weight: 700;")
-        header_layout.addWidget(self.header_label, 1)
-
-        self.toggle_btn = QToolButton()
-        self.toggle_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.toggle_btn.setAutoRaise(True)
-        self.toggle_btn.setFixedSize(24, 24)
-        self.toggle_btn.setToolTip("Collapse context panel")
-        self.toggle_btn.clicked.connect(self.toggle_requested.emit)
-        self.toggle_btn.setText("⟩")
-        self.toggle_btn.setStyleSheet(
-            """
-            QToolButton {
-                border: none;
-                border-radius: 6px;
-                padding: 0px;
-                background: transparent;
-                color: #607D8B;
-                font-size: 15px;
-                font-weight: 700;
-            }
-            QToolButton:hover {
-                background-color: rgba(33, 150, 243, 0.14);
-                color: #2196F3;
-            }
-            """
-        )
-        header_layout.addWidget(self.toggle_btn, 0, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-        layout.addWidget(header)
-
-        self.content_widget = QWidget()
-        content_layout = QVBoxLayout(self.content_widget)
-        content_layout.setContentsMargins(0, 0, 0, 0)
-        content_layout.setSpacing(12)
-
-        entries_group = QGroupBox("Detected Context Entries")
-        entries_layout = QVBoxLayout(entries_group)
-
-        self.entries_list = QListWidget()
-        self.entries_list.setStyleSheet(
-            f"font-size: 11px; background-color: {panel_bg}; color: {panel_text}; "
-            f"border: 1px solid {panel_border}; border-radius: 8px;"
-        )
-        entries_layout.addWidget(self.entries_list)
-
-        self.entries_count_lbl = QLabel("0 entries found")
-        self.entries_count_lbl.setStyleSheet(f"color: {meta_text}; font-size: 11px;")
-        entries_layout.addWidget(self.entries_count_lbl)
-
-        content_layout.addWidget(entries_group)
-
-        status_group = QGroupBox("Selection Context")
-        status_layout = QVBoxLayout(status_group)
-
-        self.sync_cb = QCheckBox("Sync with App")
-        self.sync_cb.setChecked(True)
-        self.sync_cb.setStyleSheet("font-weight: bold; color: #2196F3;")
-        status_layout.addWidget(self.sync_cb)
-
-        self.date_lbl = QLabel("Dates: all history")
-        date_color = "#8fb8ff" if is_dark else "#1565C0"
-        self.date_lbl.setStyleSheet(f"font-size: 11px; color: {date_color}; font-weight: bold;")
-        self.date_lbl.setWordWrap(True)
-        status_layout.addWidget(self.date_lbl)
-
-        self.tags_lbl = QLabel("Tags: all")
-        self.tags_lbl.setStyleSheet(f"font-size: 11px; color: {meta_text};")
-        self.tags_lbl.setWordWrap(True)
-        status_layout.addWidget(self.tags_lbl)
-
-        content_layout.addWidget(status_group)
-
-        nb_group = QGroupBox("Include Notebooks")
-        nb_layout = QVBoxLayout(nb_group)
-        self.nb_list = QListWidget()
-        self.nb_list.setFixedHeight(120)
-        self.nb_list.itemChanged.connect(self.on_metadata_changed)
-        nb_layout.addWidget(self.nb_list)
-        content_layout.addWidget(nb_group)
-
-        self.add_context_btn = QPushButton("Add Context")
-        self.add_context_btn.clicked.connect(self.add_context_requested.emit)
-        content_layout.addWidget(self.add_context_btn)
-
-        self.reset_context_btn = QPushButton("Reset Extra Context")
-        self.reset_context_btn.clicked.connect(self.reset_extra_context_requested.emit)
-        content_layout.addWidget(self.reset_context_btn)
-
-        self.clear_chat_btn = QPushButton("Clear Chat History")
-        self.clear_chat_btn.clicked.connect(self.clear_chat_requested.emit)
-        content_layout.addWidget(self.clear_chat_btn)
-
-        layout.addWidget(self.content_widget)
-        layout.addStretch()
-
-        self.set_interactive(self._interactive)
-        self.header.setVisible(self._show_header)
-        self.toggle_btn.setVisible(self._show_header)
-        if not self._show_header:
-            self.content_widget.setVisible(True)
+        """Build the Qt shell through the focused context-manager view owner."""
+        build_context_panel_view(self)
 
     def load_notebooks(self):
         self.nb_list.clear()
@@ -215,54 +103,19 @@ class ContextManagerPanel(QWidget):
     def refresh_entries(self):
         """Fetch records matching current filters and display them."""
         self.entries_list.clear()
-
-        records = []
-        seen_record_ids = set()
-
-        for fr in self.forced_records:
-            rid = fr.get("id")
-            if rid is None:
-                continue
-            seen_record_ids.add(int(rid))
-            title = fr.get("title") or "Untitled"
-            created_at = fr.get("created_at") or ""
-            item = QListWidgetItem(f"📌 🎤 {title}")
-            if created_at:
-                item.setToolTip(created_at)
+        state = self._context_state()
+        notebook_entries = [
+            entry
+            for notebook_id in state.notebook_ids
+            for entry in self.notebook_db.get_entries(notebook_id)
+        ]
+        for text, tooltip in entry_descriptors(
+            state.forced_records, fetch_context_records(self.db, state), notebook_entries
+        ):
+            item = QListWidgetItem(text)
+            if tooltip:
+                item.setToolTip(tooltip)
             self.entries_list.addItem(item)
-
-        if self.current_week_monday:
-            start_date = self.current_week_monday.toString("yyyy-MM-dd")
-            end_date = self.current_date_filter
-            records = self.db.fetch_by_date_range(
-                start_date,
-                end_date,
-                self.active_global_tags if self.active_global_tags else None,
-            )
-        elif self.current_date_filter:
-            records = self.db.fetch_by_dates(
-                [self.current_date_filter],
-                self.active_global_tags if self.active_global_tags else None,
-            )
-        elif self.active_global_tags:
-            records = self.db.fetch_by_date_range("1970-01-01", "2099-12-31", self.active_global_tags)
-
-        for r in records:
-            rid = r.get("id")
-            if rid is not None and int(rid) in seen_record_ids:
-                continue
-            if rid is not None:
-                seen_record_ids.add(int(rid))
-            icon = "🎤" if r.get("type") == "recording" else "📝"
-            item = QListWidgetItem(f"{icon} {r['title'] or 'Untitled'}")
-            item.setToolTip(f"{r['created_at']}")
-            self.entries_list.addItem(item)
-
-        for nid in self.get_active_notebooks():
-            nb_entries = self.notebook_db.get_entries(nid)
-            for e in nb_entries:
-                item = QListWidgetItem(f"📓 {e['title'] or 'Notebook note'}")
-                self.entries_list.addItem(item)
 
         self.entries_count_lbl.setText(f"{self.entries_list.count()} entries in context")
 
@@ -309,14 +162,9 @@ class ContextManagerPanel(QWidget):
         self.context_changed.emit()
 
     def _update_status_labels(self):
-        if self.current_week_monday:
-            mon_s = self.current_week_monday.toString("yyyy-MM-dd")
-            self.date_lbl.setText(f"Dates: {mon_s} to {self.current_date_filter}")
-        elif self.current_date_filter:
-            self.date_lbl.setText(f"Date: {self.current_date_filter}")
-        else:
-            self.date_lbl.setText("Dates: all history")
-        self.tags_lbl.setText(f"Tags: {', '.join(self.active_global_tags) if self.active_global_tags else 'all'}")
+        date_label, tags_label = status_labels(self._context_state())
+        self.date_lbl.setText(date_label)
+        self.tags_lbl.setText(tags_label)
 
     def set_interactive(self, interactive: bool):
         self._interactive = bool(interactive)
@@ -333,32 +181,15 @@ class ContextManagerPanel(QWidget):
             self.toggle_btn.setVisible(False)
 
     def serialize_state(self):
-        notebook_ids = []
-        for i in range(self.nb_list.count()):
-            item = self.nb_list.item(i)
-            if item.checkState() == Qt.CheckState.Checked:
-                notebook_ids.append(item.data(Qt.ItemDataRole.UserRole))
-
-        return {
-            "current_week_monday": self.current_week_monday.toString("yyyy-MM-dd") if self.current_week_monday else None,
-            "current_date_filter": self.current_date_filter,
-            "active_global_tags": list(self.active_global_tags),
-            "notebook_ids": notebook_ids,
-            "forced_records": [dict(record) for record in self.forced_records],
-            "sync_enabled": self.sync_cb.isChecked(),
-            "collapsed": self.is_collapsed(),
-        }
+        return self._context_state().as_dict()
 
     def apply_state(self, state):
-        state = state or {}
-        monday_text = state.get("current_week_monday")
-        monday = QDate.fromString(str(monday_text or ""), "yyyy-MM-dd") if monday_text else QDate()
-        self.current_week_monday = monday if monday.isValid() else None
-        date_filter = state.get("current_date_filter")
-        self.current_date_filter = str(date_filter) if date_filter else None
-        self.active_global_tags = [str(tag).strip() for tag in state.get("active_global_tags") or [] if str(tag).strip()]
+        state = state_from_dict(state)
+        self.current_week_monday = state.week_monday
+        self.current_date_filter = state.date_filter
+        self.active_global_tags = state.tags
 
-        notebook_ids = {item_id for item_id in state.get("notebook_ids") or []}
+        notebook_ids = set(state.notebook_ids)
         self.nb_list.blockSignals(True)
         for i in range(self.nb_list.count()):
             item = self.nb_list.item(i)
@@ -369,9 +200,9 @@ class ContextManagerPanel(QWidget):
             )
         self.nb_list.blockSignals(False)
 
-        self.forced_records = [dict(record) for record in state.get("forced_records") or []]
-        self.sync_cb.setChecked(bool(state.get("sync_enabled", True)))
-        self._collapsed = bool(state.get("collapsed", False))
+        self.forced_records = state.forced_records
+        self.sync_cb.setChecked(state.sync_enabled)
+        self._collapsed = state.collapsed
         self._update_status_labels()
         self.refresh_entries()
         self.set_collapsed(self._collapsed)
@@ -380,3 +211,14 @@ class ContextManagerPanel(QWidget):
         if panel is None:
             return
         self.apply_state(panel.serialize_state())
+
+    def _context_state(self):
+        return ContextPanelState(
+            week_monday=self.current_week_monday,
+            date_filter=self.current_date_filter,
+            tags=list(self.active_global_tags),
+            notebook_ids=self.get_active_notebooks(),
+            forced_records=[dict(record) for record in self.forced_records],
+            sync_enabled=self.sync_cb.isChecked(),
+            collapsed=self.is_collapsed(),
+        )

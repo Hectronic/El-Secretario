@@ -16,14 +16,14 @@
 Unified Tools Widget combining Maintenance and Batch Processing functionality.
 """
 
-from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QTabWidget, QLabel, QPushButton, QHBoxLayout, QComboBox)
+from PyQt6.QtWidgets import QWidget, QVBoxLayout, QLabel, QPushButton, QHBoxLayout, QComboBox
 from PyQt6.QtGui import QPalette
 from PyQt6.QtCore import Qt
 
 from src.ui.maintenance_widget import MaintenanceWidget
-from src.ui.batch_process_widget import BatchProcessWidget
-from src.ui.summary_batch_widget import SummaryBatchWidget
-from src.ui.task_batch_widget import TaskBatchWidget
+from src.ui.tools.data_transfer import export_all_data, import_all_data
+from src.ui.tools.rag import queue_rag_reindex
+from src.ui.tools.view import build_tools_view
 
 
 class ToolsWidget(QWidget):
@@ -55,43 +55,8 @@ class ToolsWidget(QWidget):
         self.init_ui()
 
     def init_ui(self):
-        """Initialize the unified tools interface."""
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(0, 0, 0, 0)
-
-        # Title
-        title = QLabel("⚙️ Tools")
-        title.setStyleSheet("font-size: 28px; font-weight: bold; color: #607D8B; padding: 20px;")
-        layout.addWidget(title)
-
-        # Create tab widget for sub-sections
-        self.tabs = QTabWidget()
-
-        # Storage Tab (from MaintenanceWidget - cleanup functionality)
-        self.storage_widget = self._create_storage_tab()
-        self.tabs.addTab(self.storage_widget, "🗄️ Storage")
-
-        # Processing Tab (from BatchProcessWidget)
-        self.processing_widget = BatchProcessWidget(task_queue=self.task_queue)
-        self.tabs.addTab(self.processing_widget, "⏳ Processing")
-
-        # Summary Tab
-        self.summary_widget = SummaryBatchWidget(task_queue=self.task_queue)
-        self.tabs.addTab(self.summary_widget, "📝 Summaries")
-
-        # Tasks Tab (New)
-        self.tasks_batch_widget = TaskBatchWidget(task_queue=self.task_queue)
-        self.tabs.addTab(self.tasks_batch_widget, "✅ Tasks")
-
-        # Data Tab (from MaintenanceWidget - export/import)
-        self.data_widget = self._create_data_tab()
-        self.tabs.addTab(self.data_widget, "📦 Data")
-
-        # RAG Tab
-        self.rag_widget = self._create_rag_tab()
-        self.tabs.addTab(self.rag_widget, "🧠 RAG")
-
-        layout.addWidget(self.tabs)
+        """Build the tabbed Qt shell through the focused tools view owner."""
+        build_tools_view(self)
 
     def _create_storage_tab(self):
         """Create the Storage tab with cleanup functionality."""
@@ -153,19 +118,11 @@ class ToolsWidget(QWidget):
         return widget
 
     def _queue_rag_reindex(self):
-        if not self.task_queue:
-            self.rag_status_lbl.setText("Task queue is not available.")
-            self.rag_status_lbl.setStyleSheet("color: #f44336; font-size: 14px;")
-            return
         scope = self.rag_scope_combo.currentData() or "all"
-        queued = self.task_queue.enqueue_rag_reindex(scope=scope, source="tools")
-        if queued:
-            scope_text = "all records" if scope == "all" else "missing records only"
-            self.rag_status_lbl.setText(f"✓ RAG reindex task queued ({scope_text}).")
-            self.rag_status_lbl.setStyleSheet("color: #4CAF50; font-size: 14px;")
-        else:
-            self.rag_status_lbl.setText("RAG reindex task with this scope is already running or queued.")
-            self.rag_status_lbl.setStyleSheet("color: #FF9800; font-size: 14px;")
+        _queued, message, status = queue_rag_reindex(self.task_queue, scope)
+        colors = {"success": "#4CAF50", "warning": "#FF9800", "error": "#f44336"}
+        self.rag_status_lbl.setText(message)
+        self.rag_status_lbl.setStyleSheet(f"color: {colors[status]}; font-size: 14px;")
 
     def _create_data_tab(self):
         """Create the Data tab with export/import functionality."""
@@ -280,15 +237,7 @@ class ToolsWidget(QWidget):
             self.export_btn.setText("Exporting...")
             self.data_status_lbl.setText("")
             
-            exporter = DataExporter(self.db, self.notebook_db)
-            stats = exporter.export_all(file_path)
-            
-            status_msg = (
-                f"✓ Export complete! Saved to: {file_path}\n"
-                f"Records: {stats['records_count']}, "
-                f"Chat Sessions: {stats['chat_sessions_count']}, "
-                f"Notebooks: {stats['notebooks_count']}"
-            )
+            stats, status_msg = export_all_data(self.db, self.notebook_db, file_path)
             self.data_status_lbl.setText(status_msg)
             self.data_status_lbl.setStyleSheet("color: #4CAF50; font-size: 14px;")
             logger.info(f"Export complete: {stats}")
@@ -345,18 +294,7 @@ class ToolsWidget(QWidget):
             self.import_btn.setText("Importing...")
             self.data_status_lbl.setText("")
             
-            exporter = DataExporter(self.db, self.notebook_db)
-            result = exporter.import_all(file_path)
-            
-            if not result.success:
-                raise Exception(result.error_message)
-            
-            status_msg = (
-                f"✓ Import complete!\n"
-                f"Records: {result.records.imported} imported, {result.records.skipped} skipped\n"
-                f"Chat Sessions: {result.chat_sessions.imported} imported, {result.chat_sessions.skipped} skipped\n"
-                f"Notebooks: {result.notebooks.imported} imported, {result.notebooks.skipped} skipped"
-            )
+            result, status_msg = import_all_data(self.db, self.notebook_db, file_path)
             self.data_status_lbl.setText(status_msg)
             self.data_status_lbl.setStyleSheet("color: #4CAF50; font-size: 14px;")
             logger.info(f"Import complete: records={result.records}, sessions={result.chat_sessions}, notebooks={result.notebooks}")

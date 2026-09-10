@@ -12,8 +12,8 @@
 from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import QApplication, QDialog, QListWidgetItem, QMenu, QMessageBox
 
-from src.ui.components import SidebarTaskCompactWidget
-from src.ui.tasks_list_widget import TaskEditDialog
+from src.ui.component_widgets.sidebar import SidebarTaskCompactWidget
+from src.ui.tasks.edit_dialog import TaskEditDialog
 
 
 class TasksSidebarActionsCoordinator:

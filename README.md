@@ -24,7 +24,8 @@ Read this in [Español](README_ES.md) | [Asturianu](README_AST.md)
 ## Architecture And Specs
 
 - Architecture notes: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
-- Spec-driven feature registry: [docs/specs/README.md](docs/specs/README.md)
+- Architecture guide: [docs/ARCHITECTURE_GUIDE.md](docs/ARCHITECTURE_GUIDE.md)
+- Spec Kit feature registry: [specs/README.md](specs/README.md)
 
 ## Installation
 

@@ -18,7 +18,7 @@ from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QTextEdit,
                              QMessageBox, QApplication, QSplitter, QListWidget, QListWidgetItem, QInputDialog)
 from PyQt6.QtCore import Qt, pyqtSignal, QSettings
 from src.database import DBManager
-from src.ui.components import TagsLineEdit
+from src.ui.component_widgets.tags import TagsLineEdit
 from src.ai_assistant import AIAssistant
 from src.ui.tasks_list_widget import TasksListWidget
 

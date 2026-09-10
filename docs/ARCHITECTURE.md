@@ -12,7 +12,9 @@ Main runtime areas:
 - `src/ui/`: PyQt widgets and UI coordinators.
 - `src/ui/main_window/`: main shell, dedicated layout builder, and coordinators for tabs, recording-tab lifecycle, window lifecycle/navigation, shell actions, sidebar actions, sidebar content, sidebar sync, setup actions, floating chat, summary queue status, and runtime startup.
   - `content_tabs.py` now owns note/chat/summary tab lifecycle and context-driven tab openers.
-- `src/ui/chat/`: pure-ish chat state/rendering/context helpers used by `ChatWidget`.
+- `src/ui/chat/`: chat state/rendering/context helpers used by `ChatWidget` and
+  the standalone `ChatWindow`; `src/ui/chat_window.py` is its compatible import
+  facade.
 - `src/ui/settings/`: settings panels grouped by product area.
 - `src/ui/audio_editor/`: waveform editor and audio-editing UI.
 - `src/worker_components/`: transcription worker internals, runtime/device selection, subprocess isolation, and fallback policy.
@@ -20,8 +22,13 @@ Main runtime areas:
 - `src/database.py`: backwards-compatible `DBManager` facade. Aggregate-specific SQLite operations live in `src/persistence/`.
 - `src/persistence/`: schema/migrations plus repositories for records, chat sessions, transcription logs, summaries, and tasks.
 - `src/notebook_database.py`: notebook-specific persistence.
-- `src/rag_engine.py`: Chroma-backed RAG indexing/search with Windows-safe subprocess fallbacks.
-- `src/ai_provider.py`, `src/ai_assistant.py`, `src/summary_generator.py`: AI provider abstraction and summary/chat generation flows.
+- `src/rag_engine.py`: backwards-compatible `RAGEngine` import; the focused
+  implementation, document mutations, search orchestration, store adapters, and
+  Windows-safe subprocess fallbacks live under `src/rag/`.
+- `src/ai_provider.py` is the compatible provider import boundary; Gemini/Ollama
+  adapters, factory/validation, and retry policy live in `src/ai_providers/`.
+  Together with `src/ai_assistant.py`, `src/summary_generator.py`, and
+  `src/app/summaries/`, they provide chat and summary-generation flows.
 
 ## Refactor Baseline
 
@@ -29,14 +36,21 @@ The repository has already moved several high-growth areas away from older flat 
 
 - `src/ui/main_window.py` has been split into the `src/ui/main_window/` package. `MainWindow` remains in `src/ui/main_window/__init__.py` as a compatibility shell, visual composition lives in `layout.py`, and tab handling, floating chat, sidebar actions, sidebar content, sidebar sync, and setup actions live in focused coordinators.
 - Chat-specific helpers have been extracted from `src/ui/chat_widget.py` into `src/ui/chat/`, including context building, session state, session loading/applying, rendering, theme styles, header state, busy state, and the add-context dialog.
+- The standalone `ChatWindow` now uses focused layout and RAG/session-state
+  helpers in `src/ui/chat/`; its original flat module is retained only as an
+  import-compatible facade.
 - Settings UI has been split into `src/ui/settings/` panels for audio, general, prompts, and RAG configuration.
-- The audio editor has moved from a flat widget into `src/ui/audio_editor/`, with separate widget and waveform modules.
+- The audio editor has moved from a flat widget into `src/ui/audio_editor/`: the
+  compatible widget façade composes focused layout, selection synchronization,
+  preview-media lifecycle, session, waveform, persistence, and retranscription
+  modules.
 - Legacy worker code has moved from `src/worker.py` and `src/whisper_subprocess.py` into `src/worker_components/` plus provider adapters in `src/stt_providers/`.
 - Shared dialogs/components have started moving out of broad modules into targeted files such as `src/ui/filter_dialog.py`, `src/ui/speaker_dialog.py`, `src/ui/secret_field_widget.py`, and `src/ui/context_manager_panel.py`.
 - Summary queue logic now lives in `src/app/summary_queue/` (tasks/completion/history/rag_reindex/workers/runtime/threads/worker_factory/worker_signals/worker_lifecycle/actions/presentation), while `src/ui/summary_task_queue.py` remains a thin Qt queue adapter for signals and worker lifecycle wiring.
 - Tests now partially mirror the new feature packages under `tests/ui/main_window/`, `tests/ui/chat/`, `tests/ui/settings/`, `tests/ui/audio_editor/`, `tests/worker_components/`, and `tests/stt_providers/`.
 
-See `docs/specs/REFACTOR-2026-05-feature-packages.md` for the behavior-preserving refactor record.
+See `specs/` for the individual converged feature specifications, architecture
+plans, and completed Spec Kit task histories.
 
 ## Product Capabilities
 
@@ -71,8 +85,17 @@ Use these boundaries when adding new features:
 - `src/database.py` is now a thin compatibility facade over `src/persistence/`; preserve this public import path while callers are migrated incrementally to aggregate-specific repositories where appropriate.
 - `src/ui/recording_widget.py` is now a Qt composition shell for recording detail and legacy audio-edit tabs. Focused modules own UI builders, controls, state/trim/cleanup support, detail loading/persistence, transcription and AI orchestration, speaker mapping, and RAG indexing; public widget methods remain compatible delegates.
 - `src/ui/welcome_widget.py` is a thin signal façade. Its layout, capture runtime, microphone runtime, and landing actions live in `src/ui/welcome/`; retain its public delegates while callers migrate.
-- `src/ui/summary_task_queue.py` still carries queue orchestration and signal wiring complexity, but most non-Qt queue logic already lives in `src/app/summary_queue/`.
-- `src/rag_engine.py` combines vector store adapter, in-memory fallback, subprocess entrypoints, keyword fallback, Chroma compatibility, and Windows safety policy.
+- `src/ui/recording_in_progress_widget.py` is the compatible active-capture
+  import. `src/ui/recording_in_progress/widget.py` owns its Qt facade and receives
+  the caller's persistence port; sibling modules own capture runtime, workspace,
+  session payload, and responsive layout.
+- `src/ui/summary_task_queue.py` is the compatibility import for the Qt queue
+  facade. `src/ui/summary_queue/manager.py` owns signals and lifecycle adapters,
+  while `worker_runtime.py` owns worker construction/startup; non-Qt logic stays
+  in `src/app/summary_queue/`.
+- `src/rag_engine.py` is an intentional compatibility import. `src/rag/engine.py`
+  is a thin public facade over focused store, document, search, runtime-policy,
+  and subprocess modules; retain that boundary for existing callers.
 - `src/ui/styles.py` is the theme-application and compatibility façade; static global theme sheets live in `src/ui/theme_styles.py`. Feature-specific styling should not grow in either shared module by default.
 
 ## Target Direction
@@ -94,10 +117,8 @@ Do not move everything at once. Move code when a spec or change touches that are
 
 Recommended next cuts:
 
-1. Move RAG subprocess/keyword/vector-store adapter logic out of `RAGEngine` into smaller adapter modules.
-2. Continue shrinking `RecordingWidget` by moving dirty-state and legacy audio-edit coordination into focused modules; detail loading/persistence, deletion, open-chat, playback adapters, UI builders, shared controls, direct-transcription and AI orchestration, speaker mapping, audio trim helpers, and RAG indexing helpers already live under `src/ui/recording/`.
-3. Continue reducing `src/ui/summary_task_queue.py` by moving signal wiring and Qt-specific coordination into focused UI helpers.
-4. Migrate selected application services to the repositories in `src/persistence/` only when doing so reduces coupling; retain `DBManager` as the compatibility boundary for existing UI code.
+1. Continue shrinking `RecordingWidget` by moving dirty-state and legacy audio-edit coordination into focused modules; detail loading/persistence, deletion, open-chat, playback adapters, UI builders, shared controls, direct-transcription and AI orchestration, speaker mapping, audio trim helpers, and RAG indexing helpers already live under `src/ui/recording/`.
+2. Migrate selected application services to the repositories in `src/persistence/` only when doing so reduces coupling; retain `DBManager` as the compatibility boundary for existing UI code.
 
 ## Testing Expectations
 

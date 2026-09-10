@@ -1,6 +1,12 @@
 from datetime import date
 
-from src.ui.tasks.actions import create_manual_task, delete_tasks, set_task_completion
+from src.ui.tasks.actions import (
+    create_manual_task,
+    delete_tasks,
+    save_custom_order,
+    set_task_completion,
+    update_task_details,
+)
 
 
 class _TaskPort:
@@ -8,6 +14,8 @@ class _TaskPort:
         self.created = []
         self.completed = []
         self.deleted = []
+        self.updated = []
+        self.order = []
 
     def _week_sunday(self, _day_date):
         return "2026-03-08"
@@ -21,6 +29,12 @@ class _TaskPort:
 
     def delete_task(self, task_id):
         self.deleted.append(task_id)
+
+    def update_task_details(self, task_id, content, notes, tags):
+        self.updated.append((task_id, content, notes, tags))
+
+    def set_tasks_custom_order(self, task_ids):
+        self.order.append(task_ids)
 
 
 def test_create_manual_task_keeps_day_and_week_context():
@@ -55,3 +69,14 @@ def test_completion_and_deletion_apply_each_selected_task():
 
     assert db.completed == [(3, True), (5, True)]
     assert db.deleted == [5, 3]
+
+
+def test_update_and_reorder_actions_delegate_only_valid_order_payloads():
+    db = _TaskPort()
+
+    update_task_details(db, 7, "Revised", "With notes", "ops")
+    save_custom_order(db, [])
+    save_custom_order(db, [9, 7])
+
+    assert db.updated == [(7, "Revised", "With notes", "ops")]
+    assert db.order == [[9, 7]]

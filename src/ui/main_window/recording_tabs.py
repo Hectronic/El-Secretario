@@ -145,7 +145,11 @@ class RecordingTabCoordinator:
             window.recorder.set_device(config["device_index"])
         window.recorder.set_capture_machine_audio(config.get("capture_system_audio", False))
 
-        rec_widget = RecordingInProgressWidget(recorder=window.recorder, config=config)
+        rec_widget = RecordingInProgressWidget(
+            recorder=window.recorder,
+            config=config,
+            persistence=window.db,
+        )
         rec_widget.finished.connect(
             lambda path, finished_config, widget=rec_widget: self.on_recording_finished(
                 path, finished_config, widget

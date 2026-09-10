@@ -16,41 +16,21 @@ from __future__ import annotations
 
 import logging
 import os
-import tempfile
 
 import soundfile as sf
-import numpy as np
-from PyQt6.QtCore import Qt, QUrl, pyqtSignal
-from PyQt6.QtGui import QShortcut, QKeySequence
+from PyQt6.QtCore import pyqtSignal
 from PyQt6.QtMultimedia import QAudioOutput, QMediaPlayer
-from PyQt6.QtWidgets import (
-    QDoubleSpinBox,
-    QFrame,
-    QGroupBox,
-    QHBoxLayout,
-    QLabel,
-    QListWidget,
-    QListWidgetItem,
-    QMessageBox,
-    QPushButton,
-    QSlider,
-    QVBoxLayout,
-    QWidget,
-)
-from PyQt6.QtWidgets import QStyle
+from PyQt6.QtWidgets import QMessageBox, QWidget
 
 from src.audio import Recorder
 from src.database import DBManager
-from src.ui.audio_editor.editing_state import (
-    AudioChunk,
-    ChunkEditHistory,
-    adjust_chunk_boundary,
-    build_preview_ranges,
-    split_chunk,
-)
+from src.ui.audio_editor.editing_state import AudioChunk
+from src.ui.audio_editor.layout import build_audio_editor_layout
 from src.ui.audio_editor.persistence import apply_edited_audio
+from src.ui.audio_editor.playback import AudioEditorPlaybackController
+from src.ui.audio_editor.selection import AudioEditorSelectionController
+from src.ui.audio_editor.session import AudioEditorSession
 from src.ui.audio_editor.transcription_runtime import AudioEditorTranscriptionRuntime
-from src.ui.audio_editor.waveform import AudioWaveformWidget
 
 
 class AudioEditorWidget(QWidget):
@@ -59,6 +39,28 @@ class AudioEditorWidget(QWidget):
     close_requested = pyqtSignal()
     status_changed = pyqtSignal(str)
     progress_changed = pyqtSignal(int)
+
+    # Compatibility proxies keep the established widget state observable while the
+    # non-Qt session owns it. Existing integrations may inspect these attributes.
+    current_audio = property(lambda self: self.session.current_audio, lambda self, value: setattr(self.session, "current_audio", value))
+    current_sample_rate = property(lambda self: self.session.sample_rate, lambda self, value: setattr(self.session, "sample_rate", value))
+    current_duration = property(lambda self: self.session.duration, lambda self, value: setattr(self.session, "duration", value))
+    preview_audio = property(lambda self: self.session.preview_audio, lambda self, value: setattr(self.session, "preview_audio", value))
+    preview_ranges = property(lambda self: self.session.preview_ranges, lambda self, value: setattr(self.session, "preview_ranges", value))
+    chunks = property(lambda self: self.session.chunks, lambda self, value: setattr(self.session, "chunks", value))
+    active_chunk_index = property(lambda self: self.session.active_chunk_index, lambda self, value: setattr(self.session, "active_chunk_index", value))
+    selection_start = property(lambda self: self.session.selection_start, lambda self, value: setattr(self.session, "selection_start", value))
+    selection_end = property(lambda self: self.session.selection_end, lambda self, value: setattr(self.session, "selection_end", value))
+    _has_unsaved_changes = property(lambda self: self.session.has_unsaved_changes, lambda self, value: setattr(self.session, "has_unsaved_changes", value))
+    _boundary_drag_history_pending = property(lambda self: self.session.boundary_drag_history_pending, lambda self, value: setattr(self.session, "boundary_drag_history_pending", value))
+    preview_temp_path = property(
+        lambda self: self.playback.preview_temp_path,
+        lambda self, value: setattr(self.playback, "preview_temp_path", value),
+    )
+    _suppress_signals = property(
+        lambda self: self.selection.suppress_signals,
+        lambda self, value: setattr(self.selection, "suppress_signals", value),
+    )
 
     def __init__(
         self,
@@ -75,22 +77,19 @@ class AudioEditorWidget(QWidget):
         self.db = persistence if persistence is not None else DBManager()
         self.recorder = recorder if recorder is not None else Recorder()
         self.summary_task_queue = task_queue
+        self.session = AudioEditorSession()
         self.current_record_id = record_id
         self.current_recording_path = None
         self.current_audio = None
         self.current_sample_rate = 16000
         self.current_duration = 0.0
         self.preview_audio = None
-        self.preview_temp_path = None
         self.preview_ranges = []
-        self.chunks: list[AudioChunk] = []
+        self.chunks = []
         self.active_chunk_index = -1
         self.selection_start = 0.0
         self.selection_end = 0.0
-        self._suppress_signals = False
         self._has_unsaved_changes = False
-        self._history = ChunkEditHistory()
-        self._boundary_drag_history_pending = False
         self.transcription_runtime = transcription_runtime or AudioEditorTranscriptionRuntime()
         self.player = QMediaPlayer()
         self.audio_output = QAudioOutput()
@@ -99,6 +98,7 @@ class AudioEditorWidget(QWidget):
         self.player.durationChanged.connect(self.duration_changed)
         self.player.playbackStateChanged.connect(self.media_state_changed)
         self.audio_output.setVolume(0.7)
+        self.playback = AudioEditorPlaybackController(self.player, self.audio_output)
         self._init_ui()
         if self.current_record_id:
             self.load_record(self.current_record_id)
@@ -106,165 +106,15 @@ class AudioEditorWidget(QWidget):
             self.status_changed.emit("Ready.")
 
     def _init_ui(self):
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(8, 8, 8, 8)
-        layout.setSpacing(8)
-        self.setStyleSheet("QLabel#editorMeta { font-size: 12px; }")
-
-        header = QHBoxLayout()
-        header.setContentsMargins(0, 0, 0, 0)
-        header.setSpacing(8)
-        self.title_label = QLabel("Audio Editor")
-        self.title_label.setStyleSheet("font-size: 16px; font-weight: 700;")
-        header.addWidget(self.title_label)
-        self.file_info_label = QLabel("No audio loaded")
-        self.file_info_label.setObjectName("editorMeta")
-        header.addWidget(self.file_info_label)
-        header.addStretch()
-        self.hint_label = QLabel("Drag segment edges on the waveform to retime cuts")
-        self.hint_label.setObjectName("editorMeta")
-        header.addWidget(self.hint_label)
-        layout.addLayout(header)
-
-        playback_frame = QFrame()
-        playback_frame.setFrameShape(QFrame.Shape.StyledPanel)
-        playback = QHBoxLayout(playback_frame)
-        playback.setContentsMargins(8, 6, 8, 6)
-        playback.setSpacing(8)
-        self.play_btn = QPushButton()
-        self.play_btn.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_MediaPlay))
-        self.play_btn.clicked.connect(self.play_audio)
-        self.play_btn.setEnabled(False)
-        self.play_btn.setToolTip("Play")
-        playback.addWidget(self.play_btn)
-
-        self.pause_btn = QPushButton()
-        self.pause_btn.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_MediaPause))
-        self.pause_btn.clicked.connect(self.pause_audio)
-        self.pause_btn.setEnabled(False)
-        self.pause_btn.setToolTip("Pause")
-        playback.addWidget(self.pause_btn)
-
-        self.stop_btn = QPushButton()
-        self.stop_btn.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_MediaStop))
-        self.stop_btn.clicked.connect(self.stop_audio)
-        self.stop_btn.setEnabled(False)
-        self.stop_btn.setToolTip("Stop")
-        playback.addWidget(self.stop_btn)
-
-        self.slider = QSlider(Qt.Orientation.Horizontal)
-        self.slider.setRange(0, 0)
-        self.slider.sliderMoved.connect(self.set_position)
-        playback.addWidget(self.slider)
-
-        self.time_label = QLabel("00:00 / 00:00")
-        playback.addWidget(self.time_label)
-
-        vol_lbl = QLabel("Vol")
-        vol_lbl.setObjectName("editorMeta")
-        playback.addWidget(vol_lbl)
-        self.volume_slider = QSlider(Qt.Orientation.Horizontal)
-        self.volume_slider.setRange(0, 100)
-        self.volume_slider.setValue(70)
-        self.volume_slider.setFixedWidth(80)
-        self.volume_slider.valueChanged.connect(self.audio_output.setVolume)
-        playback.addWidget(self.volume_slider)
-        layout.addWidget(playback_frame)
-
-        self.waveform = AudioWaveformWidget()
-        self.waveform.selection_changed.connect(self._on_waveform_selection_changed)
-        self.waveform.chunk_clicked.connect(self._on_waveform_chunk_clicked)
-        self.waveform.seek_requested.connect(self._seek_to_time)
-        self.waveform.boundary_dragged.connect(self._on_waveform_boundary_dragged)
-        self.waveform.boundary_drag_started.connect(self._on_boundary_drag_started)
-        self.waveform.boundary_drag_finished.connect(self._on_boundary_drag_finished)
-        self.waveform.setMinimumHeight(320)
-        layout.addWidget(self.waveform, 1)
-
-        side = QWidget()
-        side_layout = QVBoxLayout(side)
-        side_layout.setContentsMargins(0, 0, 0, 0)
-        side_layout.setSpacing(8)
-
-        selection_group = QGroupBox("Selection")
-        selection_layout = QVBoxLayout(selection_group)
-        row = QHBoxLayout()
-        self.selection_start_spin = QDoubleSpinBox()
-        self.selection_start_spin.setDecimals(3)
-        self.selection_start_spin.setSingleStep(0.1)
-        self.selection_start_spin.setMinimum(0.0)
-        self.selection_start_spin.valueChanged.connect(self._on_spin_selection_changed)
-        row.addWidget(QLabel("Start:"))
-        row.addWidget(self.selection_start_spin)
-        self.selection_end_spin = QDoubleSpinBox()
-        self.selection_end_spin.setDecimals(3)
-        self.selection_end_spin.setSingleStep(0.1)
-        self.selection_end_spin.setMinimum(0.0)
-        self.selection_end_spin.valueChanged.connect(self._on_spin_selection_changed)
-        row.addWidget(QLabel("End:"))
-        row.addWidget(self.selection_end_spin)
-        selection_layout.addLayout(row)
-
-        selection_btns = QHBoxLayout()
-        self.mark_start_btn = QPushButton("Mark Start")
-        self.mark_start_btn.clicked.connect(self.mark_start_from_playhead)
-        selection_btns.addWidget(self.mark_start_btn)
-        self.mark_end_btn = QPushButton("Mark End")
-        self.mark_end_btn.clicked.connect(self.mark_end_from_playhead)
-        selection_btns.addWidget(self.mark_end_btn)
-        self.split_btn = QPushButton("Split")
-        self.split_btn.clicked.connect(self.split_selection)
-        selection_btns.addWidget(self.split_btn)
-        self.cut_btn = QPushButton("Cut")
-        self.cut_btn.clicked.connect(self.cut_selection)
-        selection_btns.addWidget(self.cut_btn)
-        selection_layout.addLayout(selection_btns)
-        chunk_group = QGroupBox("Chunks")
-        chunk_layout = QVBoxLayout(chunk_group)
-        chunk_layout.setContentsMargins(8, 8, 8, 8)
-        self.chunk_list = QListWidget()
-        self.chunk_list.setMaximumHeight(160)
-        self.chunk_list.currentRowChanged.connect(self._on_chunk_row_changed)
-        chunk_layout.addWidget(self.chunk_list)
-        chunk_btns = QHBoxLayout()
-        self.up_btn = QPushButton("Up")
-        self.up_btn.clicked.connect(lambda: self.move_chunk(-1))
-        chunk_btns.addWidget(self.up_btn)
-        self.down_btn = QPushButton("Down")
-        self.down_btn.clicked.connect(lambda: self.move_chunk(1))
-        chunk_btns.addWidget(self.down_btn)
-        self.delete_chunk_btn = QPushButton("Delete")
-        self.delete_chunk_btn.clicked.connect(self.delete_chunk)
-        chunk_btns.addWidget(self.delete_chunk_btn)
-        self.reset_btn = QPushButton("Reset")
-        self.reset_btn.clicked.connect(self.reset_edits)
-        chunk_btns.addWidget(self.reset_btn)
-        chunk_layout.addLayout(chunk_btns)
-
-        tools_row = QHBoxLayout()
-        tools_row.setSpacing(8)
-        tools_row.addWidget(selection_group, 2)
-        tools_row.addWidget(chunk_group, 3)
-        side_layout.addLayout(tools_row)
-
-        action_row = QHBoxLayout()
-        self.apply_btn = QPushButton("Apply Edits")
-        self.apply_btn.setProperty("class", "calendar-primary-btn")
-        self.apply_btn.setMinimumHeight(34)
-        self.apply_btn.clicked.connect(self.apply_edits)
-        action_row.addWidget(self.apply_btn)
-        action_row.addStretch()
-        side_layout.addLayout(action_row)
-
-        layout.addWidget(side, 0)
-
-        self.undo_shortcut = QShortcut(QKeySequence("Ctrl+Z"), self)
-        self.undo_shortcut.activated.connect(self.undo)
-        self.redo_shortcut = QShortcut(QKeySequence("Ctrl+Y"), self)
-        self.redo_shortcut.activated.connect(self.redo)
-        self.redo_alt_shortcut = QShortcut(QKeySequence("Ctrl+Shift+Z"), self)
-        self.redo_alt_shortcut.activated.connect(self.redo)
-
+        build_audio_editor_layout(self)
+        self.selection = AudioEditorSelectionController(
+            self.session,
+            self.waveform,
+            self.chunk_list,
+            self.selection_start_spin,
+            self.selection_end_spin,
+            self._fmt_seconds,
+        )
         self._set_editor_enabled(False)
 
     def _set_editor_enabled(self, enabled: bool):
@@ -311,11 +161,7 @@ class AudioEditorWidget(QWidget):
 
     def _load_audio_buffer(self, path: str):
         audio, sample_rate = sf.read(path, always_2d=True, dtype="float32")
-        self.current_audio = audio
-        self.current_sample_rate = int(sample_rate)
-        self.current_duration = float(audio.shape[0] / sample_rate) if len(audio) else 0.0
-        self.chunks = [AudioChunk(0.0, self.current_duration)] if self.current_duration > 0 else []
-        self.active_chunk_index = 0 if self.chunks else -1
+        self.session.load_audio(audio, sample_rate)
         self._rebuild_preview()
 
     def _rebuild_preview(self):
@@ -326,24 +172,10 @@ class AudioEditorWidget(QWidget):
             self.waveform.set_chunk_ranges([], -1)
             self._refresh_chunk_list()
             self._update_time_label()
+            self._refresh_preview_player()
             return
 
-        parts = []
-        preview_ranges = build_preview_ranges(self.chunks)
-        for idx, chunk in enumerate(self.chunks):
-            start_frame = int(round(chunk.source_start * self.current_sample_rate))
-            end_frame = int(round(chunk.source_end * self.current_sample_rate))
-            start_frame = max(0, min(start_frame, len(self.current_audio)))
-            end_frame = max(start_frame, min(end_frame, len(self.current_audio)))
-            part = self.current_audio[start_frame:end_frame]
-            if len(part):
-                parts.append(part)
-
-        if parts:
-            self.preview_audio = np.concatenate(parts, axis=0)
-        else:
-            self.preview_audio = np.zeros((0, self.current_audio.shape[1]), dtype=np.float32)
-        self.preview_ranges = preview_ranges
+        self.session.rebuild_preview()
         self.waveform.set_audio(self.preview_audio, self.current_sample_rate)
         self.waveform.set_chunk_ranges(self.preview_ranges, self.active_chunk_index)
         self._refresh_chunk_list()
@@ -352,95 +184,28 @@ class AudioEditorWidget(QWidget):
         self._refresh_preview_player()
 
     def _refresh_preview_player(self):
-        if self.preview_temp_path and os.path.exists(self.preview_temp_path):
-            try:
-                os.remove(self.preview_temp_path)
-            except Exception:
-                pass
-        self.preview_temp_path = None
-        if self.preview_audio is None:
-            self.player.setSource(QUrl())
-            return
-        fd, path = tempfile.mkstemp(prefix="secretario_audio_preview_", suffix=".wav")
-        os.close(fd)
-        sf.write(path, self.preview_audio, self.current_sample_rate)
-        self.preview_temp_path = path
-        self.player.setSource(QUrl.fromLocalFile(path))
+        self.playback.refresh_preview(self.preview_audio, self.current_sample_rate)
 
     def _refresh_chunk_list(self):
-        self._suppress_signals = True
-        self.chunk_list.clear()
-        for idx, chunk in enumerate(self.preview_ranges):
-            item = QListWidgetItem(
-                f"{idx + 1}. {self._fmt_seconds(chunk['output_start'])} - {self._fmt_seconds(chunk['output_end'])}"
-            )
-            item.setData(Qt.ItemDataRole.UserRole, idx)
-            self.chunk_list.addItem(item)
-        if 0 <= self.active_chunk_index < self.chunk_list.count():
-            self.chunk_list.setCurrentRow(self.active_chunk_index)
-        self._suppress_signals = False
+        self.selection.refresh_chunks()
 
     def _update_active_selection_from_chunk(self):
-        if not (0 <= self.active_chunk_index < len(self.preview_ranges)):
-            self.selection_start_spin.setValue(0.0)
-            self.selection_end_spin.setValue(0.0)
-            self.waveform.set_selection(0.0, 0.0)
-            return
-        active = self.preview_ranges[self.active_chunk_index]
-        self.selection_start_spin.blockSignals(True)
-        self.selection_end_spin.blockSignals(True)
-        self.selection_start_spin.setRange(active["output_start"], active["output_end"])
-        self.selection_end_spin.setRange(active["output_start"], active["output_end"])
-        self.selection_start_spin.setValue(active["output_start"])
-        self.selection_end_spin.setValue(active["output_end"])
-        self.selection_start_spin.blockSignals(False)
-        self.selection_end_spin.blockSignals(False)
-        self.waveform.set_selection(active["output_start"], active["output_end"])
+        self.selection.sync_active_selection()
 
     def _on_waveform_selection_changed(self, start: float, end: float):
-        if self._suppress_signals:
-            return
-        self.selection_start = start
-        self.selection_end = end
-        self.selection_start_spin.blockSignals(True)
-        self.selection_end_spin.blockSignals(True)
-        self.selection_start_spin.setValue(start)
-        self.selection_end_spin.setValue(end)
-        self.selection_start_spin.blockSignals(False)
-        self.selection_end_spin.blockSignals(False)
-        self._mark_dirty()
+        self.selection.from_waveform(start, end)
 
     def _on_spin_selection_changed(self, *_args):
-        if self._suppress_signals:
-            return
-        start = self.selection_start_spin.value()
-        end = self.selection_end_spin.value()
-        if end < start:
-            start, end = end, start
-        self.selection_start = start
-        self.selection_end = end
-        self.waveform.set_selection(start, end)
-        self._mark_dirty()
+        self.selection.from_spins()
 
     def _on_chunk_row_changed(self, row: int):
-        if self._suppress_signals:
-            return
-        if row < 0:
-            return
-        self.active_chunk_index = row
-        self.waveform.set_chunk_ranges(self.preview_ranges, self.active_chunk_index)
-        self._update_active_selection_from_chunk()
+        self.selection.select_chunk(row)
 
     def _on_waveform_chunk_clicked(self, index: int):
-        if not (0 <= index < len(self.preview_ranges)):
-            return
-        if self.chunk_list.currentRow() != index:
-            self.chunk_list.setCurrentRow(index)
-        else:
-            self._on_chunk_row_changed(index)
+        self.selection.select_waveform_chunk(index)
 
     def _on_waveform_boundary_dragged(self, side: str, boundary_time: float):
-        if self._suppress_signals:
+        if self.selection.suppress_signals:
             return
         if not (0 <= self.active_chunk_index < len(self.chunks)):
             return
@@ -453,14 +218,10 @@ class AudioEditorWidget(QWidget):
         self._boundary_drag_history_pending = False
 
     def _chunk_for_selection(self):
-        if not (0 <= self.active_chunk_index < len(self.preview_ranges)):
-            return None, None
-        active = self.preview_ranges[self.active_chunk_index]
-        if self.selection_end <= self.selection_start:
-            return None, "Select a range first."
-        if self.selection_start < active["output_start"] or self.selection_end > active["output_end"]:
-            return None, "The selection must stay inside the active chunk."
-        return active, None
+        try:
+            return self.session.selection_range(), None
+        except ValueError as exc:
+            return None, str(exc)
 
     def _selection_to_chunk(self):
         active, error = self._chunk_for_selection()
@@ -475,22 +236,8 @@ class AudioEditorWidget(QWidget):
             QMessageBox.warning(self, "Split", str(exc))
             return
 
-        self._push_undo_state()
-        chunk = self.chunks[self.active_chunk_index]
-        left, middle, right = split_chunk(
-            chunk, active, self.selection_start, self.selection_end, keep_middle=True
-        )
-        new_chunks = []
-        if left:
-            new_chunks.append(left)
-        if middle:
-            new_chunks.append(middle)
-        if right:
-            new_chunks.append(right)
-        self.chunks[self.active_chunk_index:self.active_chunk_index + 1] = new_chunks
-        self.active_chunk_index = min(self.active_chunk_index + (1 if left else 0), len(self.chunks) - 1)
+        self.session.split_selection()
         self._rebuild_preview()
-        self._mark_dirty()
 
     def cut_selection(self):
         try:
@@ -499,110 +246,61 @@ class AudioEditorWidget(QWidget):
             QMessageBox.warning(self, "Cut", str(exc))
             return
 
-        self._push_undo_state()
-        chunk = self.chunks[self.active_chunk_index]
-        left, _, right = split_chunk(
-            chunk, active, self.selection_start, self.selection_end, keep_middle=False
-        )
-        new_chunks = []
-        if left:
-            new_chunks.append(left)
-        if right:
-            new_chunks.append(right)
-        self.chunks[self.active_chunk_index:self.active_chunk_index + 1] = new_chunks
-        self.active_chunk_index = min(self.active_chunk_index, max(0, len(self.chunks) - 1))
+        self.session.cut_selection()
         self._rebuild_preview()
-        self._mark_dirty()
 
     def delete_chunk(self):
-        if not (0 <= self.active_chunk_index < len(self.chunks)):
+        try:
+            changed = self.session.delete_active_chunk()
+        except ValueError as exc:
+            QMessageBox.warning(self, "Delete Chunk", str(exc))
             return
-        if len(self.chunks) == 1:
-            QMessageBox.warning(self, "Delete Chunk", "You need at least one chunk.")
+        if not changed:
             return
-        self._push_undo_state()
-        del self.chunks[self.active_chunk_index]
-        self.active_chunk_index = min(self.active_chunk_index, len(self.chunks) - 1)
         self._rebuild_preview()
-        self._mark_dirty()
 
     def move_chunk(self, offset: int):
-        if not (0 <= self.active_chunk_index < len(self.chunks)):
+        if not self.session.move_active_chunk(offset):
             return
-        target = self.active_chunk_index + offset
-        if target < 0 or target >= len(self.chunks):
-            return
-        self._push_undo_state()
-        self.chunks[self.active_chunk_index], self.chunks[target] = self.chunks[target], self.chunks[self.active_chunk_index]
-        self.active_chunk_index = target
         self._rebuild_preview()
-        self._mark_dirty()
 
     def adjust_active_chunk_boundary(self, side: str, boundary_time: float):
-        if not (0 <= self.active_chunk_index < len(self.chunks)):
+        if not self.session.adjust_active_boundary(side, boundary_time):
             return False
-        if not self.preview_ranges:
-            return False
-        if self._boundary_drag_history_pending:
-            self._push_undo_state()
-            self._boundary_drag_history_pending = False
-
-        if not adjust_chunk_boundary(
-            self.chunks,
-            self.active_chunk_index,
-            self.preview_ranges,
-            side,
-            boundary_time,
-            self.current_duration,
-        ):
-            return False
-
         self._rebuild_preview()
-        self._mark_dirty()
         return True
 
     def reset_edits(self):
-        if self.current_duration <= 0:
+        if not self.session.reset():
             return
-        self._push_undo_state()
-        self.chunks = [AudioChunk(0.0, self.current_duration)]
-        self.active_chunk_index = 0
         self._rebuild_preview()
-        self._mark_dirty()
 
     def _mark_dirty(self):
-        self._has_unsaved_changes = True
+        self.session.mark_dirty()
 
     def _mark_clean(self):
-        self._has_unsaved_changes = False
+        self.session.mark_clean()
 
     def has_unsaved_changes(self):
-        return self._has_unsaved_changes
+        return self.session.has_unsaved_changes
 
     def _clear_history(self):
-        self._history.clear()
-        self._boundary_drag_history_pending = False
+        self.session.clear_history()
 
     def _push_undo_state(self):
-        self._history.push(self.chunks, self.active_chunk_index)
+        self.session.history.push(self.chunks, self.active_chunk_index)
 
     def undo(self):
-        restored = self._history.undo(self.chunks, self.active_chunk_index)
-        if restored is None:
+        if not self.session.undo():
             return False
-        self.chunks, self.active_chunk_index = restored
         self._rebuild_preview()
-        self._mark_dirty()
         self.status_changed.emit("Undo")
         return True
 
     def redo(self):
-        restored = self._history.redo(self.chunks, self.active_chunk_index)
-        if restored is None:
+        if not self.session.redo():
             return False
-        self.chunks, self.active_chunk_index = restored
         self._rebuild_preview()
-        self._mark_dirty()
         self.status_changed.emit("Redo")
         return True
 
@@ -628,13 +326,9 @@ class AudioEditorWidget(QWidget):
                 self.db,
                 self.current_record_id,
             )
-            self.current_audio = self.preview_audio
             self.status_changed.emit("Audio updated.")
             self.recording_saved.emit()
-            self._mark_clean()
-            self._clear_history()
-            self.chunks = [AudioChunk(0.0, self.current_duration)]
-            self.active_chunk_index = 0
+            self.session.accept_saved_preview(self.current_duration)
             self._rebuild_preview()
             self._retranscribe_current_audio()
             return True
@@ -731,14 +425,7 @@ class AudioEditorWidget(QWidget):
         return f"{mins:02d}:{secs:05.2f}" if mins else f"{secs:05.2f}"
 
     def cleanup(self):
-        self.stop_audio()
-        self.player.setSource(QUrl())
-        if self.preview_temp_path and os.path.exists(self.preview_temp_path):
-            try:
-                os.remove(self.preview_temp_path)
-            except Exception:
-                pass
-            self.preview_temp_path = None
+        self.playback.cleanup()
         self.transcription_runtime.cleanup()
 
     def closeEvent(self, event):
