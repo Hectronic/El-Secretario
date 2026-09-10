@@ -37,6 +37,12 @@ def test_audio_panel_defaults_and_save(qtbot, monkeypatch, tmp_path):
     assert panel.rag_auto_index_check.isChecked() is True
     assert panel.rescan_before_capture_check.isChecked() is True
     assert panel.prefer_index_check.isChecked() is False
+    assert panel.duration_reminder_spin.value() == 60
+    assert panel.silence_warning_spin.value() == 15
+    assert panel.duration_reminders_enabled_check.isChecked() is True
+    assert panel.silence_warnings_enabled_check.isChecked() is True
+    assert panel.tray_notifications_enabled_check.isChecked() is True
+    assert panel.auto_stop_silence_check.isChecked() is False
 
     panel.sys_audio_check.setChecked(True)
     panel.whisper_combo.setCurrentIndex(0)
@@ -50,6 +56,12 @@ def test_audio_panel_defaults_and_save(qtbot, monkeypatch, tmp_path):
     panel.rag_auto_index_check.setChecked(False)
     panel.rescan_before_capture_check.setChecked(False)
     panel.prefer_index_check.setChecked(True)
+    panel.duration_reminder_spin.setValue(25)
+    panel.silence_warning_spin.setValue(7)
+    panel.duration_reminders_enabled_check.setChecked(False)
+    panel.silence_warnings_enabled_check.setChecked(False)
+    panel.tray_notifications_enabled_check.setChecked(False)
+    panel.auto_stop_silence_check.setChecked(True)
 
     panel.save()
 
@@ -65,6 +77,12 @@ def test_audio_panel_defaults_and_save(qtbot, monkeypatch, tmp_path):
     assert settings.value("auto_index_rag", True, type=bool) is False
     assert settings.value("audio_rescan_before_capture", True, type=bool) is False
     assert settings.value("audio_prefer_device_index", False, type=bool) is True
+    assert settings.value("recording_guardian/duration_reminder_seconds", type=int) == 1500
+    assert settings.value("recording_guardian/silence_warning_seconds", type=int) == 420
+    assert settings.value("recording_guardian/duration_reminders_enabled", True, type=bool) is False
+    assert settings.value("recording_guardian/silence_warnings_enabled", True, type=bool) is False
+    assert settings.value("recording_guardian/tray_notifications_enabled", True, type=bool) is False
+    assert settings.value("recording_guardian/auto_stop_after_silence", False, type=bool) is True
 
 
 def test_audio_panel_rescan_updates_status(qtbot, monkeypatch, tmp_path):

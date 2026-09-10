@@ -20,6 +20,7 @@ from PyQt6.QtWidgets import (
     QLabel,
     QLineEdit,
     QPushButton,
+    QSpinBox,
     QVBoxLayout,
     QWidget,
 )
@@ -101,6 +102,51 @@ class AudioSettingsPanel(QWidget):
         self.sys_audio_check.setToolTip("Attempts to automatically find and record from the system monitor device.")
         self.sys_audio_check.setChecked(self.settings.value("capture_system_audio", False, type=bool))
         form_layout.addRow(lbl_sys_audio, self.sys_audio_check)
+
+        guardian_label = QLabel("🛡️ Recording Safety")
+        guardian_label.setStyleSheet("font-size: 18px; font-weight: bold; color: #607D8B; margin-top: 20px;")
+        form_layout.addRow(guardian_label)
+
+        self.duration_reminder_spin = QSpinBox()
+        self.duration_reminder_spin.setRange(1, 24 * 60)
+        self.duration_reminder_spin.setSuffix(" minutes")
+        self.duration_reminder_spin.setValue(
+            max(1, int(self.settings.value("recording_guardian/duration_reminder_seconds", 3600)) // 60)
+        )
+        form_layout.addRow("Active recording reminder:", self.duration_reminder_spin)
+
+        self.duration_reminders_enabled_check = QCheckBox("Send active-recording reminders")
+        self.duration_reminders_enabled_check.setChecked(
+            self.settings.value("recording_guardian/duration_reminders_enabled", True, type=bool)
+        )
+        form_layout.addRow("Duration reminders:", self.duration_reminders_enabled_check)
+
+        self.silence_warning_spin = QSpinBox()
+        self.silence_warning_spin.setRange(1, 24 * 60)
+        self.silence_warning_spin.setSuffix(" minutes")
+        self.silence_warning_spin.setValue(
+            max(1, int(self.settings.value("recording_guardian/silence_warning_seconds", 900)) // 60)
+        )
+        form_layout.addRow("No-audio warning:", self.silence_warning_spin)
+
+        self.silence_warnings_enabled_check = QCheckBox("Warn when no audio is detected")
+        self.silence_warnings_enabled_check.setChecked(
+            self.settings.value("recording_guardian/silence_warnings_enabled", True, type=bool)
+        )
+        form_layout.addRow("Silence warnings:", self.silence_warnings_enabled_check)
+
+        self.tray_notifications_enabled_check = QCheckBox("Show safety notifications from the system tray")
+        self.tray_notifications_enabled_check.setChecked(
+            self.settings.value("recording_guardian/tray_notifications_enabled", True, type=bool)
+        )
+        form_layout.addRow("Tray notifications:", self.tray_notifications_enabled_check)
+
+        self.auto_stop_silence_check = QCheckBox("Automatically stop and save after a no-audio warning")
+        self.auto_stop_silence_check.setToolTip("Disabled by default. When enabled, a silence warning is shown before the recording is stopped.")
+        self.auto_stop_silence_check.setChecked(
+            self.settings.value("recording_guardian/auto_stop_after_silence", False, type=bool)
+        )
+        form_layout.addRow("Automatic silence stop:", self.auto_stop_silence_check)
 
         trans_label = QLabel("📝 Transcription Engine")
         trans_label.setStyleSheet("font-size: 18px; font-weight: bold; color: #607D8B; margin-top: 20px;")
@@ -286,6 +332,12 @@ class AudioSettingsPanel(QWidget):
         self.settings.setValue("default_mic_name", self.mic_combo.currentText() if self.mic_combo.currentData() is not None else "")
         self.settings.setValue("default_mic_index", self.mic_combo.currentData())
         self.settings.setValue("capture_system_audio", self.sys_audio_check.isChecked())
+        self.settings.setValue("recording_guardian/duration_reminder_seconds", self.duration_reminder_spin.value() * 60)
+        self.settings.setValue("recording_guardian/silence_warning_seconds", self.silence_warning_spin.value() * 60)
+        self.settings.setValue("recording_guardian/duration_reminders_enabled", self.duration_reminders_enabled_check.isChecked())
+        self.settings.setValue("recording_guardian/silence_warnings_enabled", self.silence_warnings_enabled_check.isChecked())
+        self.settings.setValue("recording_guardian/tray_notifications_enabled", self.tray_notifications_enabled_check.isChecked())
+        self.settings.setValue("recording_guardian/auto_stop_after_silence", self.auto_stop_silence_check.isChecked())
         self.settings.setValue("whisper_model", self.whisper_combo.currentText())
         self.settings.setValue(
             "sherpa_onnx_model_dir",

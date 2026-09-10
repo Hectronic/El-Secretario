@@ -9,6 +9,7 @@ El Secretario es una herramienta inteligente de transcripción y organización d
 ## Características
 
 - **Grabación e Importación de Audio**: Graba audio directamente en la aplicación o importa archivos existentes.
+- **Guardián de seguridad de grabación**: Consulta el indicador de grabación con el icono de la aplicación en la bandeja del sistema cuando esté disponible; pausa, reanuda, finaliza/guarda o cancela con seguridad; recibe avisos configurables por duración o silencio y activa opcionalmente la parada tras un aviso de silencio.
 - **Edición de grabaciones**: Abre una grabación en una segunda pestaña de edición, recorta segmentos de audio y vuelve a transcribir automáticamente el clip editado. El primer recorte conserva una copia `.orig` del archivo original.
 - **Transcripción y Diarización**: Transcribe audio automáticamente, copia la transcripción completa con un clic e identifica diferentes hablantes (diarización) utilizando backends locales de Whisper, `sherpa-onnx` y pyannote.audio.
 - **Búsqueda Inteligente (RAG)**: Utiliza Generación Aumentada por Recuperación (RAG) para chatear con tus grabaciones y encontrar información específica. Soporta Google Gemini y **Ollama** para ejecución local.

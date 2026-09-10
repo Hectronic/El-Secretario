@@ -17,5 +17,5 @@ and `tasks.md`. All baseline tasks are complete.
 - `012-tasks-board`
 - `013-settings-runtime`
 - `014-tools-data-management`
-- `015-recording-safety-guardian` — planned
+- `015-recording-safety-guardian` — implemented and validated
 - `016-runtime-performance-baseline` — planned

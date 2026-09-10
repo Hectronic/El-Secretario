@@ -2,7 +2,7 @@
 
 **Feature Branch**: `015-recording-safety-guardian`  
 **Created**: 2026-09-10  
-**Status**: Planned  
+**Status**: Completed
 **Input**: Prevent users from accidentally leaving a recording running while
 keeping deliberate long recordings uninterrupted.
 
@@ -22,6 +22,9 @@ assert visible status, duration updates, and stop action dispatch.
    indicator visibly identifies the active recording and its elapsed duration.
 2. **Given** the tray is available, **When** the user chooses stop and save,
    **Then** the existing recording-stop workflow runs exactly once.
+3. **Given** the tray is available, **When** the user chooses pause/resume or
+   cancel, **Then** the existing capture lifecycle performs that action and the
+   tray reflects or cleans up the terminal state.
 
 ### User Story 2 - Receive a safe prolonged-recording reminder (Priority: P1)
 
@@ -66,6 +69,9 @@ period, and automatic stop remains opt-in.
   explicit opt-in.
 - **FR-005**: Tray actions and notifications MUST reuse the existing safe
   stop/save lifecycle and clean up on every terminal recording state.
+- **FR-006**: The tray MUST offer pause/resume and cancel actions in addition to
+  stop and save; cancel MUST discard the active capture through the existing
+  cancellation lifecycle.
 
 ## Success Criteria
 
