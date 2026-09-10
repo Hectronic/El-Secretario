@@ -12,7 +12,9 @@ Main runtime areas:
 - `src/ui/`: PyQt widgets and UI coordinators.
 - `src/ui/main_window/`: main shell, dedicated layout builder, and coordinators for tabs, recording-tab lifecycle, window lifecycle/navigation, shell actions, sidebar actions, sidebar content, sidebar sync, setup actions, floating chat, summary queue status, and runtime startup.
   - `content_tabs.py` now owns note/chat/summary tab lifecycle and context-driven tab openers.
-- `src/ui/chat/`: pure-ish chat state/rendering/context helpers used by `ChatWidget`.
+- `src/ui/chat/`: chat state/rendering/context helpers used by `ChatWidget` and
+  the standalone `ChatWindow`; `src/ui/chat_window.py` is its compatible import
+  facade.
 - `src/ui/settings/`: settings panels grouped by product area.
 - `src/ui/audio_editor/`: waveform editor and audio-editing UI.
 - `src/worker_components/`: transcription worker internals, runtime/device selection, subprocess isolation, and fallback policy.
@@ -34,6 +36,9 @@ The repository has already moved several high-growth areas away from older flat 
 
 - `src/ui/main_window.py` has been split into the `src/ui/main_window/` package. `MainWindow` remains in `src/ui/main_window/__init__.py` as a compatibility shell, visual composition lives in `layout.py`, and tab handling, floating chat, sidebar actions, sidebar content, sidebar sync, and setup actions live in focused coordinators.
 - Chat-specific helpers have been extracted from `src/ui/chat_widget.py` into `src/ui/chat/`, including context building, session state, session loading/applying, rendering, theme styles, header state, busy state, and the add-context dialog.
+- The standalone `ChatWindow` now uses focused layout and RAG/session-state
+  helpers in `src/ui/chat/`; its original flat module is retained only as an
+  import-compatible facade.
 - Settings UI has been split into `src/ui/settings/` panels for audio, general, prompts, and RAG configuration.
 - The audio editor has moved from a flat widget into `src/ui/audio_editor/`, with separate widget and waveform modules.
 - Legacy worker code has moved from `src/worker.py` and `src/whisper_subprocess.py` into `src/worker_components/` plus provider adapters in `src/stt_providers/`.

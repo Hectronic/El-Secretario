@@ -2,7 +2,7 @@
 
 Status: Implemented
 Owner: TBD
-Last updated: 2026-09-07
+Last updated: 2026-09-10
 
 ## Problem
 
@@ -53,6 +53,10 @@ Users need to ask questions over selected recordings, notes, notebooks, tags, da
   owns visual composition/theme application; the shell accepts injected chat,
   notebook persistence, and conversation-runtime ports while retaining compatible
   defaults.
+- Standalone dialog: `src/ui/chat/window.py` owns the compatible standalone
+  `ChatWindow` façade; `window_layout.py` owns its Qt composition and
+  `window_state.py` owns its small collection-scoped RAG and session-persistence
+  operations. `src/ui/chat_window.py` remains an import-only compatibility facade.
 - Context building: `src/ui/chat/context_builder.py` owns chat context text assembly from notebooks, forced records, date/week filters, tags, tasks, and RAG fragments, plus context serialization for sessions.
 - Context parsing: `src/ui/chat/context_state.py` normalizes stored context JSON into UI-ready date, tag, notebook, and forced-record state.
 - Sessions: `src/ui/chat/session_state.py`, `src/ui/chat/session_loader.py`, and `src/ui/chat/session_applier.py` own session naming, save/update payloads, malformed JSON handling, and applying loaded messages/contexts to a widget.
@@ -72,7 +76,7 @@ Users need to ask questions over selected recordings, notes, notebooks, tags, da
 
 ## Test Plan
 
-- Unit: context text assembly, context serialization/parsing, session naming/payload persistence, loaded-session application, message rendering, theme styles, header state, busy state, and provider/worker lifecycle in `tests/ui/chat/test_conversation_runtime.py`.
+- Unit: context text assembly, context serialization/parsing, session naming/payload persistence, loaded-session application, message rendering, theme styles, header state, busy state, standalone-window state, and provider/worker lifecycle in `tests/ui/chat/`.
 - Dialog/UI: add-context dialog selection and context manager panel state round trips.
 - Main-window UI: `tests/ui/main_window/test_floating_chat_host.py` covers bounded
   host resizing; `tests/ui/main_window/test_chat_floating.py` covers
@@ -83,6 +87,9 @@ Users need to ask questions over selected recordings, notes, notebooks, tags, da
   `tests/integration/test_chat_session_persistence.py` verifies both the real SQLite
   worker response → session → restored-context round trip and session-preserving
   float/minimize/restore/dock lifecycle.
+  `tests/integration/test_chat_window_persistence.py` verifies the standalone
+  dialog's real SQLite session round trip, collection-scoped RAG request, Qt
+  response signal, and restored history.
 - Manual: start chats from recording, calendar/week, tag, notebook, and search flows; float/dock/minimize/restore; delete an open session; verify light/dark readability.
 
 ## Documentation
@@ -104,6 +111,9 @@ Users need to ask questions over selected recordings, notes, notebooks, tags, da
   the visible shell and session-persistence owner.
 - 2026-09-08: moved initial-context application and tab/floating presentation
   policy into `src/ui/chat/context_actions.py` and `src/ui/chat/display_mode.py`.
+- 2026-09-10: split the legacy standalone `ChatWindow` into a compatible facade,
+  focused layout, and RAG/session-state helpers; added injected persistence/runtime
+  ports and a real SQLite integration contract.
 
 ## Open Questions
 
