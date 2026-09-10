@@ -24,7 +24,7 @@ Read this in [Español](README_ES.md) | [Asturianu](README_AST.md)
 ## Architecture And Specs
 
 - Architecture notes: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
-- Spec Kit product baseline: [specs/000-established-product-baseline/spec.md](specs/000-established-product-baseline/spec.md)
+- Spec Kit feature registry: [specs/README.md](specs/README.md)
 
 ## Installation
 
