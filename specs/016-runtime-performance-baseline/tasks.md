@@ -16,3 +16,11 @@
 - [ ] T006 Add focused regression and required real-boundary integration tests.
 - [ ] T007 Compare before/after measurements and validate Windows, Ubuntu, macOS guards.
 - [ ] T008 Run the full suite and record the accepted performance results.
+
+## Definition of Done
+
+- The six representative scenarios have reproducible harnesses and baseline
+  output.
+- Hotspot hypotheses are ranked using measurements, not file size or intuition.
+- Every optimization has a paired before/after result and regression test.
+- Full-profile runtime policy and cross-platform guards remain unchanged.

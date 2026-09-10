@@ -25,3 +25,11 @@
 
 - [x] T010 Validate availability-aware tray fallback with deterministic platform edges and run the full suite.
 - [x] T011 Add branded tray icon plus pause/resume and cancel actions, with lifecycle integration coverage.
+
+## Definition of Done
+
+- Default silence behavior cannot stop a recording.
+- Tray, notification, and stop ports are injectable and deterministic in tests.
+- Existing stop/save flow is invoked once and remains the only persistence owner.
+- Timers, signal connections, and tray state are cleaned up for success, failure,
+  cancellation, and application shutdown.
