@@ -32,3 +32,13 @@ def test_transcription_request_keeps_queue_contract():
         "title": "capture.wav",
         "source": "batch_process",
     }
+
+
+def test_transcription_request_preserves_a_windows_queue_path_contract():
+    request = transcription_request(
+        {"id": 8, "filename": "capture.wav"},
+        recordings_dir=r"C:\recordings",
+        model="large-v3",
+    )
+
+    assert request["file_path"] == r"C:\recordings\capture.wav"
