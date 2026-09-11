@@ -45,6 +45,7 @@ class SummaryTaskQueueManager(QObject):
     task_started = pyqtSignal(dict, int)   # task, remaining_pending
     task_finished = pyqtSignal(dict)       # task
     task_failed = pyqtSignal(dict, str)    # task, error message
+    task_terminal = pyqtSignal(dict)       # typed terminal outcome, emitted once per execution
     task_skipped = pyqtSignal(dict, str)   # task, reason
     task_progress = pyqtSignal(int)        # Proxy for progress (0-100, -1 for indeterminate)
     task_status_update = pyqtSignal(str)   # Proxy for status messages
@@ -80,6 +81,7 @@ class SummaryTaskQueueManager(QObject):
             start_next=self._start_next_if_idle,
             retain_worker=self._retain_zombie_worker,
             is_fatal_transcription_failure=is_transcription_fatal_failure,
+            emit_terminal=self.task_terminal.emit,
         )
     @property
     def _queue(self):

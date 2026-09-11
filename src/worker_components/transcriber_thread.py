@@ -32,6 +32,8 @@ from src.worker_components import runtime as worker_runtime
 from src.worker_components import settings as worker_settings
 from src.worker_components import subprocess_runner
 from src.worker_components import transcription_flow
+from src.worker_components.lifecycle import TerminalOutcomeEmitter, TerminalStatus
+from src.worker_components.subprocess_runner import TranscriptionCancelledError, TranscriptionTimeoutError
 
 
 def _run_transcription_in_subprocess(
@@ -129,6 +131,7 @@ class TranscriberThread(QThread):
     progress = pyqtSignal(int)
     status_update = pyqtSignal(str)
     error = pyqtSignal(str)
+    terminal = pyqtSignal(dict)
 
     def __init__(self, audio_path, model_size="base", device=None, compute_type=None, language=None, hf_token=None, enable_diarization=False, total_duration=0, force_cpu=False, backend_preference="auto"):
         """Create a transcription job.
@@ -168,6 +171,14 @@ class TranscriberThread(QThread):
         self.hf_token = hf_token
         self.enable_diarization = enable_diarization
         self.total_duration = total_duration
+        self._terminal = TerminalOutcomeEmitter()
+
+    def _emit_terminal(self, status, *, user_message="", retryable=False, preserved_work=True):
+        outcome = self._terminal.complete(
+            status, user_message=user_message, retryable=retryable, preserved_work=preserved_work
+        )
+        if outcome is not None:
+            self.terminal.emit(outcome.payload())
 
     def _persist_working_transcription_settings(self):
         try:
@@ -337,6 +348,7 @@ class TranscriberThread(QThread):
                     )
                 if self.isInterruptionRequested():
                     self.status_update.emit("Cancelled.")
+                    self._emit_terminal(TerminalStatus.CANCELLED, user_message="Transcription cancelled.", retryable=True)
                     return
 
                 whisper_segments = [SimpleNamespace(**s) for s in serialized_segments]
@@ -347,6 +359,7 @@ class TranscriberThread(QThread):
             for segment in whisper_segments:
                 if self.isInterruptionRequested():
                     self.status_update.emit("Cancelled.")
+                    self._emit_terminal(TerminalStatus.CANCELLED, user_message="Transcription cancelled.", retryable=True)
                     return
                 if self.total_duration > 0:
                     prog = transcription_flow.compute_segment_progress(
@@ -369,6 +382,7 @@ class TranscriberThread(QThread):
                 try:
                     if self.isInterruptionRequested():
                         self.status_update.emit("Cancelled.")
+                        self._emit_terminal(TerminalStatus.CANCELLED, user_message="Transcription cancelled.", retryable=True)
                         return
                     pipeline = pipeline_cls.from_pretrained("pyannote/speaker-diarization-3.1", use_auth_token=self.hf_token)
                     if pipeline:
@@ -419,9 +433,21 @@ class TranscriberThread(QThread):
             self.status_update.emit("Finished.")
             self.finished.emit(result)
 
+            self._emit_terminal(TerminalStatus.SUCCEEDED)
+
+        except TranscriptionCancelledError:
+            self.status_update.emit("Cancelled.")
+            self._emit_terminal(TerminalStatus.CANCELLED, user_message="Transcription cancelled.", retryable=True)
+        except TranscriptionTimeoutError as error:
+            message = transcription_error_message(error)
+            logging.error("Transcription timed out: %s", error, exc_info=True)
+            self.error.emit(message)
+            self._emit_terminal(TerminalStatus.TIMED_OUT, user_message=message, retryable=True)
         except Exception as e:
             logging.error(f"Transcription failed: {e}", exc_info=True)
-            self.error.emit(transcription_error_message(e))
+            message = transcription_error_message(e)
+            self.error.emit(message)
+            self._emit_terminal(TerminalStatus.FAILED, user_message=message, retryable=True)
         finally:
             if "pipeline" in locals():
                 del pipeline

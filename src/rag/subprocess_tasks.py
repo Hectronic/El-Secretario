@@ -74,6 +74,9 @@ def run_json_subprocess_task(
         if proc.is_alive():
             proc.terminate()
             proc.join(timeout=5)
+            if proc.is_alive():
+                proc.kill()
+                proc.join(timeout=5)
             logging.error(timeout_error)
             return None
         if proc.exitcode != 0:
@@ -95,11 +98,18 @@ def run_json_subprocess_task(
             logging.error(setup_error, setup_error_arg, e, exc_info=True)
         return None
     finally:
+        if "proc" in locals():
+            try:
+                proc.close()
+            except (ValueError, OSError):
+                logging.debug("RAG subprocess handle was already closed.")
         if "result_path" in locals():
             try:
                 os.remove(result_path)
+            except FileNotFoundError:
+                logging.debug("RAG subprocess result file already removed: %s", result_path)
             except OSError:
-                pass
+                logging.exception("Failed removing RAG subprocess result file: %s", result_path)
 
 
 def rag_upsert_in_subprocess(

@@ -1,8 +1,10 @@
 """Worker-outcome orchestration for the sequential summary queue."""
 
 import logging
+from uuid import uuid4
 
 from src.app.summary_queue.runtime import build_retry_wait_state, cleanup_between_jobs
+from src.worker_components.lifecycle import TerminalOutcome, TerminalStatus
 
 
 class QueueWorkerExecutionCoordinator:
@@ -28,6 +30,7 @@ class QueueWorkerExecutionCoordinator:
         start_next,
         retain_worker,
         is_fatal_transcription_failure,
+        emit_terminal=lambda _outcome: None,
     ):
         self.state = state
         self.history = history
@@ -46,6 +49,22 @@ class QueueWorkerExecutionCoordinator:
         self.start_next = start_next
         self.retain_worker = retain_worker
         self.is_fatal_transcription_failure = is_fatal_transcription_failure
+        self.emit_terminal = emit_terminal
+        self._terminal_task_ids = set()
+
+    def _emit_terminal_once(self, task, status, *, message="", retryable=False):
+        task_id = id(task)
+        if task_id in self._terminal_task_ids:
+            return
+        self._terminal_task_ids.add(task_id)
+        outcome = TerminalOutcome(
+            status=TerminalStatus(status),
+            operation_id=task.get("_operation_id") or uuid4().hex,
+            user_message=message,
+            retryable=retryable,
+            preserved_work=True,
+        )
+        self.emit_terminal(outcome.payload())
 
     def on_generator_progress(self, current, total):
         if total > 0:
@@ -81,12 +100,14 @@ class QueueWorkerExecutionCoordinator:
         if task.get("type") == "transcription" and self.is_fatal_transcription_failure(message):
             self.append_history("skipped", task, message)
             self.emit_skipped(task, message)
+            self._emit_terminal_once(task, TerminalStatus.FAILED, message=message, retryable=True)
             self.emit_status(f"Skipping failed transcription: {message}")
             logging.warning("Queue: fatal transcription failure converted to skipped: %s", message)
             return
 
         self.append_history("failed", task, message)
         self.emit_failed(task, message)
+        self._emit_terminal_once(task, TerminalStatus.FAILED, message=message, retryable=True)
         logging.error("Queue: task failed type=%s error=%s", task.get("type"), message)
 
     def on_worker_status_update(self, message):
@@ -107,7 +128,8 @@ class QueueWorkerExecutionCoordinator:
             if not had_error:
                 self.append_history("finished", task)
                 logging.info("Queue: task finished successfully type=%s.", task.get("type"))
-            self.emit_finished(task)
+                self.emit_finished(task)
+                self._emit_terminal_once(task, TerminalStatus.SUCCEEDED)
         if worker:
             worker.deleteLater()
             self.retain_worker(worker)
