@@ -1,5 +1,7 @@
 from PyQt6.QtCore import QObject, QSettings, pyqtSignal
+import numpy as np
 
+from src.audio import Recorder
 from src.database import DBManager
 from src.ui.recording_in_progress_widget import RecordingInProgressWidget
 
@@ -188,3 +190,26 @@ def test_silence_warning_recovers_on_activity_without_default_auto_stop(qtbot, m
     assert tray.cleaned is True
     settings.remove("recording_guardian/silence_warning_seconds")
     settings.remove("recording_guardian/auto_stop_after_silence")
+
+
+def test_real_capture_callback_throttles_qt_vu_updates_without_dropping_pcm(qtbot, monkeypatch):
+    monkeypatch.setattr("src.ui.recording_in_progress.widget.DBManager", _TagDatabase)
+    clock = [0.0]
+    recorder = Recorder(amplitude_update_hz=20, monotonic_clock=lambda: clock[0])
+    monkeypatch.setattr(recorder, "start", lambda: setattr(recorder, "is_recording", True))
+    widget = RecordingInProgressWidget(recorder=recorder, tray_port=_TrayPort())
+    qtbot.addWidget(widget)
+    delivered = []
+    recorder.amplitude_changed.connect(delivered.append)
+    block = np.ones((160, 1), dtype=np.float32)
+
+    recorder.callback(block, 160, None, None)
+    clock[0] = 0.01
+    recorder.callback(block, 160, None, None)
+    clock[0] = 0.05
+    recorder.callback(block, 160, None, None)
+
+    assert len(delivered) == 2
+    assert len(recorder.recording) == 3
+    assert widget.vu_meter.value() == 100
+    widget.cleanup()

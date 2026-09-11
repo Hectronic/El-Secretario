@@ -15,6 +15,7 @@
 import os
 import subprocess
 import tempfile
+import time
 import sounddevice as sd
 import soundfile as sf
 import numpy as np
@@ -24,7 +25,14 @@ from PyQt6.QtCore import QObject, pyqtSignal
 class Recorder(QObject):
     amplitude_changed = pyqtSignal(float) # Signal to emit RMS amplitude (0.0 to 1.0)
 
-    def __init__(self, sample_rate=16000, channels=1):
+    def __init__(
+        self,
+        sample_rate=16000,
+        channels=1,
+        *,
+        amplitude_update_hz=20.0,
+        monotonic_clock=None,
+    ):
         super().__init__()
         self.fs = sample_rate
         self.channels = channels
@@ -35,6 +43,11 @@ class Recorder(QObject):
         self.start_time = None
         self.device_index = None # Default device
         self.capture_machine_audio = False
+        # Audio callbacks can arrive 50-100 times/second.  Cap only the
+        # UI-facing level signal; every PCM block is still retained unchanged.
+        self.amplitude_update_hz = amplitude_update_hz
+        self._monotonic_clock = monotonic_clock or time.monotonic
+        self._last_amplitude_emit_at = None
 
     def set_device(self, device_index):
         """Set the input device index."""
@@ -49,9 +62,18 @@ class Recorder(QObject):
         if status:
             print(status)
         
-        # Calculate RMS amplitude for VU meter
+        # Calculate RMS amplitude for VU meter. Emitting each callback queues
+        # needless UI events while recording; a 20 Hz VU meter is responsive.
         rms = np.sqrt(np.mean(indata**2))
-        self.amplitude_changed.emit(rms)
+        now = self._monotonic_clock()
+        interval = (
+            1.0 / float(self.amplitude_update_hz)
+            if self.amplitude_update_hz and self.amplitude_update_hz > 0
+            else 0.0
+        )
+        if self._last_amplitude_emit_at is None or now - self._last_amplitude_emit_at >= interval:
+            self.amplitude_changed.emit(float(rms))
+            self._last_amplitude_emit_at = now
 
         if not self.is_paused:
             self.recording.append(indata.copy())
@@ -65,6 +87,7 @@ class Recorder(QObject):
         self.recording = []
         self.is_recording = True
         self.is_paused = False
+        self._last_amplitude_emit_at = None
         self.start_time = datetime.now()
         
         # Determine target device
