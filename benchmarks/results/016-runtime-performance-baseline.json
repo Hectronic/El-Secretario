@@ -1,0 +1,157 @@
+{
+  "comparisons": [
+    {
+      "after": {
+        "ui_update_cap_hz": 20,
+        "values": [
+          6000,
+          36000
+        ]
+      },
+      "before": {
+        "ui_update_cap_hz": 100,
+        "values": [
+          30000,
+          180000
+        ]
+      },
+      "durations_seconds": [
+        300,
+        1800
+      ],
+      "improvement_percent": 80.0,
+      "metric": "ui_update_count",
+      "scenario": "capture"
+    }
+  ],
+  "results": [
+    {
+      "commit": "c9a598d+working-tree",
+      "configuration": {
+        "audio": "none",
+        "cache_state": "cold process",
+        "device_compute_force_cpu": "unchanged",
+        "external_edge": "SQLite and Qt are real; provider/network edges disabled",
+        "provider_model": "deterministic double; no AI/STT provider loaded",
+        "stt_backend": "unchanged"
+      },
+      "median_ms": 2078.2681,
+      "notes": "",
+      "observed_leaks": 0,
+      "p95_ms": 2295.2688,
+      "peak_rss_mb": 23.984,
+      "platform": "macOS-26.6.2-arm64-arm-64bit",
+      "python": "3.12.14",
+      "repetitions": 7,
+      "scenario": "startup"
+    },
+    {
+      "commit": "c9a598d+working-tree",
+      "configuration": {
+        "audio": "16 kHz mono PCM callback frames",
+        "cache_state": "warm in-process",
+        "callback_rate_hz": 100,
+        "device_compute_force_cpu": "unchanged",
+        "external_edge": "deterministic audio callback",
+        "provider_model": "deterministic double; no AI/STT provider loaded",
+        "simulated_durations_seconds": [
+          300,
+          1800
+        ],
+        "stt_backend": "unchanged",
+        "ui_update_cap_hz": 20
+      },
+      "median_ms": 0.0024,
+      "notes": "At 100 Hz, 5/30 minute capture produces <= 6,000/36,000 UI updates; the pre-cap baseline was 30,000/180,000.",
+      "observed_leaks": 0,
+      "p95_ms": 0.0054,
+      "peak_rss_mb": 24.0,
+      "platform": "macOS-26.6.2-arm64-arm-64bit",
+      "python": "3.12.14",
+      "repetitions": 7,
+      "scenario": "capture"
+    },
+    {
+      "commit": "c9a598d+working-tree",
+      "configuration": {
+        "audio": "300 second representative timeline",
+        "cache_state": "warm",
+        "device_compute_force_cpu": "unchanged",
+        "external_edge": "deterministic STT progress",
+        "provider_model": "deterministic double; no AI/STT provider loaded",
+        "stt_backend": "unchanged"
+      },
+      "median_ms": 0.0019,
+      "notes": "No backend, model, device, compute type, or force_cpu setting is changed.",
+      "observed_leaks": 0,
+      "p95_ms": 0.9042,
+      "peak_rss_mb": 24.453,
+      "platform": "macOS-26.6.2-arm64-arm-64bit",
+      "python": "3.12.14",
+      "repetitions": 7,
+      "scenario": "stt"
+    },
+    {
+      "commit": "c9a598d+working-tree",
+      "configuration": {
+        "audio": "none",
+        "device_compute_force_cpu": "unchanged",
+        "external_edge": "deterministic worker",
+        "failures": 1,
+        "provider_model": "deterministic double; no AI/STT provider loaded",
+        "stt_backend": "unchanged",
+        "tasks": 20
+      },
+      "median_ms": 0.0005,
+      "notes": "Includes one deterministic recoverable failure.",
+      "observed_leaks": 0,
+      "p95_ms": 0.0016,
+      "peak_rss_mb": 24.453,
+      "platform": "macOS-26.6.2-arm64-arm-64bit",
+      "python": "3.12.14",
+      "repetitions": 7,
+      "scenario": "queue"
+    },
+    {
+      "commit": "c9a598d+working-tree",
+      "configuration": {
+        "audio": "two text documents",
+        "cache_state": "cold per repetition",
+        "device_compute_force_cpu": "unchanged",
+        "external_edge": "in-memory RAG store",
+        "provider_model": "deterministic double; no AI/STT provider loaded",
+        "stt_backend": "unchanged"
+      },
+      "median_ms": 0.0017,
+      "notes": "",
+      "observed_leaks": 0,
+      "p95_ms": 0.1269,
+      "peak_rss_mb": 24.453,
+      "platform": "macOS-26.6.2-arm64-arm-64bit",
+      "python": "3.12.14",
+      "repetitions": 7,
+      "scenario": "rag"
+    },
+    {
+      "commit": "c9a598d+working-tree",
+      "configuration": {
+        "audio": "none",
+        "cache_state": "n/a",
+        "device_compute_force_cpu": "unchanged",
+        "external_edge": "deterministic owned resources",
+        "provider_model": "deterministic double; no AI/STT provider loaded",
+        "stt_backend": "unchanged"
+      },
+      "median_ms": 0.002,
+      "notes": "",
+      "observed_leaks": 0,
+      "p95_ms": 0.0057,
+      "peak_rss_mb": 24.516,
+      "platform": "macOS-26.6.2-arm64-arm-64bit",
+      "python": "3.12.14",
+      "repetitions": 7,
+      "scenario": "shutdown"
+    }
+  ],
+  "schema": "runtime-performance-baseline/v1"
+}

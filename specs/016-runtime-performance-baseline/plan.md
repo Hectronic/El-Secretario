@@ -1,6 +1,6 @@
 # Implementation Plan: Runtime Performance Baseline
 
-**Branch**: `016-runtime-performance-baseline` | **Status**: Planned | **Spec**: [spec.md](spec.md)
+**Branch**: `016-runtime-performance-baseline` | **Status**: Completed and validated | **Spec**: [spec.md](spec.md)
 
 ## Summary
 
@@ -27,14 +27,41 @@ These are hypotheses, not accepted findings:
 - `src/ui/main_window/` may duplicate sidebar refresh work across coordinators.
 - The sequential summary queue may spend time rebuilding status views.
 
-The first benchmark report must confirm or reject each hypothesis before code
-changes are proposed.
+The first benchmark report must select, reject, or defer each hypothesis before
+code changes are proposed.
 
 ## Acceptance Threshold Policy
 
 Before the baseline exists, use no universal target. For each accepted
 optimization, define a local threshold using timing, memory, UI responsiveness,
 and correctness comparisons against the paired baseline.
+
+## Baseline And Accepted Optimization
+
+Baseline command:
+
+```bash
+GIT_COMMIT=$(git rev-parse --short HEAD) ./venv/bin/python -m benchmarks.runtime_baseline --repetitions 7
+```
+
+The machine-readable result is stored at
+`benchmarks/results/016-runtime-performance-baseline.json`. It records macOS,
+Python 3.12.14, deterministic external edges, warm/cold state, retained runtime
+policy, median/p95 timings, and peak RSS for startup, capture, STT, queue, RAG,
+and shutdown. The startup scenario launches the real main window in a fresh
+offscreen process; SQLite and Qt are real while provider/network edges are not.
+
+The selected hotspot was capture's UI-facing RMS signal. At a 100 Hz callback
+rate, the pre-change path would enqueue 30,000 updates in five minutes and
+180,000 in thirty minutes. The accepted 20 Hz cap limits those counts to 6,000
+and 36,000 respectively (80% fewer UI events), while the benchmarked capture
+workload remains sub-millisecond and tests prove every PCM block is retained.
+No STT backend, model, device, compute type, or `force_cpu` setting changed.
+
+The other initial hypotheses were not accepted as optimizations: capture's PCM
+buffer cannot be discarded without violating WAV semantics; RAG model setup,
+subprocess cancellation, sidebar refresh, and queue rendering are deferred for
+their own representative benchmarks rather than optimized by intuition.
 
 ## Constitution Check
 

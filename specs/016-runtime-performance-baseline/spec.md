@@ -2,7 +2,8 @@
 
 **Feature Branch**: `016-runtime-performance-baseline`  
 **Created**: 2026-09-10  
-**Status**: Planned  
+**Status**: Completed
+
 **Input**: Improve responsiveness and resource use through evidence, without
 reducing transcription quality or overriding user runtime choices.
 
