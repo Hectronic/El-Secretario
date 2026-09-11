@@ -25,6 +25,22 @@ audio-activity doubles.
   second audio capture pipeline.
 - Persist preferences through the existing settings boundary.
 
+## Implementation Order
+
+1. Add pure guardian state transitions and settings normalization.
+2. Add deterministic timer, notification, and tray ports with unit tests.
+3. Connect the guardian to `RecordingCaptureRuntime` and the existing amplitude
+   signal without changing `Recorder`.
+4. Route stop/save through the recording-tab lifecycle and prove idempotency.
+5. Add real offscreen Qt lifecycle coverage and platform availability cases.
+
+## Explicit Non-Goals
+
+- No automatic stop in the first implementation unless explicitly enabled.
+- No tray-specific recording or audio ownership.
+- No new polling loop over audio hardware.
+- No direct database writes from the guardian.
+
 ## Constitution Check
 
 Requires real Qt lifecycle integration tests, explicit cleanup, and no platform

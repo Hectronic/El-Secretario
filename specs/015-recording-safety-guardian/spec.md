@@ -58,6 +58,67 @@ period, and automatic stop remains opt-in.
 - The recording ends, fails, or the app shuts down while a reminder is queued.
 - Multiple capture windows must never create conflicting tray indicators.
 
+## Current Implementation Context
+
+- `src/ui/recording_in_progress/runtime.py` owns recorder start, pause, stop,
+  cancel, and amplitude-signal connection.
+- `src/ui/recording_in_progress/session.py` owns elapsed-time formatting and
+  the finished recording configuration payload.
+- `src/ui/recording_in_progress/widget.py` owns the active capture UI.
+- `src/audio.py` exposes `Recorder.amplitude_changed` and emits an RMS value
+  from every audio callback.
+- Main-window and recording-tab coordinators own final save and transcription
+  handoff. The guardian MUST dispatch to those owners and never call
+  `Recorder.stop()` directly from a tray adapter.
+
+## Proposed Settings And State
+
+Settings keys should be namespaced under `recording_guardian/`:
+
+| Key | Type | Proposed default | Meaning |
+| --- | --- | --- | --- |
+| `enabled` | bool | `true` | enable in-app/tray observation |
+| `duration_warning_enabled` | bool | `true` | enable prolonged-recording warning |
+| `duration_threshold_seconds` | int | `3600` | first duration warning |
+| `reminder_interval_seconds` | int | `900` | minimum interval between reminders |
+| `silence_warning_enabled` | bool | `true` | enable inactivity warning |
+| `silence_threshold_seconds` | int | `300` | sustained low activity threshold |
+| `auto_stop_after_silence` | bool | `false` | never stop by default |
+
+Missing or invalid values fall back to these defaults and are clamped to
+positive, finite intervals.
+
+Guardian state should be a single session object with:
+
+```text
+inactive | recording | paused | stopping | completed | failed | cancelled
+started_at, last_activity_at, last_reminder_at, warning_count
+```
+
+Only `recording` and `paused` are active tray states. Terminal states cancel
+timers and remove the indicator.
+
+## Platform Ports
+
+Define injectable ports before connecting Qt:
+
+- `TrayPort`: availability, set status/title, show/hide, action callbacks;
+- `NotificationPort`: warning/error notification with action identifiers;
+- `RecordingStopPort`: one idempotent `request_stop_and_save()` operation.
+
+The Qt adapter may use `QSystemTrayIcon`; tests use deterministic fakes. If
+tray availability changes, the guardian falls back to in-app status without
+changing capture state.
+
+## Activity And Timer Rules
+
+- Activity is refreshed only from the existing amplitude signal; no second audio
+  stream or polling pipeline may be introduced.
+- Paused recordings do not accumulate silence warnings.
+- A reminder re-checks current state immediately before display.
+- Stop/save dispatch uses a compare-and-set guard so tray, UI, and notification
+  actions cannot save twice.
+
 ## Requirements
 
 - **FR-001**: The system MUST expose one accurate active-recording tray state
@@ -80,3 +141,14 @@ period, and automatic stop remains opt-in.
 - **SC-002**: No default configuration stops a recording solely due to silence.
 - **SC-003**: Integration tests prove tray/action state and cleanup across the
   capture lifecycle with deterministic platform edges.
+
+## Required Acceptance Examples
+
+1. Start → tray appears → elapsed text updates → stop dispatches once → tray
+   disappears after the existing save flow completes.
+2. Duration threshold → one warning → continue → no warning before the interval.
+3. Silence threshold → warning only; default settings leave recording active.
+4. Silence warning → explicit stop → exactly one existing stop/save request.
+5. Tray unavailable → in-app status remains accurate without an adapter error.
+6. Shutdown while active → timers, signal connections, tray state, and guardian
+   references are cleaned up.

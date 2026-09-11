@@ -19,3 +19,30 @@ and `tasks.md`. All baseline tasks are complete.
 - `014-tools-data-management`
 - `015-recording-safety-guardian` — implemented and validated
 - `016-runtime-performance-baseline` — planned
+- `017-stability-hardening` — planned
+- `018-lightweight-runtime` — planned
+- `019-knowledge-workflows` — planned
+
+## Roadmap relationship
+
+The planned work is intentionally staged:
+
+1. `016-runtime-performance-baseline` measures before optimization.
+2. `017-stability-hardening` strengthens lifecycle and failure contracts.
+3. `018-lightweight-runtime` reduces installation and cold-start cost without
+   changing provider behavior.
+4. `019-knowledge-workflows` deepens indexing, provenance, and resumable
+   knowledge features.
+
+`015-recording-safety-guardian` can proceed alongside the baseline when its
+recording-specific contracts are implemented.
+
+## Cross-feature invariants
+
+- `016` owns measurements and accepted performance thresholds; later specs must
+  reference its baselines rather than inventing unmeasured targets.
+- `017` owns lifecycle, failure, cancellation, retry, and cleanup semantics.
+- `018` owns packaging, capability detection, lazy imports, and cold-start cost.
+- `019` owns indexing freshness, provenance, and resumable knowledge workflows.
+- Existing compatibility façades (`DBManager`, `RAGEngine`, legacy widgets) are
+  preserved unless a future spec explicitly defines a migration.

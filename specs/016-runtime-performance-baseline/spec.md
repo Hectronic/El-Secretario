@@ -44,6 +44,40 @@ and only use a safe fallback after a real runtime failure.
 - **FR-004**: Each accepted optimization MUST retain focused regression coverage;
   shared boundary changes require integration coverage.
 
+## Measurement Contract
+
+Every result records operating system, Python version, provider/model
+configuration, audio characteristics, warm/cold cache state, and whether the
+external edge was real or deterministic. Record median and p95 timings plus
+peak RSS where available.
+
+| ID | Scenario | Primary metrics |
+| --- | --- | --- |
+| `startup` | fresh process to usable main window | time, imports, peak RSS |
+| `capture` | deterministic 5/30-minute callback simulation | buffer bytes, callback rate, UI updates |
+| `stt` | representative transcription | worker start, duration, cleanup latency, peak RSS |
+| `queue` | N summary tasks with one failure | admission, idle latency, cleanup, retained state |
+| `rag` | engine creation, first index, repeated search | init time, first-use time, repeated-call cost |
+| `shutdown` | close while each operation is active | shutdown latency, remaining threads/processes |
+
+The harness must not require a GPU, microphone, network, or AI provider.
+Those edges use deterministic doubles; SQLite and Qt event delivery remain real.
+
+## Baseline Output
+
+Store machine-readable results outside source packages during development and
+record accepted before/after summaries in this spec or its plan. Each result
+includes:
+
+```text
+scenario, commit, platform, python, configuration, repetitions
+median_ms, p95_ms, peak_rss_mb, observed_leaks, notes
+```
+
+No optimization is accepted from a single run or from wall-clock improvement
+that increases memory, drops UI signals, changes result shape, or alters the
+configured runtime policy.
+
 ## Success Criteria
 
 - **SC-001**: Baseline measurements identify the dominant cost for each selected
@@ -51,3 +85,12 @@ and only use a safe fallback after a real runtime failure.
 - **SC-002**: Chosen optimizations demonstrate a measurable improvement against
   that baseline with no behavioral regression.
 - **SC-003**: Full tests and existing cross-platform guards remain green.
+
+## Guardrails
+
+- Do not benchmark with `force_cpu=true` unless selected by the configuration.
+- Do not replace model/backend/device settings to improve a benchmark.
+- Do not count hidden lazy initialization as an improvement if first-use cost
+  regresses beyond the recorded baseline.
+- Capture changes preserve WAV content, sample rate, channel count, and
+  stop/cancel semantics.
