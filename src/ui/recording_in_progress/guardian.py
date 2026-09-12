@@ -65,59 +65,55 @@ class RecordingGuardianSettings:
 
 
 class SystemTrayPort(QObject):
-    """Availability-aware Qt tray adapter; harmless on unsupported desktops."""
+    """Availability-aware Qt tray adapter; harmless on unsupported desktops. Proxies to SystemTrayManager."""
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self._tray = None
-        self._menu = None
-        self._pause_action = None
-        self._stop_action = None
-        self._cancel_action = None
+        self._manager = None
+        
+    def _get_manager(self):
+        if self._manager:
+            return self._manager
+        app = QApplication.instance()
+        if app:
+            for widget in app.topLevelWidgets():
+                if hasattr(widget, "system_tray_manager"):
+                    self._manager = widget.system_tray_manager
+                    return self._manager
+        return None
 
     def start(self, stop_callback, pause_callback, cancel_callback):
         if not QSystemTrayIcon.isSystemTrayAvailable():
             return False
-        if self._tray is None:
-            icon = recording_tray_icon()
-            self._tray = QSystemTrayIcon(icon if not icon.isNull() else QIcon(), self)
-            self._menu = QMenu()
-            self._pause_action = self._menu.addAction("Pause Recording")
-            self._stop_action = self._menu.addAction("Stop and Save Recording")
-            self._cancel_action = self._menu.addAction("Cancel Recording")
-            self._tray.setContextMenu(self._menu)
-            self._pause_action.triggered.connect(pause_callback)
-            self._stop_action.triggered.connect(stop_callback)
-            self._cancel_action.triggered.connect(cancel_callback)
-        self.update_duration(0)
-        self._tray.show()
-        return True
+        
+        manager = self._get_manager()
+        if manager:
+            manager.bind_recording_actions(stop_callback, pause_callback, cancel_callback)
+            self.update_duration(0)
+            return True
+        return False
 
     def update_duration(self, elapsed_seconds):
-        if self._tray is not None:
-            self._tray.setToolTip(f"Recording in progress — {format_elapsed_time(elapsed_seconds)}")
+        manager = self._get_manager()
+        if manager:
+            manager.set_recording_tooltip(f"Recording in progress — {format_elapsed_time(elapsed_seconds)}")
 
     def set_paused(self, paused):
-        if self._pause_action is not None:
-            self._pause_action.setText("Resume Recording" if paused else "Pause Recording")
+        manager = self._get_manager()
+        if manager:
+            manager.set_recording_paused(paused)
 
     def notify(self, title, message):
-        if self._tray is None:
-            return False
-        self._tray.showMessage(title, message, QSystemTrayIcon.MessageIcon.Information)
-        return True
+        manager = self._get_manager()
+        if manager:
+            manager.show_message(title, message)
+            return True
+        return False
 
     def cleanup(self):
-        if self._tray is not None:
-            self._tray.hide()
-            self._tray.deleteLater()
-        if self._menu is not None:
-            self._menu.deleteLater()
-        self._tray = None
-        self._menu = None
-        self._pause_action = None
-        self._stop_action = None
-        self._cancel_action = None
+        manager = self._get_manager()
+        if manager:
+            manager.unbind_recording_actions()
 
 
 class RecordingSafetyGuardian(QObject):
