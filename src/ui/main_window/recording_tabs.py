@@ -150,6 +150,17 @@ class RecordingTabCoordinator:
             config=config,
             persistence=window.db,
         )
+
+        if hasattr(window, "system_tray_manager"):
+            window.system_tray_manager.set_recording_state(True)
+
+        def _on_finish_or_cancel(*args, **kwargs):
+            if hasattr(window, "system_tray_manager"):
+                window.system_tray_manager.set_recording_state(False)
+
+        rec_widget.finished.connect(_on_finish_or_cancel)
+        rec_widget.cancelled.connect(_on_finish_or_cancel)
+
         rec_widget.finished.connect(
             lambda path, finished_config, widget=rec_widget: self.on_recording_finished(
                 path, finished_config, widget

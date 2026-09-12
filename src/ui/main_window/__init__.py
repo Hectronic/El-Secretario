@@ -39,6 +39,7 @@ from src.ui.main_window.layout import build_main_window_layout
 from src.ui.main_window.window_lifecycle import MainWindowLifecycleCoordinator
 from src.ui.main_window.window_navigation import MainWindowNavigationCoordinator
 from src.ui.styles import apply_theme
+from src.ui.system_tray_manager import SystemTrayManager
 
 from src.ui.summary_task_queue import SummaryTaskQueueManager
 
@@ -97,6 +98,10 @@ class MainWindow(QMainWindow):
         self.floating_chat_hosts = []
 
         apply_theme()
+
+        self._force_quit = False
+        self.system_tray_manager = SystemTrayManager(self)
+        self.system_tray_manager.quit_requested.connect(self.force_quit)
 
         self.init_ui()
         bootstrap_main_window(self)
@@ -472,10 +477,21 @@ class MainWindow(QMainWindow):
     # open_maintenance_tab removed - now handled by open_tools_tab
 
     def closeEvent(self, event):
-        lifecycle = getattr(self, "window_lifecycle", None)
-        if lifecycle is not None:
-            lifecycle.cleanup_before_close()
-        super().closeEvent(event)
+        if hasattr(self, "_force_quit") and self._force_quit:
+            lifecycle = getattr(self, "window_lifecycle", None)
+            if lifecycle is not None:
+                lifecycle.cleanup_before_close()
+            super().closeEvent(event)
+        else:
+            # Minimize to tray instead of closing
+            event.ignore()
+            self.hide()
+            if hasattr(self, "system_tray_manager"):
+                self.system_tray_manager.toggle_window_action.setText("Show El Secretario")
+
+    def force_quit(self):
+        self._force_quit = True
+        self.close()
 
     def resizeEvent(self, event):
         super().resizeEvent(event)
