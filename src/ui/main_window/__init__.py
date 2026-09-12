@@ -477,7 +477,8 @@ class MainWindow(QMainWindow):
     # open_maintenance_tab removed - now handled by open_tools_tab
 
     def closeEvent(self, event):
-        if hasattr(self, "_force_quit") and self._force_quit:
+        tray_available = hasattr(self, "system_tray_manager") and getattr(self.system_tray_manager, "_tray_icon", None) is not None
+        if not tray_available or (hasattr(self, "_force_quit") and self._force_quit):
             lifecycle = getattr(self, "window_lifecycle", None)
             if lifecycle is not None:
                 lifecycle.cleanup_before_close()
@@ -486,7 +487,7 @@ class MainWindow(QMainWindow):
             # Minimize to tray instead of closing
             event.ignore()
             self.hide()
-            if hasattr(self, "system_tray_manager"):
+            if hasattr(self.system_tray_manager, "toggle_window_action"):
                 self.system_tray_manager.toggle_window_action.setText("Show El Secretario")
 
     def force_quit(self):

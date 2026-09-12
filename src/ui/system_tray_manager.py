@@ -20,16 +20,8 @@ class SystemTrayManager(QObject):
         self._init_tray_icon()
 
     def _init_tray_icon(self):
-        if not QSystemTrayIcon.isSystemTrayAvailable():
-            logging.warning("System tray is not available on this platform.")
-            return
-
-        # Ensure the app doesn't quit when the main window is closed
         if self.app:
             self.app.setQuitOnLastWindowClosed(False)
-
-        self._tray_icon = QSystemTrayIcon(self)
-        self._update_icon()
 
         self._menu = QMenu()
         
@@ -59,6 +51,13 @@ class SystemTrayManager(QObject):
         quit_action = QAction("Quit", self)
         quit_action.triggered.connect(self._on_quit_triggered)
         self._menu.addAction(quit_action)
+
+        if not QSystemTrayIcon.isSystemTrayAvailable():
+            logging.warning("System tray is not available on this platform.")
+            return
+
+        self._tray_icon = QSystemTrayIcon(self)
+        self._update_icon()
 
         self._tray_icon.setContextMenu(self._menu)
         self._tray_icon.activated.connect(self._on_tray_activated)
