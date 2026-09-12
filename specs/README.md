@@ -19,7 +19,7 @@ and `tasks.md`. All baseline tasks are complete.
 - `014-tools-data-management`
 - `015-recording-safety-guardian` — implemented and validated
 - `016-runtime-performance-baseline` — completed and validated
-- `017-stability-hardening` — planned
+- `017-stability-hardening` — completed and validated
 - `018-lightweight-runtime` — planned
 - `019-knowledge-workflows` — planned
 

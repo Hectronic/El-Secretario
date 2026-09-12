@@ -52,6 +52,7 @@ def _coordinator(state=None):
         start_next=Mock(),
         retain_worker=Mock(),
         is_fatal_transcription_failure=lambda message: "timed out" in message,
+        emit_terminal=Mock(),
     )
     return coordinator, events, completion_actions, timer
 
@@ -79,6 +80,7 @@ def test_fatal_transcription_error_is_skipped_and_not_failed():
     assert events == [("skipped", task, "Transcription subprocess timed out.")]
     coordinator.emit_skipped.assert_called_once_with(task, "Transcription subprocess timed out.")
     coordinator.emit_failed.assert_not_called()
+    coordinator.emit_terminal.assert_called_once()
 
 
 def test_worker_finish_releases_worker_and_starts_next_task():
@@ -96,6 +98,7 @@ def test_worker_finish_releases_worker_and_starts_next_task():
     coordinator.emit_finished.assert_called_once_with(task)
     coordinator.start_next.assert_called_once_with()
     assert events == [("finished", task, "")]
+    coordinator.emit_terminal.assert_called_once()
 
 
 def test_retry_wait_emits_state_and_starts_timer():

@@ -136,7 +136,9 @@ def test_queue_e2e_summary_chains_task_extraction_and_persists(qtbot, monkeypatc
     record_id = db.save("meeting.wav", "Transcript", 10.0, "Planning")
     db.update_tags(record_id, "work")
     statuses = []
+    terminals = []
     queue.task_status_update.connect(statuses.append)
+    queue.task_terminal.connect(terminals.append)
 
     try:
         assert queue.enqueue_recording_summary(record_id, "Transcript", "Planning")
@@ -158,6 +160,7 @@ def test_queue_e2e_summary_chains_task_extraction_and_persists(qtbot, monkeypatc
         assert "summary: started" in statuses
         assert "task_extraction: started" in statuses
         assert history_events.count("finished") >= 2
+        assert [outcome["status"] for outcome in terminals] == ["succeeded", "succeeded"]
     finally:
         queue.cancel_all()
 

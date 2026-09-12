@@ -55,6 +55,9 @@ def test_cleanup_before_close_stops_work_and_cleans_tabs_and_floating_chats():
     assert window.regen_worker is None
     assert window._pending_history_reload is False
     assert window._pending_tag_reload is False
+    coordinator.cleanup_before_close()
+    window.summary_task_queue.cancel_all.assert_called_once_with()
+    recorder.stop.assert_called_once_with()
 
 
 def test_change_and_resize_events_delegate_to_floating_chat_coordinator():

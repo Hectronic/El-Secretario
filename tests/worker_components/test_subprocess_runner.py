@@ -117,7 +117,7 @@ def test_run_backend_subprocess_timeout_kills_stubborn_process():
                 payload={"audio_path": "x.wav"},
                 timeout_seconds=5,
             )
-        except RuntimeError as exc:
+        except subprocess_runner.TranscriptionTimeoutError as exc:
             assert "timed out" in str(exc)
         else:
             raise AssertionError("expected timeout")
