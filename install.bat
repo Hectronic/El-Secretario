@@ -46,8 +46,21 @@ python -m pip install --upgrade pip
 python -m pip install -r requirements.txt
 
 echo ================================================
+echo Setting up OS Integration...
+
+set "SHORTCUT_PATH=%APPDATA%\Microsoft\Windows\Start Menu\Programs\El Secretario.lnk"
+set "TARGET_PATH=%INSTALL_DIR%\.venv\Scripts\pythonw.exe"
+set "WORKING_DIR=%INSTALL_DIR%"
+set "SCRIPT_ARGS=%INSTALL_DIR%\main.py"
+set "ICON_PATH=%INSTALL_DIR%\logo.ico"
+
+echo Creating Start Menu shortcut...
+powershell -NoProfile -ExecutionPolicy Bypass -Command "$wshell = New-Object -ComObject WScript.Shell; $shortcut = $wshell.CreateShortcut('%SHORTCUT_PATH%'); $shortcut.TargetPath = '%TARGET_PATH%'; $shortcut.Arguments = '%SCRIPT_ARGS%'; $shortcut.WorkingDirectory = '%WORKING_DIR%'; $shortcut.IconLocation = '%ICON_PATH%'; $shortcut.Save()"
+
+echo ================================================
 echo Installation complete!
-echo You can now run El Secretario by executing:
-echo cd /d "%INSTALL_DIR%" ^&^& .venv\Scripts\python.exe main.py
+echo El Secretario is now available in your Start Menu.
+echo Alternatively, you can run it via terminal:
+echo cd /d "%INSTALL_DIR%" ^&^& .venv\Scripts\pythonw.exe main.py
 echo ================================================
 pause

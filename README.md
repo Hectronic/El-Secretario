@@ -42,6 +42,8 @@ curl -sSfL https://raw.githubusercontent.com/Hectronic/El-Secretario/main/instal
 Invoke-WebRequest -Uri "https://raw.githubusercontent.com/Hectronic/El-Secretario/main/install.bat" -OutFile "install.bat"; .\install.bat
 ```
 
+> **Note on OS Integration:** The automated scripts will create a shortcut for El Secretario in your applications menu (Start Menu, Launchpad, or App Drawer) and taskbar. If you ever accidentally delete the shortcut, simply re-run the automated installation script to rebuild it.
+
 ### Manual Installation (from source)
 
 1.  **Clone the repository:**
