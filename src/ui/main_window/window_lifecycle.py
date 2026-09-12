@@ -10,6 +10,7 @@ class MainWindowLifecycleCoordinator:
 
     def __init__(self, window):
         self.window = window
+        self._cleanup_completed = False
 
     def handle_change_event(self, event):
         if event.type() in (
@@ -23,6 +24,10 @@ class MainWindowLifecycleCoordinator:
         self.window.chat_floating.reposition_floating_chat_bar()
 
     def cleanup_before_close(self):
+        if self._cleanup_completed:
+            logging.debug("MainWindow close cleanup already completed.")
+            return
+        self._cleanup_completed = True
         window = self.window
         logging.warning(
             "MainWindow.closeEvent triggered. tabs=%d queue_running=%s recorder_recording=%s",

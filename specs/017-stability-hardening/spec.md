@@ -1,6 +1,6 @@
 # SPEC-017: Stability Hardening And Failure Observability
 
-Status: Planned
+Status: Completed
 Owner: Runtime and application services
 Last updated: 2026-09-10
 

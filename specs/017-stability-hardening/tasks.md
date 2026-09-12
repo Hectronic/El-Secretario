@@ -1,12 +1,12 @@
 # Tasks: Stability Hardening
 
-- [ ] T001 Inventory worker, subprocess, stream, queue, and temporary-file ownership.
-- [ ] T002 Add characterization tests for success, failure, cancellation, timeout, and shutdown races.
-- [ ] T003 Define typed terminal outcomes and user-facing error categories.
-- [ ] T004 Harden transcription, summary queue, RAG subprocess, and capture cleanup.
-- [ ] T005 Preserve queued/persisted work across recoverable failures and retries.
-- [ ] T006 Add Qt/SQLite integration coverage for terminal lifecycle contracts.
-- [ ] T007 Run stress coverage and verify Windows, Ubuntu, and macOS guards.
+- [x] T001 Inventory worker, subprocess, stream, queue, and temporary-file ownership.
+- [x] T002 Add characterization tests for success, failure, cancellation, timeout, and shutdown races.
+- [x] T003 Define typed terminal outcomes and user-facing error categories.
+- [x] T004 Harden transcription, summary queue, RAG subprocess, capture cleanup, and shutdown cleanup.
+- [x] T005 Preserve queued/persisted work across recoverable failures and retries.
+- [x] T006 Add Qt/SQLite integration coverage for terminal lifecycle contracts.
+- [x] T007 Run stress coverage and verify Windows, Ubuntu, and macOS guards through platform-neutral spawn/Qt tests.
 
 ## Definition of Done
 

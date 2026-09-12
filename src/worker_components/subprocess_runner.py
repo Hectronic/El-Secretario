@@ -22,6 +22,25 @@ from PyQt6.QtCore import QThread
 from src.stt_providers.dispatcher import subprocess_transcribe_entry
 
 
+class TranscriptionCancelledError(RuntimeError):
+    pass
+
+
+class TranscriptionTimeoutError(RuntimeError):
+    pass
+
+
+def _stop_process(proc, *, force=False):
+    """Terminate an owned process without leaving its handle live."""
+    if proc is None or (not force and not proc.is_alive()):
+        return
+    proc.terminate()
+    proc.join(timeout=5)
+    if proc.is_alive():
+        proc.kill()
+        proc.join(timeout=5)
+
+
 def run_backend_subprocess(*, backend: str, payload: dict, timeout_seconds: int = 1800):
     ctx = mp.get_context("spawn")
     result_queue = ctx.Queue()
@@ -35,20 +54,12 @@ def run_backend_subprocess(*, backend: str, payload: dict, timeout_seconds: int 
             current_thread = QThread.currentThread()
             if current_thread is not None and hasattr(current_thread, "isInterruptionRequested"):
                 if current_thread.isInterruptionRequested():
-                    proc.terminate()
-                    proc.join(timeout=5)
-                    if proc.is_alive():
-                        proc.kill()
-                        proc.join(timeout=5)
-                    raise RuntimeError("Transcription cancelled.")
+                    _stop_process(proc, force=True)
+                    raise TranscriptionCancelledError("Transcription cancelled.")
 
             if start_time is not None and (time.monotonic() - start_time) >= timeout_seconds:
-                proc.terminate()
-                proc.join(timeout=5)
-                if proc.is_alive():
-                    proc.kill()
-                    proc.join(timeout=5)
-                raise RuntimeError("Transcription subprocess timed out.")
+                _stop_process(proc, force=True)
+                raise TranscriptionTimeoutError("Transcription subprocess timed out.")
 
             proc.join(timeout=1)
 
@@ -67,18 +78,10 @@ def run_backend_subprocess(*, backend: str, payload: dict, timeout_seconds: int 
 
         return result["segments"]
     finally:
-        try:
-            result_queue.close()
-        except Exception:
-            pass
-        try:
-            result_queue.join_thread()
-        except Exception:
-            pass
-        try:
-            proc.close()
-        except Exception:
-            pass
+        _stop_process(proc)
+        result_queue.close()
+        result_queue.join_thread()
+        proc.close()
 
 
 def run_transcription_in_subprocess(

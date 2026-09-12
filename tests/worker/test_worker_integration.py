@@ -45,12 +45,16 @@ def test_transcriber_thread_async_happy_path_with_real_qthread(qtbot, monkeypatc
         compute_type="int8",
         total_duration=1.0,
     )
+    terminals = []
+    thread.terminal.connect(terminals.append)
     with qtbot.waitSignal(thread.finished, timeout=3000) as blocker:
         thread.start()
 
     result = blocker.args[0]
     assert result["text"] == "hola"
     assert result["backend"] == "faster-whisper"
+    qtbot.waitUntil(lambda: len(terminals) == 1, timeout=1000)
+    assert terminals == [{"status": "succeeded", "operation_id": thread._terminal.operation_id, "user_message": "", "retryable": False, "preserved_work": True}]
 
 
 def test_transcriber_thread_interrupts_cleanly_without_finished(qtbot, monkeypatch, tmp_path):
@@ -75,6 +79,8 @@ def test_transcriber_thread_interrupts_cleanly_without_finished(qtbot, monkeypat
     finished_payloads: list[dict] = []
     thread.status_update.connect(statuses.append)
     thread.finished.connect(finished_payloads.append)
+    terminals = []
+    thread.terminal.connect(terminals.append)
 
     thread.start()
     qtbot.wait(20)
@@ -83,9 +89,30 @@ def test_transcriber_thread_interrupts_cleanly_without_finished(qtbot, monkeypat
     # Cross-thread Qt signals can be delivered after QThread reports stopped,
     # notably on macOS runners. Wait for the queued cancellation notification.
     qtbot.waitUntil(lambda: "Cancelled." in statuses, timeout=1000)
+    qtbot.waitUntil(lambda: len(terminals) == 1, timeout=1000)
 
     assert "Cancelled." in statuses
     assert finished_payloads == []
+    assert terminals[0]["status"] == "cancelled"
+    assert terminals[0]["retryable"] is True
+
+
+def test_transcriber_thread_timeout_emits_one_retryable_terminal_outcome(qtbot, monkeypatch, tmp_path):
+    audio_path = tmp_path / "timeout.wav"
+    _write_dummy_audio(audio_path)
+    monkeypatch.setattr(
+        "src.worker_components.transcriber_thread._run_transcription_in_subprocess",
+        lambda **_kwargs: (_ for _ in ()).throw(subprocess_runner.TranscriptionTimeoutError("timed out")),
+    )
+    thread = TranscriberThread(str(audio_path), device="cpu", compute_type="int8")
+    terminals = []
+    thread.terminal.connect(terminals.append)
+
+    thread.start()
+    qtbot.waitUntil(lambda: len(terminals) == 1, timeout=3000)
+
+    assert terminals[0]["status"] == "timed_out"
+    assert terminals[0]["retryable"] is True
 
 
 def test_subprocess_runner_real_process_reports_unsupported_backend():

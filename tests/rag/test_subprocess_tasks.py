@@ -8,6 +8,32 @@ from src.rag.subprocess_tasks import (
     rag_upsert_in_subprocess,
     run_json_subprocess_task,
 )
+
+
+def test_rag_subprocess_timeout_terminates_kills_and_closes_owned_process(monkeypatch):
+    class Process:
+        exitcode = 0
+        def __init__(self): self.alive = True; self.terminated = self.killed = self.closed = False
+        def start(self): pass
+        def join(self, timeout=None): pass
+        def is_alive(self): return self.alive
+        def terminate(self): self.terminated = True
+        def kill(self): self.killed = True; self.alive = False
+        def close(self): self.closed = True
+    class Context:
+        def __init__(self, process): self.process = process
+        def Process(self, **_kwargs): return self.process
+    process = Process()
+    monkeypatch.setattr(subprocess_tasks.mp, "get_context", lambda _name: Context(process))
+
+    result = subprocess_tasks.run_json_subprocess_task(
+        target=lambda *_args: None, payload={}, timeout_seconds=1, temp_prefix="rag_test_",
+        timeout_error="timeout", crash_error="crash %s", missing_result_error="missing",
+        operation_error="operation %s", setup_error="setup %s",
+    )
+
+    assert result is None
+    assert process.terminated and process.killed and process.closed
 from tests.rag import subprocess_targets
 
 
