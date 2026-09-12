@@ -30,16 +30,30 @@ Read this in [Español](README_ES.md) | [Asturianu](README_AST.md)
 
 ## Installation
 
+### Automated Installation (Recommended)
+
+**Linux / macOS:**
+```bash
+curl -sSfL https://raw.githubusercontent.com/Hectronic/El-Secretario/main/install.sh | bash
+```
+
+**Windows (PowerShell):**
+```powershell
+Invoke-WebRequest -Uri "https://raw.githubusercontent.com/Hectronic/El-Secretario/main/install.bat" -OutFile "install.bat"; .\install.bat
+```
+
+### Manual Installation (from source)
+
 1.  **Clone the repository:**
     ```bash
-    git clone https://github.com/hector/secretario.git
-    cd secretario
+    git clone https://github.com/Hectronic/El-Secretario.git
+    cd El-Secretario
     ```
 
 2.  **Create a virtual environment:**
     ```bash
-    python3 -m venv venv
-    source venv/bin/activate
+    python3 -m venv .venv
+    source .venv/bin/activate
     ```
 
 3.  **Install dependencies:**
