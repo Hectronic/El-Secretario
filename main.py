@@ -41,6 +41,22 @@ import logging
 
 if __name__ == "__main__":
     setup_logging()
+    
+    # Early Auto-Updater Check (SPEC-023)
+    try:
+        from src.auto_updater import is_auto_update_enabled, check_for_updates, perform_update
+        if is_auto_update_enabled():
+            print("[INFO] Checking for updates...")
+            is_behind, reqs_changed, msg = check_for_updates(timeout_sec=3)
+            if is_behind:
+                if perform_update(reqs_changed):
+                    print("[INFO] Update successfully applied. Restarting...")
+                    os.execv(sys.executable, [sys.executable] + sys.argv)
+            else:
+                print(f"[INFO] Auto-updater check finished: {msg}")
+    except Exception as e:
+        print(f"[WARNING] Early auto-update check failed: {e}")
+
     logging.info("Application starting...")
     app = QApplication(sys.argv)
     
