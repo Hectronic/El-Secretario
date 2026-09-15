@@ -103,24 +103,30 @@ class SystemTrayManager(QObject):
             self._tray_icon.showMessage(title, message, QSystemTrayIcon.MessageIcon.Information)
 
     def bind_recording_actions(self, stop_callback, pause_callback, cancel_callback):
+        if not hasattr(self, "pause_recording_action"):
+            return
         self._disconnect_all(self.pause_recording_action)
-        self._disconnect_all(self.stop_recording_action)
-        self._disconnect_all(self.cancel_recording_action)
-        
         self.pause_recording_action.triggered.connect(pause_callback)
-        self.stop_recording_action.triggered.connect(stop_callback)
-        self.cancel_recording_action.triggered.connect(cancel_callback)
-        
         self.pause_recording_action.setVisible(True)
+
+        self._disconnect_all(self.stop_recording_action)
+        self.stop_recording_action.triggered.connect(stop_callback)
         self.stop_recording_action.setVisible(True)
+
+        self._disconnect_all(self.cancel_recording_action)
+        self.cancel_recording_action.triggered.connect(cancel_callback)
         self.cancel_recording_action.setVisible(True)
 
     def unbind_recording_actions(self):
+        if not hasattr(self, "pause_recording_action"):
+            return
         self.pause_recording_action.setVisible(False)
-        self.stop_recording_action.setVisible(False)
-        self.cancel_recording_action.setVisible(False)
         self._disconnect_all(self.pause_recording_action)
+
+        self.stop_recording_action.setVisible(False)
         self._disconnect_all(self.stop_recording_action)
+
+        self.cancel_recording_action.setVisible(False)
         self._disconnect_all(self.cancel_recording_action)
 
     def _disconnect_all(self, action):
