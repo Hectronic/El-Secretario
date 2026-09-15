@@ -17,16 +17,11 @@ import os
 from dataclasses import dataclass
 from typing import Any
 
-from chromadb.config import Settings
-
 from src.rag.chroma_compat import (
     get_or_create_collection_compatible,
     suppress_sentencepiece_swig_deprecation_warnings,
 )
 
-suppress_sentencepiece_swig_deprecation_warnings()
-
-from chromadb.utils import embedding_functions
 from src.rag.fallback_store import InMemoryChromaClient
 
 
@@ -38,7 +33,10 @@ class ChromaStore:
     is_persistent: bool
 
 
-def create_embedding_function(embedding_module=embedding_functions):
+def create_embedding_function(embedding_module=None):
+    if embedding_module is None:
+        from chromadb.utils import embedding_functions
+        embedding_module = embedding_functions
     try:
         logging.info("Initializing embedding function (SentenceTransformer)...")
         return embedding_module.SentenceTransformerEmbeddingFunction(
@@ -58,10 +56,19 @@ def create_embedding_function(embedding_module=embedding_functions):
 def create_chroma_store(
     persist_directory: str,
     *,
-    chromadb_module,
-    embedding_module=embedding_functions,
-    settings_factory=Settings,
+    chromadb_module=None,
+    embedding_module=None,
+    settings_factory=None,
 ) -> ChromaStore:
+    suppress_sentencepiece_swig_deprecation_warnings()
+
+    if chromadb_module is None:
+        import chromadb
+        chromadb_module = chromadb
+    if settings_factory is None:
+        from chromadb.config import Settings
+        settings_factory = Settings
+
     os.makedirs(persist_directory, exist_ok=True)
     chroma_settings = settings_factory(anonymized_telemetry=False)
 

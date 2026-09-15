@@ -27,8 +27,9 @@ echo Installing El Secretario to %INSTALL_DIR%...
 if exist "%INSTALL_DIR%" (
     echo Directory already exists. Updating repository...
     cd /d "%INSTALL_DIR%"
-    git fetch origin main
-    git reset --hard origin/main
+    git stash
+    git pull origin main
+    git stash pop || echo Done
 ) else (
     echo Cloning repository...
     git clone -b main "%REPO_URL%" "%INSTALL_DIR%"
@@ -51,7 +52,7 @@ echo Setting up OS Integration...
 set "SHORTCUT_PATH=%APPDATA%\Microsoft\Windows\Start Menu\Programs\El Secretario.lnk"
 set "TARGET_PATH=%INSTALL_DIR%\.venv\Scripts\pythonw.exe"
 set "WORKING_DIR=%INSTALL_DIR%"
-set "SCRIPT_ARGS=%INSTALL_DIR%\main.py"
+set "SCRIPT_ARGS=""%INSTALL_DIR%\main.py"""
 set "ICON_PATH=%INSTALL_DIR%\logo.ico"
 
 echo Creating Start Menu shortcut...

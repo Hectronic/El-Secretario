@@ -12,8 +12,6 @@ from src.rag.chroma_compat import suppress_sentencepiece_swig_deprecation_warnin
 
 suppress_sentencepiece_swig_deprecation_warnings()
 
-import chromadb
-
 from src.rag.chroma_store import create_chroma_store
 from src.rag.documents import add_document as index_document
 from src.rag.documents import delete_document as remove_document
@@ -37,7 +35,7 @@ class RAGEngine:
         platform_name: Optional[str] = None,
         environment: Optional[Mapping[str, str]] = None,
         store_factory: Callable[..., Any] = create_chroma_store,
-        chromadb_module: Any = chromadb,
+        chromadb_module: Any = None,
     ):
         self.persist_directory = persist_directory
         policy = runtime_policy or RAGRuntimePolicy.resolve(

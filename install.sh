@@ -25,8 +25,9 @@ echo "Installing El Secretario to $INSTALL_DIR..."
 if [ -d "$INSTALL_DIR" ]; then
     echo "Directory already exists. Updating repository..."
     cd "$INSTALL_DIR"
-    git fetch origin main
-    git reset --hard origin/main
+    git stash
+    git pull origin main
+    git stash pop || true
 else
     echo "Cloning repository..."
     git clone -b main "$REPO_URL" "$INSTALL_DIR"
@@ -48,11 +49,42 @@ echo "================================================"
 echo "Setting up OS Integration..."
 
 if [ "$(uname)" == "Darwin" ]; then
-    # macOS: Create an AppleScript wrapper app
+    # macOS: Create a standard .app bundle
     APP_PATH="$HOME/Applications/El Secretario.app"
     echo "Creating macOS application at $APP_PATH..."
-    mkdir -p "$HOME/Applications"
-    osacompile -o "$APP_PATH" -e "do shell script \"cd '$INSTALL_DIR' && '$INSTALL_DIR/.venv/bin/python' main.py >/dev/null 2>&1 &\""
+    mkdir -p "$APP_PATH/Contents/MacOS"
+    mkdir -p "$APP_PATH/Contents/Resources"
+    
+    cat > "$APP_PATH/Contents/MacOS/El Secretario" << 'EOF'
+#!/bin/bash
+DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+INSTALL_DIR=$(defaults read "$DIR/../Info" InstallDir 2>/dev/null || echo "$HOME/Library/Application Support/El-Secretario")
+cd "$INSTALL_DIR"
+exec "$INSTALL_DIR/.venv/bin/python" main.py
+EOF
+    chmod +x "$APP_PATH/Contents/MacOS/El Secretario"
+
+    cat > "$APP_PATH/Contents/Info.plist" << EOF
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>CFBundleExecutable</key>
+    <string>El Secretario</string>
+    <key>CFBundleIconFile</key>
+    <string>applet.icns</string>
+    <key>CFBundleIdentifier</key>
+    <string>com.hectoralvarez.elsecretario</string>
+    <key>CFBundleName</key>
+    <string>El Secretario</string>
+    <key>CFBundlePackageType</key>
+    <string>APPL</string>
+    <key>InstallDir</key>
+    <string>$INSTALL_DIR</string>
+</dict>
+</plist>
+EOF
+
     # Replace default icon
     if [ -f "$INSTALL_DIR/logo.icns" ]; then
         cp "$INSTALL_DIR/logo.icns" "$APP_PATH/Contents/Resources/applet.icns"
@@ -72,6 +104,7 @@ Type=Application
 Name=El Secretario
 Comment=Intelligent audio transcription and organization tool
 Exec="$INSTALL_DIR/.venv/bin/python" "$INSTALL_DIR/main.py"
+Path=$INSTALL_DIR
 Icon=$INSTALL_DIR/logo.png
 Terminal=false
 Categories=Utility;AudioVideo;

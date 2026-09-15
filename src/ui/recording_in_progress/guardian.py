@@ -39,13 +39,21 @@ class RecordingGuardianSettings:
 
     @classmethod
     def from_settings(cls, settings):
+        try:
+            dur = int(settings.value("recording_guardian/duration_reminder_seconds", 3600))
+            if dur <= 0: raise ValueError
+        except (ValueError, TypeError):
+            dur = 3600
+        
+        try:
+            sil = int(settings.value("recording_guardian/silence_warning_seconds", 900))
+            if sil <= 0: raise ValueError
+        except (ValueError, TypeError):
+            sil = 900
+
         return cls(
-            duration_reminder_seconds=max(
-                1, int(settings.value("recording_guardian/duration_reminder_seconds", 3600))
-            ),
-            silence_warning_seconds=max(
-                1, int(settings.value("recording_guardian/silence_warning_seconds", 900))
-            ),
+            duration_reminder_seconds=dur,
+            silence_warning_seconds=sil,
             duration_reminders_enabled=settings.value(
                 "recording_guardian/duration_reminders_enabled", True, type=bool
             ),
