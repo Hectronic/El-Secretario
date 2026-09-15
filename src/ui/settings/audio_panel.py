@@ -110,9 +110,12 @@ class AudioSettingsPanel(QWidget):
         self.duration_reminder_spin = QSpinBox()
         self.duration_reminder_spin.setRange(1, 24 * 60)
         self.duration_reminder_spin.setSuffix(" minutes")
-        self.duration_reminder_spin.setValue(
-            max(1, int(self.settings.value("recording_guardian/duration_reminder_seconds", 3600)) // 60)
-        )
+        try:
+            dur = int(self.settings.value("recording_guardian/duration_reminder_seconds", 3600))
+            if dur <= 0: raise ValueError
+        except (ValueError, TypeError):
+            dur = 3600
+        self.duration_reminder_spin.setValue(max(1, dur // 60))
         form_layout.addRow("Active recording reminder:", self.duration_reminder_spin)
 
         self.duration_reminders_enabled_check = QCheckBox("Send active-recording reminders")
@@ -124,9 +127,12 @@ class AudioSettingsPanel(QWidget):
         self.silence_warning_spin = QSpinBox()
         self.silence_warning_spin.setRange(1, 24 * 60)
         self.silence_warning_spin.setSuffix(" minutes")
-        self.silence_warning_spin.setValue(
-            max(1, int(self.settings.value("recording_guardian/silence_warning_seconds", 900)) // 60)
-        )
+        try:
+            sil = int(self.settings.value("recording_guardian/silence_warning_seconds", 900))
+            if sil <= 0: raise ValueError
+        except (ValueError, TypeError):
+            sil = 900
+        self.silence_warning_spin.setValue(max(1, sil // 60))
         form_layout.addRow("No-audio warning:", self.silence_warning_spin)
 
         self.silence_warnings_enabled_check = QCheckBox("Warn when no audio is detected")

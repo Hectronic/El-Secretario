@@ -120,6 +120,26 @@ class SchemaManager:
                     )
                 ''')
 
+                cursor.execute('''
+                    CREATE TABLE IF NOT EXISTS rag_index_status (
+                        source_id TEXT PRIMARY KEY,
+                        content_fingerprint TEXT,
+                        status TEXT,
+                        indexed_at DATETIME DEFAULT CURRENT_TIMESTAMP
+                    )
+                ''')
+
+                cursor.execute('''
+                    CREATE TABLE IF NOT EXISTS summary_queue_jobs (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        record_id INTEGER,
+                        task_type TEXT,
+                        payload TEXT,
+                        status TEXT,
+                        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+                    )
+                ''')
+
                 # Migration: Add columns if they don't exist
                 cursor.execute("PRAGMA table_info(records)")
                 columns = [column[1] for column in cursor.fetchall()]

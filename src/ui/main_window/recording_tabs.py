@@ -152,7 +152,8 @@ class RecordingTabCoordinator:
         )
 
         if hasattr(window, "system_tray_manager"):
-            window.system_tray_manager.set_recording_state(True)
+            if rec_widget.recording_started:
+                window.system_tray_manager.set_recording_state(True)
 
         def _on_finish_or_cancel(*args, **kwargs):
             if hasattr(window, "system_tray_manager"):

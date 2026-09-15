@@ -114,3 +114,13 @@ def test_guardian_can_disable_reminders_and_tray_notifications(qtbot, tmp_path):
     guardian.tick(5)
 
     assert tray.notifications == []
+
+def test_guardian_normalizes_invalid_settings(tmp_path):
+    settings = _settings(
+        tmp_path,
+        recording_guardian__duration_reminder_seconds="invalid",
+        recording_guardian__silence_warning_seconds=-10,
+    )
+    guardian = RecordingSafetyGuardian(settings, tray_port=_TrayPort())
+    assert guardian.policy.duration_reminder_seconds == 3600
+    assert guardian.policy.silence_warning_seconds == 900

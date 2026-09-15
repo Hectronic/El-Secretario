@@ -1,6 +1,6 @@
 # SPEC-018: Lightweight Installation And Lazy Runtime
 
-Status: Planned
+Status: Implemented
 Owner: Runtime bootstrap and integration boundaries
 Last updated: 2026-09-10
 

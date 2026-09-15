@@ -13,7 +13,7 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 import logging
-from PyQt6.QtWidgets import QMainWindow
+from PyQt6.QtWidgets import QMainWindow, QApplication
 from PyQt6.QtCore import QTimer
 from PyQt6.QtGui import QIcon
 
@@ -493,6 +493,9 @@ class MainWindow(QMainWindow):
     def force_quit(self):
         self._force_quit = True
         self.close()
+        app = QApplication.instance()
+        if app:
+            app.quit()
 
     def resizeEvent(self, event):
         super().resizeEvent(event)

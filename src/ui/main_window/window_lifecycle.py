@@ -27,7 +27,6 @@ class MainWindowLifecycleCoordinator:
         if self._cleanup_completed:
             logging.debug("MainWindow close cleanup already completed.")
             return
-        self._cleanup_completed = True
         window = self.window
         logging.warning(
             "MainWindow.closeEvent triggered. tabs=%d queue_running=%s recorder_recording=%s",
@@ -44,6 +43,7 @@ class MainWindowLifecycleCoordinator:
         self._cleanup_tabs_and_floating_chats()
         self._stop_recorder()
         self._release_optional_gpu_cache()
+        self._cleanup_completed = True
         logging.warning("MainWindow.closeEvent cleanup completed.")
 
     def _stop_search_thread(self):
@@ -52,7 +52,8 @@ class MainWindowLifecycleCoordinator:
             try:
                 search_thread.requestInterruption()
                 search_thread.quit()
-                search_thread.wait(3000)
+                if not search_thread.wait(3000):
+                    logging.error("Search thread abandoned: failed to terminate within 3 seconds.")
             except Exception:
                 logging.exception("Failed stopping search thread during closeEvent.")
         self.window.search_thread = None

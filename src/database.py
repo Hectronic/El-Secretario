@@ -18,6 +18,8 @@
 from .persistence import (
     ChatSessionsRepository,
     PersistenceBase,
+    QueueJobsRepository,
+    RAGIndexRepository,
     RecordsRepository,
     SchemaManager,
     SummariesRepository,
@@ -32,6 +34,8 @@ class DBManager(
     TranscriptionLogsRepository,
     SummariesRepository,
     TasksRepository,
+    RAGIndexRepository,
+    QueueJobsRepository,
     SchemaManager,
     PersistenceBase,
 ):

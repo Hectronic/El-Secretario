@@ -59,6 +59,14 @@ class SummaryTaskQueueManager(QObject):
         self.db = persistence if persistence is not None else DBManager()
         self.rag_engine = None
         self._wait_state = QueueRetryWaitState()
+
+        # Load pending jobs from durable storage
+        try:
+            pending_jobs = self.db.load_queue_jobs()
+            for job in pending_jobs:
+                self._state.pending.append(job)
+        except Exception as e:
+            logging.error(f"Failed to load queue jobs from DB: {e}")
         self._wait_timer = QTimer(self)
         self._wait_timer.setInterval(1000)
         self._wait_timer.timeout.connect(self._tick_wait_timer)
@@ -275,6 +283,11 @@ class SummaryTaskQueueManager(QObject):
         self._append_history("skipped", task, reason)
 
     def _emit_queue_state(self):
+        try:
+            # We save both pending and the current task (if we wanted to resume running, but we only resume pending right now)
+            self.db.save_queue_jobs(list(self._state.pending))
+        except Exception as e:
+            logging.error(f"Failed to save queue jobs to DB: {e}")
         self.queue_changed.emit(self.pending_count, self._current_worker is not None)
 
     def _start_next_if_idle(self):

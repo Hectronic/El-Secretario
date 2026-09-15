@@ -356,7 +356,7 @@ def test_parse_semantic_query_results_filters_deleted_and_fills_distance():
         "distances": [[0.2, 0.9]],
     }
     parsed = _parse_semantic_query_results(raw)
-    assert parsed == [{"id": "1", "text": "hello", "metadata": {"deleted": "0"}, "distance": 0.2}]
+    assert parsed == [{"id": "1", "text": "hello", "metadata": {"deleted": "0"}, "distance": 0.2, "retrieval_mode": "semantic"}]
 
     raw_no_dist = {
         "ids": [["x"]],

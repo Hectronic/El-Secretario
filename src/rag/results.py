@@ -39,6 +39,7 @@ def parse_semantic_query_results(results: Dict[str, Any]) -> List[Dict[str, Any]
                 "text": docs[i] if i < len(docs) else "",
                 "metadata": metadata or {},
                 "distance": dists[i] if i < len(dists) else 0.0,
+                "retrieval_mode": "semantic",
             }
         )
     return parsed_results
@@ -63,6 +64,7 @@ def keyword_rank_raw_results(raw: Dict[str, Any], query: str, n_results: int) ->
                 "text": text or "",
                 "metadata": metadata or {},
                 "distance": float(-score),
+                "retrieval_mode": "keyword_fallback",
             }
         )
     scored.sort(key=lambda r: r["distance"])
