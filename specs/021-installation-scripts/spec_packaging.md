@@ -76,6 +76,42 @@ These installers must install the application in a way that respects standard sy
     - Executes the virtual environment python with the `auto_updater.py` script, then runs `main.py`.
     - This adheres perfectly to macOS security guidelines (as `/Applications` is read-only for regular users, but `~/Library/Application Support` has full user-space write access for seamless auto-updates).
 
+## Root Folder Cleanup & Organization
+
+To maintain a clean, enterprise-grade codebase, the root folder of the repository should be streamlined. Cluttered scripts, assets, build configurations, and debug helpers will be reorganized as follows:
+
+### 1. Retention in Root Directory
+Only critical project files and entry points remain in the root folder:
+- `main.py` (Core entry point)
+- `requirements.txt` (Dependencies pin)
+- `run.sh` / `run.bat` (Quick-run developer wrappers)
+- Essential documentation: `README.md`, `README_ES.md`, `README_AST.md`, `CONTRIBUTING.md`, `LICENSE`, `PROJECT_EVOLUTION.md`, `AGENTS.md`, `GEMINI.md`.
+
+### 2. Assets Folder (`resources/`)
+Move the following visual assets from the root to `resources/`:
+- `logo.png`, `logo.ico`, `logo.icns`
+- Update any direct paths inside the source code (e.g., in `main.py`, `MainWindow` icon configuration, macOS bundle configs, and `.desktop` templates) to use the new `resources/` path relative to the application base.
+
+### 3. Build & Packaging Folder (`scripts/build/`)
+Move build-related and native installer compiling files to `scripts/build/`:
+- `build_ubuntu.sh`
+- `build_windows.bat`
+- `ElSecretario.spec` (PyInstaller specification)
+- Standard OS install scripts: `install.sh`, `install.bat` (Moved to `scripts/install/` with root-level redirection or clear documentation).
+
+### 4. Development & Pipeline Scripts (`scripts/`)
+Move general development wrappers and pipeline validation scripts to `scripts/`:
+- `reinstall_and_run.sh` / `reinstall_and_run.bat`
+- `run_with_test.sh`
+- `verify_pipeline.sh`
+
+### 5. Debug Helpers (`debug/`)
+Move isolated troubleshooting and debugging scripts to `debug/`:
+- `debug_flow.py`
+- `debug_mainwindow.py`
+- `debug_tasks_widget.py`
+- `debug_tests.sh`
+
 ## Acceptance Criteria
 
 - **Debian Package:**

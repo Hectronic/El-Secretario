@@ -10,3 +10,5 @@ Last updated: 2026-09-15
 - [ ] T005 Construct macOS `.app` shell bundle and shell launcher with user-space application support folder isolation.
 - [ ] T006 Compile macOS `.app` bundle into a clean drag-and-drop `.dmg` installer.
 - [ ] T007 Build validation suite to test "Enable Auto-Updates" settings toggling across all three packaged environments.
+- [ ] T008 Reorganize root folder: create resources/, debug/, scripts/build/, and scripts/install/ folders and migrate respective files.
+- [ ] T009 Refactor file path resolution in main.py, setup_actions.py, and launcher templates to support the relocated assets folder.

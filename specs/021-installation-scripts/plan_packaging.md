@@ -30,3 +30,11 @@ Spec: [spec_packaging.md](spec_packaging.md)
 ### Phase 4: Full Validation & Testing
 - Validate the auto-update checkbox toggling from settings under each platform's native installation.
 - Verify that developers can safely override updates using `DISABLE_AUTO_UPDATE=1`.
+
+### Phase 5: Root Folder Reorganization & Cleanup
+- Create folders `resources/`, `debug/`, `scripts/build/`, and `scripts/install/`.
+- Move visual assets (`logo.png`, `logo.ico`, `logo.icns`) to `resources/` and update references inside code.
+- Move troubleshooting scripts to `debug/`.
+- Move build configurations to `scripts/build/`.
+- Move install helpers to `scripts/install/` and other runner wrappers to `scripts/`.
+- Ensure `run.sh` / `run.bat` remain in the root directory as clean, zero-friction developer launchers.
