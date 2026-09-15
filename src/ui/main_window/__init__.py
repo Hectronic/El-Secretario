@@ -490,6 +490,15 @@ class MainWindow(QMainWindow):
             if hasattr(self.system_tray_manager, "toggle_window_action"):
                 self.system_tray_manager.toggle_window_action.setText("Show El Secretario")
 
+    def restart_app(self):
+        """Clean up resources and restart El Secretario using the same environment."""
+        lifecycle = getattr(self, "window_lifecycle", None)
+        if lifecycle is not None:
+            lifecycle.cleanup_before_close()
+        import os
+        import sys
+        os.execv(sys.executable, [sys.executable] + sys.argv)
+
     def force_quit(self):
         self._force_quit = True
         self.close()

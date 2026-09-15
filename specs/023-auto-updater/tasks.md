@@ -1,8 +1,8 @@
 # Tasks: Auto Updater
 
-Status: Draft
+Status: Completed
 Last updated: 2026-09-15
 
-- [ ] T001 Design updater architecture.
-- [ ] T002 Implement background version check.
-- [ ] T003 Integrate updater with UI.
+- [x] T001 Design updater architecture.
+- [x] T002 Implement background version check.
+- [x] T003 Integrate updater with UI.

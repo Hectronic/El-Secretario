@@ -169,6 +169,26 @@ class GeneralSettingsPanel(QWidget):
         info_label.setStyleSheet("color: gray; font-size: 13px; margin-top: 10px;")
         layout.addWidget(info_label)
 
+        # Auto-Updater (SPEC-023)
+        updater_section_label = QLabel("🔄 Auto-Updater")
+        updater_section_label.setStyleSheet("font-size: 18px; font-weight: bold; color: #607D8B; margin-top: 20px;")
+        layout.addWidget(updater_section_label)
+
+        self.enable_update_check = QCheckBox("Enable automatic updates on startup")
+        self.enable_update_check.setChecked(
+            self.settings.value("enable_auto_update", True, type=bool)
+        )
+        layout.addWidget(self.enable_update_check)
+
+        updater_row = QHBoxLayout()
+        self.check_update_btn = QPushButton("Check for Updates")
+        self.check_update_btn.clicked.connect(self._check_for_updates)
+        self.updater_status_label = QLabel("Click to check for updates.")
+        self.updater_status_label.setStyleSheet("color: gray; font-size: 13px;")
+        updater_row.addWidget(self.check_update_btn)
+        updater_row.addWidget(self.updater_status_label, 1)
+        layout.addLayout(updater_row)
+
         # OS Integration (SPEC-022 T003)
         os_section_label = QLabel("🖥️ OS Integration")
         os_section_label.setStyleSheet("font-size: 18px; font-weight: bold; color: #607D8B; margin-top: 20px;")
@@ -198,6 +218,59 @@ class GeneralSettingsPanel(QWidget):
         except Exception as e:
             from PyQt6.QtWidgets import QMessageBox
             QMessageBox.warning(self, "Repair Failed", f"Failed to run installer script: {e}")
+
+    def _check_for_updates(self):
+        self.check_update_btn.setEnabled(False)
+        self.updater_status_label.setText("Checking for updates...")
+        self.updater_status_label.setStyleSheet("color: blue; font-size: 13px;")
+        
+        from src.ui.main_window.update_checker import UpdateCheckerThread
+        self.update_thread = UpdateCheckerThread(self)
+        self.update_thread.update_checked.connect(self._on_update_checked)
+        self.update_thread.start()
+
+    def _on_update_checked(self, is_behind, reqs_changed, msg):
+        self.check_update_btn.setEnabled(True)
+        if is_behind:
+            self.updater_status_label.setText("Update available!")
+            self.updater_status_label.setStyleSheet("color: green; font-weight: bold; font-size: 13px;")
+            
+            from PyQt6.QtWidgets import QMessageBox
+            reply = QMessageBox.question(
+                self,
+                "Update Available",
+                "An update is available for El Secretario. Would you like to restart the application now to apply it?",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.Yes
+            )
+            if reply == QMessageBox.StandardButton.Yes:
+                self.updater_status_label.setText("Applying update...")
+                QApplication.processEvents()
+                from src.auto_updater import perform_update
+                if perform_update(reqs_changed):
+                    # Find top-level MainWindow and restart
+                    parent = self.parent()
+                    while parent is not None:
+                        from src.ui.main_window import MainWindow
+                        if isinstance(parent, MainWindow):
+                            parent.restart_app()
+                            return
+                        parent = parent.parent()
+                    
+                    import os
+                    import sys
+                    os.execv(sys.executable, [sys.executable] + sys.argv)
+                else:
+                    QMessageBox.warning(self, "Update Failed", "Failed to apply updates. Please try again later.")
+                    self.updater_status_label.setText("Update failed.")
+                    self.updater_status_label.setStyleSheet("color: red; font-size: 13px;")
+        else:
+            if "Up to date" in msg:
+                self.updater_status_label.setText("El Secretario is up to date.")
+                self.updater_status_label.setStyleSheet("color: green; font-size: 13px;")
+            else:
+                self.updater_status_label.setText(f"Check finished: {msg}")
+                self.updater_status_label.setStyleSheet("color: gray; font-size: 13px;")
 
     def _on_provider_changed(self):
         """Show/hide provider-specific settings based on selection."""
@@ -270,5 +343,9 @@ class GeneralSettingsPanel(QWidget):
         self.settings.setValue(
             "startup_enqueue_previous_daily_summary",
             self.startup_prev_daily_check.isChecked(),
+        )
+        self.settings.setValue(
+            "enable_auto_update",
+            self.enable_update_check.isChecked(),
         )
         apply_theme(selected_theme)
