@@ -1,6 +1,6 @@
 # SPEC-021: Cross-Platform Installation Scripts
 
-Status: Draft
+Status: Implemented
 Owner: TBD
 Last updated: 2026-09-12
 

@@ -36,7 +36,7 @@ def test_in_process_search_builds_filter_and_maps_results():
         "id": "one",
         "text": "planning notes",
         "metadata": {"deleted": "0"},
-        "distance": 0.25,
+        "distance": 0.25, "retrieval_mode": "semantic",
     }]
     assert collection.calls[0]["where"] == {
         "$and": [{"source": "note", "id": "one"}, {"deleted": {"$ne": "1"}}]

@@ -92,8 +92,11 @@ def build_chat_context_text(db, notebook_db, rag, query, context_panel, forced_r
         try:
             results = rag.search(query, n_results=5, ids=rag_ids)
             for r in results:
+                mode_str = ""
+                if r.get("retrieval_mode") == "keyword_fallback":
+                    mode_str = " (Búsqueda semántica fallida: degradado a palabras clave)"
                 context_text_parts.append(
-                    f"[Fragmento relevante: {r['metadata'].get('title', 'Desconocido')}]\n{r['text']}"
+                    f"[Fragmento relevante{mode_str}: {r['metadata'].get('title', 'Desconocido')}]\n{r['text']}"
                 )
         except Exception:
             logging.exception("RAG search failed while building chat context")

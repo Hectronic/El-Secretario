@@ -1,6 +1,6 @@
 # SPEC-020: System Tray Icon
 
-Status: Draft
+Status: Implemented
 Owner: TBD
 Last updated: 2026-09-12
 

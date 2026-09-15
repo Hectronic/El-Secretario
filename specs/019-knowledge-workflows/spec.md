@@ -1,6 +1,6 @@
 # SPEC-019: Reliable Knowledge Workflows
 
-Status: Planned
+Status: Implemented
 Owner: RAG, summaries, chat, and task workflows
 Last updated: 2026-09-10
 

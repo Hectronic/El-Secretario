@@ -169,9 +169,35 @@ class GeneralSettingsPanel(QWidget):
         info_label.setStyleSheet("color: gray; font-size: 13px; margin-top: 10px;")
         layout.addWidget(info_label)
 
+        # OS Integration (SPEC-022 T003)
+        os_section_label = QLabel("🖥️ OS Integration")
+        os_section_label.setStyleSheet("font-size: 18px; font-weight: bold; color: #607D8B; margin-top: 20px;")
+        layout.addWidget(os_section_label)
+        
+        self.repair_shortcuts_btn = QPushButton("Repair Desktop / App Shortcuts")
+        self.repair_shortcuts_btn.setToolTip("Re-generate OS desktop/app launcher shortcuts.")
+        self.repair_shortcuts_btn.clicked.connect(self._repair_shortcuts)
+        layout.addWidget(self.repair_shortcuts_btn)
+
         layout.addStretch()
 
         self._on_provider_changed()
+
+    def _repair_shortcuts(self):
+        import subprocess
+        import os
+        import platform
+        try:
+            if platform.system() == "Windows":
+                script = "install.bat"
+            else:
+                script = "./install.sh"
+            subprocess.Popen([script], cwd=os.getcwd(), shell=platform.system() == "Windows")
+            from PyQt6.QtWidgets import QMessageBox
+            QMessageBox.information(self, "Shortcuts Repaired", "OS shortcuts repair triggered successfully.")
+        except Exception as e:
+            from PyQt6.QtWidgets import QMessageBox
+            QMessageBox.warning(self, "Repair Failed", f"Failed to run installer script: {e}")
 
     def _on_provider_changed(self):
         """Show/hide provider-specific settings based on selection."""

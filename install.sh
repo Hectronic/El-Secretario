@@ -1,13 +1,21 @@
 #!/usr/bin/env bash
-set -e
+check_success() {
+    if [ $? -ne 0 ]; then
+        echo >&2 "================================================"
+        echo >&2 "Error: $1"
+        echo >&2 "Please fix the issue and run the installer again."
+        echo >&2 "================================================"
+        exit 1
+    fi
+}
 
 echo "================================================"
 echo "      El Secretario - Installation Script       "
 echo "================================================"
 
 # Check dependencies
-command -v git >/dev/null 2>&1 || { echo >&2 "Error: git is required but it's not installed. Aborting."; exit 1; }
-command -v python3 >/dev/null 2>&1 || { echo >&2 "Error: python3 is required but it's not installed. Aborting."; exit 1; }
+command -v git >/dev/null 2>&1 || { echo >&2 "Error: git is required but it's not installed. Install git via your package manager and try again."; exit 1; }
+command -v python3 >/dev/null 2>&1 || { echo >&2 "Error: python3 is required but it's not installed. Install python3 (e.g. sudo apt install python3) and try again."; exit 1; }
 
 # Define installation directory
 if [ "$(uname)" == "Darwin" ]; then
@@ -24,26 +32,26 @@ echo "Installing El Secretario to $INSTALL_DIR..."
 
 if [ -d "$INSTALL_DIR" ]; then
     echo "Directory already exists. Updating repository..."
-    cd "$INSTALL_DIR"
+    cd "$INSTALL_DIR" || check_success "Could not enter directory $INSTALL_DIR"
     git stash
-    git pull origin main
+    git pull origin main || check_success "Failed to pull updates from GitHub. Check your internet connection."
     git stash pop || true
 else
     echo "Cloning repository..."
-    git clone -b main "$REPO_URL" "$INSTALL_DIR"
-    cd "$INSTALL_DIR"
+    git clone -b main "$REPO_URL" "$INSTALL_DIR" || check_success "Failed to clone repository from GitHub. Check your internet connection."
+    cd "$INSTALL_DIR" || check_success "Could not enter directory $INSTALL_DIR"
 fi
 
 echo "Setting up Python virtual environment..."
 if [ ! -d ".venv" ]; then
-    python3 -m venv .venv
+    python3 -m venv .venv || check_success "Failed to create Python virtual environment. Ensure python3-venv is installed (e.g. sudo apt install python3-venv)."
 fi
 
-source .venv/bin/activate
+source .venv/bin/activate || check_success "Failed to activate Python virtual environment."
 
 echo "Installing dependencies..."
-python3 -m pip install --upgrade pip
-python3 -m pip install -r requirements.txt
+python3 -m pip install --upgrade pip || check_success "Failed to upgrade pip."
+python3 -m pip install -r requirements.txt || check_success "Failed to install Python dependencies. Check requirements.txt or your internet connection."
 
 echo "================================================"
 echo "Setting up OS Integration..."

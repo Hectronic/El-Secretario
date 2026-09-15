@@ -11,8 +11,8 @@ def test_parse_semantic_query_results_skips_deleted_and_tolerates_missing_fields
     }
 
     assert parse_semantic_query_results(raw) == [
-        {"id": "1", "text": "hello", "metadata": {"deleted": "0"}, "distance": 0.2},
-        {"id": "3", "text": "", "metadata": {}, "distance": 0.0},
+        {"id": "1", "text": "hello", "metadata": {"deleted": "0"}, "distance": 0.2, "retrieval_mode": "semantic"},
+        {"id": "3", "text": "", "metadata": {}, "distance": 0.0, "retrieval_mode": "semantic"},
     ]
 
 
