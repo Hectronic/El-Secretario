@@ -18,6 +18,8 @@
 from .base import PersistenceBase
 from .chats import ChatSessionsRepository
 from .logs import TranscriptionLogsRepository
+from .queue import QueueJobsRepository
+from .rag import RAGIndexRepository
 from .records import RecordsRepository
 from .schema import SchemaManager
 from .summaries import SummariesRepository
@@ -31,4 +33,6 @@ __all__ = [
     "TranscriptionLogsRepository",
     "SummariesRepository",
     "TasksRepository",
+    "RAGIndexRepository",
+    "QueueJobsRepository",
 ]

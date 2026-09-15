@@ -80,7 +80,7 @@ class RuntimeStartupCoordinator:
         try:
             from src.rag_engine import RAGEngine
 
-            window.rag = RAGEngine(persist_directory=persist_dir)
+            window.rag = RAGEngine(persist_directory=persist_dir, db=window.db)
             window.summary_task_queue.set_rag_engine(window.rag)
             self.propagate_rag_engine_to_open_tabs()
             window.handle_status_message(f"RAG ready ({reason}).")

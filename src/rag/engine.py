@@ -36,8 +36,10 @@ class RAGEngine:
         environment: Optional[Mapping[str, str]] = None,
         store_factory: Callable[..., Any] = create_chroma_store,
         chromadb_module: Any = None,
+        db: Any = None,
     ):
         self.persist_directory = persist_directory
+        self.db = db
         policy = runtime_policy or RAGRuntimePolicy.resolve(
             platform_name or platform.system(), environment if environment is not None else os.environ
         )
@@ -66,6 +68,14 @@ class RAGEngine:
             use_subprocess=self._subprocess_upsert_mode,
             upsert_in_subprocess=rag_upsert_in_subprocess,
         )
+        if hasattr(self, 'db') and self.db is not None:
+            import hashlib
+            fingerprint = hashlib.sha256(text.encode('utf-8')).hexdigest()
+            try:
+                self.db.upsert_rag_index_status(str(doc_id), fingerprint, 'indexed')
+            except Exception as e:
+                import logging
+                logging.error(f"Failed to update rag_index_status for {doc_id}: {e}")
 
     def search(
         self,
