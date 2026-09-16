@@ -114,6 +114,22 @@ Stops the current recording session, triggers the transcription queue, and saves
 
 ### 4. Tasks Board Endpoints
 
+#### `GET /api/v1/tasks`
+Retrieves a list of all active task cards on the board.
+- **Response Code:** `200 OK`
+- **Payload:**
+  ```json
+  [
+    {
+      "id": 105,
+      "title": "Review spec-021 PR",
+      "description": "Verify installers on multiple environments.",
+      "due_date": "2026-09-18",
+      "completed": false
+    }
+  ]
+  ```
+
 #### `POST /api/v1/tasks`
 Programmatically inserts a new task card onto the tasks board database.
 - **Request Payload:**
@@ -131,6 +147,29 @@ Programmatically inserts a new task card onto the tasks board database.
     "success": true,
     "task_id": 105,
     "message": "Task created successfully on the board."
+  }
+  ```
+
+### 5. Search / Knowledge Endpoints
+
+#### `GET /api/v1/search`
+Queries El Secretario's transcripts and notes using semantic (RAG) and keyword search.
+- **Parameters:**
+  - `query` (Query parameter, string, required)
+- **Response Code:** `200 OK` / `400 Bad Request` (if query missing)
+- **Payload:**
+  ```json
+  {
+    "query": "installer tasks",
+    "results": [
+      {
+        "source": "recording",
+        "source_id": 42,
+        "title": "Weekly Team Sync",
+        "text": "...discussing installer scripts and native packages...",
+        "relevance_score": 0.89
+      }
+    ]
   }
   ```
 

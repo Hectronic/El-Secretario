@@ -1,47 +1,136 @@
-# SPEC-025: MCP Server Integration
+# SPEC-025: Model Context Protocol (MCP) Server Integration
 
-Status: Draft
-Owner: TBD
-Last updated: 2026-09-12
+Status: Approved
+Owner: Héctor Álvarez López <hectoralvarez.me>
+Last updated: 2026-09-15
 
 ## Problem
 
-Users want to use advanced AI assistants and agents (like Claude Desktop, Antigravity, or other MCP-compatible clients) to interact with the knowledge accumulated in "El Secretario". To achieve this seamlessly, "El Secretario" needs to act as a Model Context Protocol (MCP) server, exposing its transcriptions, recordings, tasks, and summarization capabilities as standard MCP Resources and Tools.
+Users of advanced AI agents and developer-focused chat clients (such as Claude Desktop, Cursor, or other MCP-compatible orchestration environments) want to directly interact with the rich meeting transcriptions, summaries, RAG-indexed knowledge, and task boards accumulated inside "El Secretario".
+
+Rather than forcing the user to manually export data or copy-paste text, "El Secretario" needs to operate as a standardized Model Context Protocol (MCP) server. Exposing its data and actions as standard MCP Resources and Tools allows external local LLMs to reason with and trigger actions inside the app in real-time.
 
 ## Scope
 
-- In scope: 
-  - Implementation of an MCP server utilizing the official Python MCP SDK.
-  - Integration with the Local REST API (SPEC-024) to fetch live data and trigger actions without duplicating business logic or risking database locks.
-  - Exposing specific **Resources**: `secretario://transcriptions/{id}`, `secretario://tasks/active`.
-  - Exposing specific **Tools**: `search_transcriptions`, `get_latest_summary`, `create_task`, `start_recording`.
-  - A UI toggle in the application's Settings to enable or disable the MCP Server functionality.
-- Out of scope: Implementing the MCP client side, handling complex real-time audio streaming over MCP (only metadata and text are exposed).
+- **In scope:**
+  - A standalone, stdio-transport Python script `src/api/mcp_server.py` that utilizes the official Python Model Context Protocol SDK.
+  - Integration with the Local REST API (SPEC-024) acting as a secure, fast, and loopback HTTP client proxy, completely preventing direct SQLite file locks, race conditions, or Qt thread memory corruption.
+  - **Exposing Resources:**
+    - `secretario://transcriptions` (List of metadata for all saved recordings).
+    - `secretario://transcriptions/{id}` (Raw text content, notes, and summaries of a specific meeting).
+    - `secretario://tasks/active` (Detailed list of active tasks on the board).
+  - **Exposing Tools:**
+    - `search_knowledge(query)` (Queries the semantic RAG database and keyword search via the API).
+    - `start_recording()` (Remotely starts recording in the active GUI).
+    - `stop_recording()` (Stops recording, initiates transcription, and saves the file).
+    - `create_task(title, description, due_date)` (Remotely inserts a task card on the board).
+  - A settings general panel checkbox toggle (`enable_mcp_integration`) with QSettings persistence.
+  - A UX utility button "Copy Claude Desktop Config" that automatically copies the required JSON configuration snippet to the clipboard for frictionless user setup.
+- **Out of scope:**
+  - Standard MCP over SSE (Server-Sent Events) network transports (stdio transport is preferred and standard for local desktop integration).
+  - Audio streaming or diarization processing over the MCP protocol (only text metadata, transcripts, and JSON states are exchanged).
 
-## User Stories
+## Architecture & Integration Strategy
 
-- As a user with an MCP-compatible AI assistant, I want to ask my assistant "What did I discuss in my last meeting recorded by El Secretario?", and have the assistant automatically pull the transcription using the MCP server.
-- As a user, I want my AI assistant to be able to create tasks in El Secretario's task board based on our conversation.
-- As a privacy-conscious user, I want the ability to explicitly enable or disable the MCP server integration from the El Secretario settings menu.
+```
+ +------------------------+              +------------------------+
+ |     Claude Desktop     |              |     El Secretario      |
+ |  (or other MCP Client) |              |  (Local REST API Thread)|
+ |           |            |              |           |            |
+ |    STDIO (JSON-RPC)    |              |       HTTP Local       |
+ |           |            |              |       Loopback         |
+ |           v            |              |           v            |
+ |  src/api/mcp_server.py |=============| GET/POST localhost:port|
+ |   (MCP Server Process) |  (REST client)                      |
+ +------------------------+              +------------------------+
+```
 
-## Acceptance Criteria
+### 1. Standalone Proxy Pattern
+To protect the desktop app's memory and ensure absolute stability:
+- The MCP Server runs as an isolated, standalone Python process spawned on-demand by the MCP Client (like Claude Desktop) using standard stdio.
+- Upon startup, the MCP Server reads the local dynamic port discovery file `{user_data_dir}/app.port` to find the active Local REST API port and single-use Bearer token.
+- When an MCP Client requests a resource or calls a tool, the MCP Server formats the request and queries the **Local REST API (SPEC-024)** over local loopback HTTP.
+- This proxy pattern is highly secure: it strictly respects the toggles, authentication tokens, and safe thread bridging implemented in Spec-024.
 
-- Given an MCP client is connected to the El Secretario MCP server, when the client lists resources, then it receives a list of available transcription and task resources.
-- Given an MCP client calls the `create_task` tool, then the server communicates with the Local API (SPEC-024) to create the task, and the task immediately appears in the El Secretario UI.
-- Given the user disables the MCP Server in Settings, then any spawned Standalone Stdio MCP process will immediately exit or return an error, preventing external AI agents from accessing El Secretario's data.
+### 2. UI Setting & Configuration Copy Helper
+In `src/ui/settings/general_panel.py`:
+- **"Enable MCP Server Integration"** checkbox (persisted as `enable_mcp_server`). If checked, the launcher allows the MCP process. If unchecked, the MCP proxy process instantly rejects connection attempts, enforcing strict privacy.
+- **"Copy Claude Desktop Config"** button:
+  - Generates the exact JSON block matching the current environment:
+    ```json
+    {
+      "mcpServers": {
+        "el-secretario": {
+          "command": "python",
+          "args": [
+            "/path/to/El-Secretario/src/api/mcp_server.py"
+          ],
+          "env": {
+            "PYTHONPATH": "/path/to/El-Secretario"
+          }
+        }
+      }
+    }
+    ```
+  - Copies this JSON directly to the user's system clipboard, enabling a 1-click configuration experience!
 
-## Architecture Notes
+## MCP Protocol Specifications
 
-- The MCP server will be implemented as a **Standalone Stdio** Python script (`secretario_mcp.py`) that uses stdio transport (standard for Claude Desktop). This script acts as a proxy, translating MCP stdio requests into HTTP calls to the Local REST API (SPEC-024).
-- To respect the user's toggle setting: the `secretario_mcp.py` script will read the application's `QSettings` configuration file (or the Local REST API's status endpoint) upon initialization. If `enable_mcp_server` is false, the script will exit with an error message stating that the MCP integration is disabled by the user.
-- The UI will include an "Enable MCP Server" checkbox in the settings, which persists the `enable_mcp_server` flag. It can also provide a helper button to auto-generate the `claude_desktop_config.json` snippet for the user.
+### 1. Resources
 
-## Test Plan
+#### `secretario://transcriptions`
+- **Description:** Lists all available meetings, recordings, and transcripts with metadata (IDs, titles, dates, durations).
+- **MimeType:** `application/json`
 
-- Unit: Test the mapping of MCP tool calls to Local API requests.
-- Integration: Use the MCP Inspector to connect to the MCP server via stdio, execute tools, and verify changes.
-- Security/Toggle: Disable the MCP setting, attempt to run the `secretario_mcp.py` script, and verify it cleanly rejects the execution.
+#### `secretario://transcriptions/{id}`
+- **Description:** Exposes the full transcript, summaries, and notes of a specific meeting for LLM comprehension.
+- **MimeType:** `text/plain` or `application/json`
 
-## Documentation
+#### `secretario://tasks/active`
+- **Description:** Exposes the board of active task cards.
+- **MimeType:** `application/json`
 
-- Add a guide in `docs/mcp.md` on how to configure Claude Desktop or other MCP clients to connect, and clarify that it must be enabled in Settings first.
+### 2. Tools
+
+#### `search_knowledge`
+- **Schema:**
+  ```json
+  {
+    "query": {
+      "type": "string",
+      "description": "The search query (semantic or keyword) to search in transcripts, notes, and summaries."
+    }
+  }
+  ```
+- **Returns:** List of search snippets, titles, dates, and relevance scores.
+
+#### `start_recording`
+- **Schema:** `{}`
+- **Returns:** Success confirmation string. Triggers physical GUI microphone capture.
+
+#### `stop_recording`
+- **Schema:** `{}`
+- **Returns:** Success confirmation string and temporary ID of the generated session.
+
+#### `create_task`
+- **Schema:**
+  ```json
+  {
+    "title": { "type": "string", "description": "Short summary of the task." },
+    "description": { "type": "string", "description": "Optional notes or details." },
+    "due_date": { "type": "string", "description": "Optional due date (YYYY-MM-DD)." }
+  }
+  ```
+- **Returns:** Task card creation confirmation.
+
+## Test and Validation Plan
+
+- **Protocol Conformity Tests:**
+  - Connect to the `mcp_server.py` using the official `@modelcontextprotocol/inspector` tool.
+  - Verify resource schemas and tool listings conform to the MCP protocol specification.
+- **Proxy Call Loopback Tests:**
+  - Mock the Local REST API HTTP server. Verify the MCP server correctly reads the `app.port` discovery file, forwards requests with correct headers, and translates JSON responses into MCP-compliant ToolOutputs.
+- **Privacy Override Verification:**
+  - Toggle off "Enable MCP Integration" in general settings. Start the MCP server process via stdio, and verify it immediately terminates with a clean error message.
+- **UI Copy Helper Validation:**
+  - Click the "Copy Claude Desktop Config" button in settings, paste, and verify that the JSON is valid and has correct absolute paths of the environment python and directories.
