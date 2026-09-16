@@ -14,19 +14,39 @@
 
 set -e
 
-KARATE_JAR="/home/developer/karate.jar"
 PORT_FILE="app.port"
 SERVER_LOG="/tmp/karate_test_server.log"
+
+# Smart Karate JAR discovery: use local developer, test folder, or auto-download on-the-fly
+if [ -f "/home/developer/karate.jar" ]; then
+    KARATE_JAR="/home/developer/karate.jar"
+elif [ -f "tests/integration/karate/karate.jar" ]; then
+    KARATE_JAR="tests/integration/karate/karate.jar"
+else
+    echo "[INFO] Karate standalone JAR not found. Downloading v1.4.1 on-the-fly..."
+    mkdir -p tests/integration/karate
+    curl -L -o tests/integration/karate/karate.jar https://github.com/karatelabs/karate/releases/download/v1.4.1/karate-1.4.1.jar
+    KARATE_JAR="tests/integration/karate/karate.jar"
+fi
 
 # Clean up any leftover discovery file
 if [ -f "$PORT_FILE" ]; then
     rm -f "$PORT_FILE"
 fi
 
+# Smart Python interpreter discovery
+if [ -f "./venv/bin/python" ]; then
+    PYTHON_EXEC="./venv/bin/python"
+elif [ -f ".venv/bin/python" ]; then
+    PYTHON_EXEC=".venv/bin/python"
+else
+    PYTHON_EXEC="python"
+fi
+
 echo "=========================================================="
 echo "🚀 Starting Local REST API Test Server in background..."
 echo "=========================================================="
-./venv/bin/python tests/integration/karate/start_test_server.py > "$SERVER_LOG" 2>&1 &
+$PYTHON_EXEC tests/integration/karate/start_test_server.py > "$SERVER_LOG" 2>&1 &
 SERVER_PID=$!
 
 # Wait for app.port to be generated
