@@ -35,6 +35,8 @@ class MainWindowLifecycleCoordinator:
             window.recorder.is_recording if window.recorder else None,
         )
         window._sidebar_refresh_timer.stop()
+        if hasattr(window, "_api_timer") and window._api_timer is not None:
+            window._api_timer.stop()
         window._pending_history_reload = False
         window._pending_tag_reload = False
 

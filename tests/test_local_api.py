@@ -75,15 +75,21 @@ def _make_request(port: int, path: str, token: str = None, method: str = "GET", 
     else:
         data = None
 
+    # EXPLICITLY DISABLE PROXIES TO PREVENT CI/CD TIMEOUTS ON MACOS/WINDOWS RUNNERS!
+    proxy_handler = urllib.request.ProxyHandler({})  # Bypasses any environment HTTP_PROXY
+    opener = urllib.request.build_opener(proxy_handler)
+
     req = urllib.request.Request(url, headers=headers, method=method, data=data)
     try:
-        with urllib.request.urlopen(req, timeout=2.0) as response:
+        with opener.open(req, timeout=5.0) as response:
             return response.status, json.loads(response.read().decode("utf-8"))
     except urllib.error.HTTPError as e:
         try:
             return e.code, json.loads(e.read().decode("utf-8"))
         except Exception:
             return e.code, {"error": str(e)}
+    except Exception as e:
+        return 599, {"error": str(e)}
 
 
 def test_api_port_discovery(api_thread):
@@ -270,7 +276,9 @@ def test_api_post_task_malformed_json(api_thread):
         data=b"invalid { json string"
     )
     try:
-        with urllib.request.urlopen(req) as res:
+        proxy_handler = urllib.request.ProxyHandler({})
+        opener = urllib.request.build_opener(proxy_handler)
+        with opener.open(req) as res:
             pytest.fail("Should have failed")
     except urllib.error.HTTPError as e:
         assert e.code == 400
@@ -291,7 +299,9 @@ def test_api_options_preflight(api_thread):
     """Test that OPTIONS CORS preflight queries return 200 OK and headers."""
     url = f"http://127.0.0.1:{api_thread.port}/api/v1/status"
     req = urllib.request.Request(url, method="OPTIONS")
-    with urllib.request.urlopen(req) as res:
+    proxy_handler = urllib.request.ProxyHandler({})
+    opener = urllib.request.build_opener(proxy_handler)
+    with opener.open(req) as res:
         assert res.status == 200
         assert res.headers.get("Access-Control-Allow-Origin") == "*"
         assert "GET" in res.headers.get("Access-Control-Allow-Methods")
