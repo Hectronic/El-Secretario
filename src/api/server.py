@@ -374,11 +374,17 @@ class LocalAPIServerThread(QThread):
         """Signals the server to stop listening and close sockets."""
         if self.server:
             try:
-                self.server.shutdown()  # Breaks serve_forever instantly and safely!
+                # Run shutdown() on a separate daemon thread to completely prevent deadlocks
+                # if the server has not fully started serve_forever() or is in an unstable state.
+                import threading
+                t = threading.Thread(target=self.server.shutdown)
+                t.daemon = True
+                t.start()
+
                 self.server.server_close()
             except Exception:
                 pass
-        self.wait()
+        self.wait(2000)  # Wait up to 2 seconds for the thread to stop, preventing hangs
 
     def cleanup(self):
         """Cleans up the app.port discovery file on exit."""

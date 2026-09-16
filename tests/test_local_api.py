@@ -13,6 +13,7 @@
 
 import os
 import json
+import time
 import socket
 import urllib.request
 import urllib.error
@@ -52,7 +53,7 @@ def api_thread(qtbot):
     # Wait for app.port file to be generated or port assigned
     attempts = 0
     while thread.port == 0 and attempts < 100:
-        pytest.importorskip("time").sleep(0.02)
+        time.sleep(0.02)
         attempts += 1
         
     assert thread.port > 0
