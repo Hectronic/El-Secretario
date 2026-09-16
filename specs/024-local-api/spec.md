@@ -1,6 +1,6 @@
 # SPEC-024: Local REST API
 
-Status: Approved
+Status: Implemented
 Owner: Héctor Álvarez López <hector.alvarez@diagroup.com>
 Last updated: 2026-09-15
 

@@ -62,6 +62,12 @@ This document contains useful information and strict rules for AI agents working
 - AI agents have full capability and authorization to create pull requests on GitHub themselves using the GitHub CLI (`gh`).
 - After implementing and verifying a feature, the agent should create a new branch, stage only the relevant files, commit with a descriptive message, push the branch, and create the Pull Request using the GitHub CLI (`gh pr create`) without requiring the user to do it manually.
 
+7. **Local REST API and E2E Karate Testing**:
+- Any modifications to the Local REST API (SPEC-024) must strictly maintain contract compatibility with the OpenAPI spec (`docs/openapi.yaml`).
+- Always run the E2E Karate integration and contract tests before submitting or merging API-related changes using:
+  `./scripts/run_karate_tests.sh`
+- Ensure that the background mock server (`tests/integration/karate/start_test_server.py`) is updated to cover any new API endpoints, request bodies, or mock signals.
+
 ## Recommended Workflow
 
 1. Understand the requirement and affected modules.

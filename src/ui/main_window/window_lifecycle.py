@@ -35,11 +35,23 @@ class MainWindowLifecycleCoordinator:
             window.recorder.is_recording if window.recorder else None,
         )
         window._sidebar_refresh_timer.stop()
+        if hasattr(window, "_api_timer") and window._api_timer is not None:
+            window._api_timer.stop()
         window._pending_history_reload = False
         window._pending_tag_reload = False
 
         self._stop_search_thread()
         self._cancel_summary_queue()
+        
+        # Stop local REST API thread (SPEC-024)
+        if hasattr(window, "api_thread") and window.api_thread is not None:
+            try:
+                if window.api_thread.isRunning():
+                    logging.info("Stopping Local REST API server thread during close...")
+                    window.api_thread.stop()
+            except Exception:
+                logging.exception("Failed stopping Local REST API thread during closeEvent.")
+
         self._cleanup_tabs_and_floating_chats()
         self._stop_recorder()
         self._release_optional_gpu_cache()

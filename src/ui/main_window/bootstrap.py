@@ -18,4 +18,16 @@ def bootstrap_main_window(window):
     window._connect_task_queue_signals()
     window._enqueue_missing_previous_week_summary_if_enabled()
     window._enqueue_missing_previous_daily_summary_if_enabled()
+    
+    # Start Local REST API server if enabled in settings (SPEC-024)
+    try:
+        from PyQt6.QtCore import QSettings
+        settings = QSettings("Hectronic", "Secretario")
+        enable_api = settings.value("enable_local_api", False, type=bool)
+        if enable_api:
+            window.api_thread.start()
+    except Exception as e:
+        import logging
+        logging.error(f"Failed to start Local REST API server thread: {e}")
+
     window.show_welcome_screen()

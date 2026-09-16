@@ -50,6 +50,19 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install -r requirements.txt
 
+      - name: Set up Java Runtime (for Karate REST API tests)
+        if: runner.os == 'Linux'
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '21'
+
+      - name: Run E2E Karate REST API Contract Tests
+        if: runner.os == 'Linux'
+        run: |
+          chmod +x scripts/run_karate_tests.sh
+          ./scripts/run_karate_tests.sh
+
       - name: Run integration contracts
         run: python -m pytest -q tests/integration
 
