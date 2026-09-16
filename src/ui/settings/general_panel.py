@@ -169,6 +169,18 @@ class GeneralSettingsPanel(QWidget):
         info_label.setStyleSheet("color: gray; font-size: 13px; margin-top: 10px;")
         layout.addWidget(info_label)
 
+        # Local REST API (SPEC-024)
+        api_section_label = QLabel("🔌 Local REST API")
+        api_section_label.setStyleSheet("font-size: 18px; font-weight: bold; color: #607D8B; margin-top: 20px;")
+        layout.addWidget(api_section_label)
+
+        self.enable_local_api_check = QCheckBox("Enable Local REST API server on loopback (127.0.0.1)")
+        self.enable_local_api_check.setChecked(
+            self.settings.value("enable_local_api", False, type=bool)
+        )
+        self.enable_local_api_check.setToolTip("Enables a loopback-only REST API server to query data and control recording remotely.")
+        layout.addWidget(self.enable_local_api_check)
+
         # Auto-Updater (SPEC-023)
         updater_section_label = QLabel("🔄 Auto-Updater")
         updater_section_label.setStyleSheet("font-size: 18px; font-weight: bold; color: #607D8B; margin-top: 20px;")
@@ -348,4 +360,16 @@ class GeneralSettingsPanel(QWidget):
             "enable_auto_update",
             self.enable_update_check.isChecked(),
         )
+        
+        old_api = self.settings.value("enable_local_api", False, type=bool)
+        new_api = self.enable_local_api_check.isChecked()
+        self.settings.setValue("enable_local_api", new_api)
+        if old_api != new_api:
+            try:
+                mw = self.window()
+                if hasattr(mw, "toggle_local_api"):
+                    mw.toggle_local_api(new_api)
+            except Exception:
+                pass
+
         apply_theme(selected_theme)

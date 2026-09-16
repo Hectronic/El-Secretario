@@ -1,0 +1,237 @@
+# Copyright (C) 2026 Héctor Álvarez López <hectoralvarez.me>
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License, version 3 or later.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+# You should have received a copy of the GNU General Public License along with
+# this program.  If not, see <https://www.gnu.org/licenses/>.
+
+"""Tests for the Local REST API Server."""
+
+import os
+import json
+import socket
+import urllib.request
+import urllib.error
+import pytest
+from unittest.mock import MagicMock, patch
+
+from src.api.server import LocalAPIServerThread
+
+
+@pytest.fixture
+def api_thread(qtbot):
+    """Fixture to start and manage the Local REST API Thread."""
+    thread = LocalAPIServerThread()
+    # Mock databases and RAG dependencies to isolate the HTTP server
+    thread.db = MagicMock()
+    thread.rag = MagicMock()
+    
+    # Mock some default database fetch outputs
+    thread.db.fetch_all.return_value = [
+        {"id": 42, "title": "Mock Meeting", "created_at": "2026-09-15 10:00:00", "duration": 120, "summary": "Some summary", "tags": "sync,test"}
+    ]
+    thread.db.fetch_record.return_value = {
+        "id": 42, "title": "Mock Meeting", "created_at": "2026-09-15 10:00:00", "duration": 120, "transcription": "Hello", "recording_notes": "None", "summary": "Some summary", "tags": "sync,test"
+    }
+    thread.db.get_tasks_for_board.return_value = [
+        {"id": 1, "content": "Complete Spec 24", "notes": "Write tests", "day_date": "2026-09-15", "completed": 0}
+    ]
+    thread.db.save_task.return_value = 100
+    
+    thread.rag.search.return_value = [
+        {"id": "42", "text": "RAG matching snippet", "distance": 0.1, "metadata": {"title": "Mock Meeting"}}
+    ]
+
+    # Start the thread and wait for it to assign a port
+    thread.start()
+    
+    # Wait for app.port file to be generated or port assigned
+    attempts = 0
+    while thread.port == 0 and attempts < 100:
+        pytest.importorskip("time").sleep(0.02)
+        attempts += 1
+        
+    assert thread.port > 0
+    yield thread
+    
+    # Stop thread and cleanup
+    thread.stop()
+
+
+def _make_request(port: int, path: str, token: str = None, method: str = "GET", payload: dict = None) -> tuple[int, dict]:
+    """Helper to perform localhost HTTP requests."""
+    url = f"http://127.0.0.1:{port}{path}"
+    headers = {}
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
+    if payload is not None:
+        headers["Content-Type"] = "application/json"
+        data = json.dumps(payload).encode("utf-8")
+    else:
+        data = None
+
+    req = urllib.request.Request(url, headers=headers, method=method, data=data)
+    try:
+        with urllib.request.urlopen(req, timeout=2.0) as response:
+            return response.status, json.loads(response.read().decode("utf-8"))
+    except urllib.error.HTTPError as e:
+        try:
+            return e.code, json.loads(e.read().decode("utf-8"))
+        except Exception:
+            return e.code, {"error": str(e)}
+
+
+def test_api_port_discovery(api_thread):
+    """Test that app.port file is created with correct syntax."""
+    port_filepath = os.path.abspath("app.port")
+    assert os.path.exists(port_filepath)
+    
+    with open(port_filepath, "r", encoding="utf-8") as f:
+        lines = f.read().splitlines()
+        
+    assert len(lines) == 2
+    assert lines[0] == f"port={api_thread.port}"
+    assert lines[1] == f"token={api_thread.token}"
+
+
+def test_api_unauthorized_missing_token(api_thread):
+    """Test that missing authorization headers return 401."""
+    status, body = _make_request(api_thread.port, "/api/v1/status")
+    assert status == 401
+    assert "error" in body
+    assert "Missing Bearer token" in body["error"]
+
+
+def test_api_unauthorized_invalid_token(api_thread):
+    """Test that invalid Bearer tokens return 401."""
+    status, body = _make_request(api_thread.port, "/api/v1/status", token="invalid_token")
+    assert status == 401
+    assert "error" in body
+    assert "Invalid Bearer token" in body["error"]
+
+
+def test_api_get_status_idle(api_thread):
+    """Test retrieving status when application is idle."""
+    status, body = _make_request(api_thread.port, "/api/v1/status", token=api_thread.token)
+    assert status == 200
+    assert body["app_name"] == "El Secretario"
+    assert body["status"] == "idle"
+    assert body["active_recording"] is None
+
+
+def test_api_get_status_recording(api_thread):
+    """Test status values update correctly when recording is active."""
+    api_thread.set_recording_status(True, mic_name="Blue Yeti", elapsed=30)
+    
+    status, body = _make_request(api_thread.port, "/api/v1/status", token=api_thread.token)
+    assert status == 200
+    assert body["status"] == "recording"
+    assert body["active_recording"]["audio_device"] == "Blue Yeti"
+    assert body["active_recording"]["elapsed_seconds"] == 30
+
+
+def test_api_get_recordings_list(api_thread):
+    """Test getting paginated historical recordings list."""
+    status, body = _make_request(api_thread.port, "/api/v1/recordings", token=api_thread.token)
+    assert status == 200
+    assert len(body) == 1
+    assert body[0]["id"] == 42
+    assert body[0]["title"] == "Mock Meeting"
+    assert "sync" in body[0]["tags"]
+
+
+def test_api_get_recording_detail_by_id(api_thread):
+    """Test getting full transcript and details for specific recording."""
+    status, body = _make_request(api_thread.port, "/api/v1/recordings/42", token=api_thread.token)
+    assert status == 200
+    assert body["id"] == 42
+    assert body["title"] == "Mock Meeting"
+    assert body["transcript"] == "Hello"
+
+
+def test_api_get_tasks(api_thread):
+    """Test getting task board cards."""
+    status, body = _make_request(api_thread.port, "/api/v1/tasks", token=api_thread.token)
+    assert status == 200
+    assert len(body) == 1
+    assert body[0]["id"] == 1
+    assert body[0]["title"] == "Complete Spec 24"
+
+
+def test_api_post_task_create(api_thread, qtbot):
+    """Test creating a task programmatically emits correctly and saves to DB."""
+    # Listen to sig_create_task signal using qtbot
+    with qtbot.wait_signal(api_thread.signals.sig_create_task) as blocker:
+        status, body = _make_request(
+            api_thread.port,
+            "/api/v1/tasks",
+            token=api_thread.token,
+            method="POST",
+            payload={"title": "External Task", "description": "Notes", "due_date": "2026-09-18"}
+        )
+        
+    assert status == 201
+    assert body["success"] is True
+    assert body["task_id"] == 100
+    
+    # Verify database was called with matching values
+    api_thread.db.save_task.assert_called_with(
+        record_id=None,
+        content="External Task",
+        notes="Notes",
+        day_date="2026-09-18",
+        task_origin="local_api"
+    )
+    
+    # Verify PyQt signal emitted details
+    assert blocker.args[0]["title"] == "External Task"
+    assert blocker.args[0]["description"] == "Notes"
+
+
+def test_api_post_record_start_signal(api_thread, qtbot):
+    """Test that POST /api/v1/record/start safely triggers the start_recording signal."""
+    with qtbot.wait_signal(api_thread.signals.sig_start_recording):
+        status, body = _make_request(
+            api_thread.port,
+            "/api/v1/record/start",
+            token=api_thread.token,
+            method="POST"
+        )
+        
+    assert status == 200
+    assert body["success"] is True
+
+
+def test_api_post_record_stop_signal(api_thread, qtbot):
+    """Test that POST /api/v1/record/stop safely triggers the stop_recording signal."""
+    # Set recording status so stop is allowed
+    api_thread.set_recording_status(True)
+    
+    with qtbot.wait_signal(api_thread.signals.sig_stop_recording):
+        status, body = _make_request(
+            api_thread.port,
+            "/api/v1/record/stop",
+            token=api_thread.token,
+            method="POST"
+        )
+        
+    assert status == 200
+    assert body["success"] is True
+
+
+def test_api_get_search(api_thread):
+    """Test getting semantic search query results."""
+    status, body = _make_request(
+        api_thread.port,
+        "/api/v1/search?query=hello",
+        token=api_thread.token
+    )
+    assert status == 200
+    assert body["query"] == "hello"
+    assert len(body["results"]) == 1
+    assert body["results"][0]["text"] == "RAG matching snippet"
+    assert body["results"][0]["relevance_score"] == 0.9

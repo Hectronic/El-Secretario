@@ -40,6 +40,16 @@ class MainWindowLifecycleCoordinator:
 
         self._stop_search_thread()
         self._cancel_summary_queue()
+        
+        # Stop local REST API thread (SPEC-024)
+        if hasattr(window, "api_thread") and window.api_thread is not None:
+            try:
+                if window.api_thread.isRunning():
+                    logging.info("Stopping Local REST API server thread during close...")
+                    window.api_thread.stop()
+            except Exception:
+                logging.exception("Failed stopping Local REST API thread during closeEvent.")
+
         self._cleanup_tabs_and_floating_chats()
         self._stop_recorder()
         self._release_optional_gpu_cache()

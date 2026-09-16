@@ -103,6 +103,12 @@ class MainWindow(QMainWindow):
         self.system_tray_manager = SystemTrayManager(self)
         self.system_tray_manager.quit_requested.connect(self.force_quit)
 
+        # Initialize Local REST API Server Thread (SPEC-024)
+        from src.api.server import LocalAPIServerThread
+        self.api_thread = LocalAPIServerThread(self)
+        self._connect_api_signals()
+        self._setup_api_timer()
+
         self.init_ui()
         bootstrap_main_window(self)
         logging.info("MainWindow initialized.")
@@ -511,3 +517,83 @@ class MainWindow(QMainWindow):
         lifecycle = getattr(self, "window_lifecycle", None)
         if lifecycle is not None:
             lifecycle.handle_resize()
+
+    def _connect_api_signals(self):
+        """Bridge cross-thread signals safely from the local REST API thread."""
+        self.api_thread.signals.sig_start_recording.connect(self._api_trigger_start)
+        self.api_thread.signals.sig_stop_recording.connect(self._api_trigger_stop)
+        self.api_thread.signals.sig_create_task.connect(self._api_trigger_task)
+
+    def _setup_api_timer(self):
+        """Set up periodic sync from PyQt widgets state to REST API state."""
+        self._api_timer = QTimer(self)
+        self._api_timer.timeout.connect(self._sync_api_state)
+        self._api_timer.start(1000)
+
+    def _sync_api_state(self):
+        """Query main thread state and update the REST API status atomic structure."""
+        if not hasattr(self, "api_thread") or self.api_thread is None:
+            return
+
+        is_rec = self.recorder.is_recording
+        elapsed = 0
+        mic_name = "Default"
+
+        if is_rec:
+            # Query current device name safely
+            try:
+                import sounddevice as sd
+                device_info = sd.query_devices(self.recorder.device_index, "input")
+                mic_name = device_info.get("name", "Default Microphone")
+            except Exception:
+                pass
+
+            # Search active RecordingInProgressWidget for elapsed time
+            from src.ui.recording_in_progress_widget import RecordingInProgressWidget
+            for index in range(self.central_tabs.count()):
+                widget = self.central_tabs.widget(index)
+                if isinstance(widget, RecordingInProgressWidget):
+                    elapsed = getattr(widget, "recording_seconds", 0)
+                    break
+
+        # Query transcription backlog
+        backlog = 0
+        if hasattr(self, "summary_task_queue") and self.summary_task_queue is not None:
+            backlog = self.summary_task_queue.queue.qsize() if hasattr(self.summary_task_queue, "queue") else 0
+
+        self.api_thread.set_recording_status(is_rec, mic_name, elapsed)
+        self.api_thread.set_queue_backlog(backlog)
+
+    def _api_trigger_start(self):
+        """Slot triggered from API thread to start a new recording session."""
+        config = {
+            "device_index": self.recorder.device_index,
+            "capture_system_audio": self.recorder.capture_machine_audio
+        }
+        self.recording_tabs.start_new_recording(config)
+
+    def _api_trigger_stop(self):
+        """Slot triggered from API thread to stop active recording session."""
+        from src.ui.recording_in_progress_widget import RecordingInProgressWidget
+        for index in range(self.central_tabs.count()):
+            widget = self.central_tabs.widget(index)
+            if isinstance(widget, RecordingInProgressWidget):
+                widget.stop_recording()
+                return
+
+    def _api_trigger_task(self, task_data):
+        """Slot triggered when a task is programmatically added via the local API."""
+        self.refresh_tasks_sidebar()
+
+    def toggle_local_api(self, enabled: bool):
+        """Starts or stops the API background thread when settings are changed."""
+        if enabled:
+            if not self.api_thread.isRunning():
+                self.api_thread.start()
+                import logging
+                logging.info("Local REST API server thread started.")
+        else:
+            if self.api_thread.isRunning():
+                self.api_thread.stop()
+                import logging
+                logging.info("Local REST API server thread stopped.")
