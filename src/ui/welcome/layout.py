@@ -79,7 +79,7 @@ def build_welcome_layout(widget, analog_clock_cls):
             base_path = getattr(sys, '_MEIPASS', os.getcwd())
             return os.path.join(base_path, relative_path)
         
-        logo_path = get_resource_path("logo.png")
+        logo_path = get_resource_path("resources/logo.png")
         if os.path.exists(logo_path):
             pixmap = QPixmap(logo_path)
             # Compact logo for top header

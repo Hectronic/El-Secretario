@@ -61,7 +61,7 @@ if __name__ == "__main__":
     app = QApplication(sys.argv)
     
     # Use the helper to find the icon
-    app_icon = QIcon(resource_path("logo.png"))
+    app_icon = QIcon(resource_path("resources/logo.png"))
     app.setWindowIcon(app_icon)
     
     window = MainWindow()

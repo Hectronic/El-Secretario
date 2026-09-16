@@ -10,7 +10,7 @@ class TestInstallScripts(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmpdir:
             is_windows = sys.platform == "win32"
             script_name = "install.bat" if is_windows else "install.sh"
-            script_path = os.path.join(os.getcwd(), script_name)
+            script_path = os.path.join(os.getcwd(), "scripts", "install", script_name)
             
             if not os.path.exists(script_path):
                 self.skipTest(f"{script_name} not found")
