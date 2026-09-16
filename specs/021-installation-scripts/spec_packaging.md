@@ -1,6 +1,6 @@
 # SPEC-021: Native Packaging and Auto-Updating Installers
 
-Status: Draft
+Status: Implemented
 Owner: Héctor Álvarez López <hector.alvarez@diagroup.com>
 Last updated: 2026-09-15
 

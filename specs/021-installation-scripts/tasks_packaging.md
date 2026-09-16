@@ -1,14 +1,14 @@
 # Tasks: Native Packaging and Auto-Updating Installers
 
-Status: Draft
+Status: Completed
 Last updated: 2026-09-15
 
 - [x] T001 Define and build Debian `.deb` package directory structure and postinst control scripts.
 - [x] T002 Implement `/usr/bin/el-secretario` launcher with user-space repo self-clone & auto-update bootstrapper.
-- [ ] T003 Create Windows Inno Setup `.iss` installer compiler script targeting `{localappdata}` without administrative restrictions.
-- [ ] T004 Implement Windows post-install silent bootstrapper call to initialize git cloning and pip dependencies.
-- [ ] T005 Construct macOS `.app` shell bundle and shell launcher with user-space application support folder isolation.
-- [ ] T006 Compile macOS `.app` bundle into a clean drag-and-drop `.dmg` installer.
-- [ ] T007 Build validation suite to test "Enable Auto-Updates" settings toggling across all three packaged environments.
+- [x] T003 Create Windows Inno Setup `.iss` installer compiler script targeting `{localappdata}` without administrative restrictions.
+- [x] T004 Implement Windows post-install silent bootstrapper call to initialize git cloning and pip dependencies.
+- [x] T005 Construct macOS `.app` shell bundle and shell launcher with user-space application support folder isolation.
+- [x] T006 Compile macOS `.app` bundle into a clean drag-and-drop `.dmg` installer.
+- [x] T007 Build validation suite to test "Enable Auto-Updates" settings toggling across all three packaged environments.
 - [x] T008 Reorganize root folder: create resources/, debug/, scripts/build/, and scripts/install/ folders and migrate respective files.
 - [x] T009 Refactor file path resolution in main.py, setup_actions.py, and launcher templates to support the relocated assets folder.
