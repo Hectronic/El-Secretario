@@ -74,23 +74,21 @@ fi
 
 cd "$INSTALL_DIR"
 
-if [ ! -d ".venv" ]; then
-    echo "[INFO] Creating Python virtual environment..."
+# Extremely robust virtual environment and dependency check
+if [ ! -d ".venv" ] || [ ! -f ".venv/bin/python" ] || ! ".venv/bin/python" -c "import PyQt6" &>/dev/null; then
+    echo "[INFO] Creating/fixing Python virtual environment..."
     python3 -m venv .venv
-    source .venv/bin/activate
-    echo "[INFO] Installing dependencies (this may take a moment)..."
-    pip install --upgrade pip
-    pip install -r requirements.txt
-else
-    source .venv/bin/activate
+    echo "[INFO] Installing/updating dependencies (this may take a moment)..."
+    .venv/bin/pip install --upgrade pip
+    .venv/bin/pip install -r requirements.txt
 fi
 
-# Trigger transparent auto-updates on launch
+# Trigger transparent auto-updates on launch using virtualenv python directly
 echo "[INFO] Checking for auto-updates..."
-python src/auto_updater.py || echo "[WARNING] Auto-updater skipped or failed. Continuing..."
+.venv/bin/python src/auto_updater.py || echo "[WARNING] Auto-updater skipped or failed. Continuing..."
 
 echo "[INFO] Launching El Secretario..."
-python main.py "$@"
+.venv/bin/python main.py "$@"
 EOF
 chmod 755 "$PKG_DIR/usr/bin/el-secretario"
 
