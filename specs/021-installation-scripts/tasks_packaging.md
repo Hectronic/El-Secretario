@@ -3,8 +3,8 @@
 Status: Draft
 Last updated: 2026-09-15
 
-- [ ] T001 Define and build Debian `.deb` package directory structure and postinst control scripts.
-- [ ] T002 Implement `/usr/bin/el-secretario` launcher with user-space repo self-clone & auto-update bootstrapper.
+- [x] T001 Define and build Debian `.deb` package directory structure and postinst control scripts.
+- [x] T002 Implement `/usr/bin/el-secretario` launcher with user-space repo self-clone & auto-update bootstrapper.
 - [ ] T003 Create Windows Inno Setup `.iss` installer compiler script targeting `{localappdata}` without administrative restrictions.
 - [ ] T004 Implement Windows post-install silent bootstrapper call to initialize git cloning and pip dependencies.
 - [ ] T005 Construct macOS `.app` shell bundle and shell launcher with user-space application support folder isolation.
