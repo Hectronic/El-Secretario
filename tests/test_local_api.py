@@ -235,3 +235,63 @@ def test_api_get_search(api_thread):
     assert len(body["results"]) == 1
     assert body["results"][0]["text"] == "RAG matching snippet"
     assert body["results"][0]["relevance_score"] == 0.9
+
+
+def test_api_get_recording_invalid_id_type(api_thread):
+    """Test retrieving a recording with an invalid non-integer ID returns 500 error."""
+    status, body = _make_request(api_thread.port, "/api/v1/recordings/not-an-integer", token=api_thread.token)
+    assert status == 500
+    assert body["success"] is False
+    assert "error" in body
+
+
+def test_api_post_task_missing_title(api_thread):
+    """Test that creating a task with a missing title returns 400 error."""
+    status, body = _make_request(
+        api_thread.port,
+        "/api/v1/tasks",
+        token=api_thread.token,
+        method="POST",
+        payload={"description": "No title given"}
+    )
+    assert status == 400
+    assert body["success"] is False
+    assert "title is required" in body["error"]
+
+
+def test_api_post_task_malformed_json(api_thread):
+    """Test that submitting malformed/invalid JSON syntax returns 400 error."""
+    url = f"http://127.0.0.1:{api_thread.port}/api/v1/tasks"
+    req = urllib.request.Request(
+        url,
+        headers={"Authorization": f"Bearer {api_thread.token}", "Content-Type": "application/json"},
+        method="POST",
+        data=b"invalid { json string"
+    )
+    try:
+        with urllib.request.urlopen(req) as res:
+            pytest.fail("Should have failed")
+    except urllib.error.HTTPError as e:
+        assert e.code == 400
+        body = json.loads(e.read().decode("utf-8"))
+        assert body["success"] is False
+        assert "Invalid JSON" in body["error"]
+
+
+def test_api_not_found_route(api_thread):
+    """Test that calling a non-existent path returns a 404 error."""
+    status, body = _make_request(api_thread.port, "/api/v1/non-existent-endpoint", token=api_thread.token)
+    assert status == 404
+    assert body["success"] is False
+    assert "not found" in body["error"]
+
+
+def test_api_options_preflight(api_thread):
+    """Test that OPTIONS CORS preflight queries return 200 OK and headers."""
+    url = f"http://127.0.0.1:{api_thread.port}/api/v1/status"
+    req = urllib.request.Request(url, method="OPTIONS")
+    with urllib.request.urlopen(req) as res:
+        assert res.status == 200
+        assert res.headers.get("Access-Control-Allow-Origin") == "*"
+        assert "GET" in res.headers.get("Access-Control-Allow-Methods")
+

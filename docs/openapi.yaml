@@ -1,0 +1,368 @@
+openapi: 3.0.3
+info:
+  title: El Secretario - Local REST API
+  description: |
+    Local loopback HTTP REST API for "El Secretario" intelligent audio transcriptor and organization tool (SPEC-024).
+    Enables external automation, scripting, and integration with AI assistants (e.g. Model Context Protocol servers).
+  version: 1.0.0
+servers:
+  - url: http://127.0.0.1:{port}/api/v1
+    description: Localhost Loopback API Server
+    variables:
+      port:
+        default: "12800"
+        description: Dynamically allocated port found in app.port discovery file.
+paths:
+  /status:
+    get:
+      summary: Retrieve Live Application Status
+      description: Returns real-time status of the application including current recording states and processing queue backlog.
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Live status retrieved successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AppStatus'
+        '401':
+          $ref: '#/components/responses/401Unauthorized'
+        '403':
+          $ref: '#/components/responses/403Forbidden'
+
+  /recordings:
+    get:
+      summary: List Saved Recordings
+      description: Returns a paginated list of metadata for completed recordings.
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 50
+          description: Number of records to return.
+        - name: offset
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 0
+          description: Number of records to skip.
+      responses:
+        '200':
+          description: List of recordings.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/RecordingSummary'
+        '401':
+          $ref: '#/components/responses/401Unauthorized'
+
+  /recordings/{id}:
+    get:
+      summary: Get Recording Details
+      description: Retrieves the full transcript, notes, summary, and metadata for a specific recording.
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+          description: The recording unique identifier.
+      responses:
+        '200':
+          description: Recording details retrieved successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RecordingDetail'
+        '404':
+          description: Recording not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/401Unauthorized'
+
+  /tasks:
+    get:
+      summary: List Active Tasks
+      description: Returns all active task board cards.
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: List of active tasks.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Task'
+        '401':
+          $ref: '#/components/responses/401Unauthorized'
+    post:
+      summary: Create New Task Card
+      description: Inserts a new task card onto the tasks board database.
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateTaskRequest'
+      responses:
+        '201':
+          description: Task created successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreateTaskResponse'
+        '400':
+          description: Invalid payload or missing title.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/401Unauthorized'
+
+  /search:
+    get:
+      summary: Query Semantic & Keyword Search
+      description: Queries El Secretario's database using the semantic RAG vector engine and keyword indexes.
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: query
+          in: query
+          required: true
+          schema:
+            type: string
+          description: The semantic or keyword text to search.
+      responses:
+        '200':
+          description: Search results.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SearchResponse'
+        '400':
+          description: Missing query parameter.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/401Unauthorized'
+
+  /record/start:
+    post:
+      summary: Start Live Recording
+      description: Triggers the GUI microphone capture.
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Recording successfully started.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ActionResponse'
+        '409':
+          description: Conflict (already recording).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/401Unauthorized'
+
+  /record/stop:
+    post:
+      summary: Stop Live Recording
+      description: Stops active microphone capture, saving and transcribing audio.
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Recording successfully stopped and queued.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ActionResponse'
+        '409':
+          description: Conflict (not recording).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/401Unauthorized'
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      description: Pass the random Bearer token found in your app.port file.
+
+  responses:
+    401Unauthorized:
+      description: Unauthorized. Missing or invalid Bearer token.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    403Forbidden:
+      description: Forbidden. Requests are blocked from non-loopback interfaces.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+
+  schemas:
+    AppStatus:
+      type: object
+      properties:
+        app_name:
+          type: string
+        version:
+          type: string
+        status:
+          type: string
+          enum: [idle, recording, transcribing, indexing]
+        active_recording:
+          type: object
+          nullable: true
+          properties:
+            elapsed_seconds:
+              type: integer
+            audio_device:
+              type: string
+        processing_queue_backlog:
+          type: integer
+
+    RecordingSummary:
+      type: object
+      properties:
+        id:
+          type: integer
+        title:
+          type: string
+        date:
+          type: string
+        duration_seconds:
+          type: number
+        summary_generated:
+          type: boolean
+        tags:
+          type: array
+          items:
+            type: string
+
+    RecordingDetail:
+      type: object
+      properties:
+        id:
+          type: integer
+        title:
+          type: string
+        date:
+          type: string
+        duration_seconds:
+          type: number
+        transcript:
+          type: string
+        notes:
+          type: string
+        summary:
+          type: string
+        tags:
+          type: array
+          items:
+            type: string
+
+    Task:
+      type: object
+      properties:
+        id:
+          type: integer
+        title:
+          type: string
+        description:
+          type: string
+        due_date:
+          type: string
+        completed:
+          type: boolean
+
+    CreateTaskRequest:
+      type: object
+      required:
+        - title
+      properties:
+        title:
+          type: string
+        description:
+          type: string
+        due_date:
+          type: string
+
+    CreateTaskResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        task_id:
+          type: integer
+        message:
+          type: string
+
+    SearchResponse:
+      type: object
+      properties:
+        query:
+          type: string
+        results:
+          type: array
+          items:
+            type: object
+            properties:
+              source:
+                type: string
+              source_id:
+                type: integer
+              title:
+                type: string
+              text:
+                type: string
+              relevance_score:
+                type: number
+
+    ActionResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        message:
+          type: string
+
+    ErrorResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          default: false
+        error:
+          type: string

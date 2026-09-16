@@ -284,8 +284,8 @@ class LocalAPIServerThread(QThread):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.signals = APISignals()
-        self.db = DBManager()
-        self.rag = RAGEngine()
+        self.db = None
+        self.rag = None
         self.server = None
         self.port = 0
         self.token = ""
@@ -322,6 +322,12 @@ class LocalAPIServerThread(QThread):
         }
 
     def run(self):
+        # Lazily instantiate databases on startup if not already mocked
+        if self.db is None:
+            self.db = DBManager()
+        if self.rag is None:
+            self.rag = RAGEngine()
+
         # Select dynamic available port starting at 12800
         import socket
         port = 12800
