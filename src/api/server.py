@@ -340,27 +340,31 @@ class LocalAPIServerThread(QThread):
             except socket.error:
                 port += 1
 
-        self.port = port
-        self.token = secrets.token_hex(16)
-
-        # Write the app.port discovery file safely in the root workspace folder!
-        try:
-            port_filepath = os.path.abspath("app.port")
-            with open(port_filepath, "w", encoding="utf-8") as f:
-                f.write(f"port={self.port}\ntoken={self.token}\n")
-            logger.info(f"Port discovery written to {port_filepath} (Port: {self.port})")
-        except Exception as e:
-            logger.error(f"Failed to write app.port discovery file: {e}")
+        token = secrets.token_hex(16)
 
         # Start the ThreadingHTTPServer
         try:
-            self.server = ThreadingHTTPServer(("127.0.0.1", self.port), LocalAPIRequestHandler)
+            self.server = ThreadingHTTPServer(("127.0.0.1", port), LocalAPIRequestHandler)
+            
+            # Socket is bound and listening! Assign self.port and self.token now so tests/helpers can safely connect
+            self.port = port
+            self.token = token
+
             # Inject references into server object
             self.server.token = self.token
             self.server.signals = self.signals
             self.server.db = self.db
             self.server.rag = self.rag
             self.server.thread = self
+
+            # Write the app.port discovery file safely in the root workspace folder!
+            try:
+                port_filepath = os.path.abspath("app.port")
+                with open(port_filepath, "w", encoding="utf-8") as f:
+                    f.write(f"port={self.port}\ntoken={self.token}\n")
+                logger.info(f"Port discovery written to {port_filepath} (Port: {self.port})")
+            except Exception as e:
+                logger.error(f"Failed to write app.port discovery file: {e}")
 
             logger.info(f"Local REST API server listening strictly on 127.0.0.1:{self.port}...")
             self.server.serve_forever()
