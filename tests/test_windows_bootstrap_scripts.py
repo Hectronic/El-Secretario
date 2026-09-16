@@ -5,7 +5,10 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 def _read_script(name: str) -> str:
-    return (ROOT / name).read_text(encoding="utf-8")
+    path = ROOT / name
+    if not path.exists():
+        path = ROOT / "scripts" / name
+    return path.read_text(encoding="utf-8")
 
 
 def test_run_bat_prefers_python_312_or_311():

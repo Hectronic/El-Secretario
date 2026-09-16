@@ -19,7 +19,7 @@ def recording_tray_icon():
     if not app_icon.isNull():
         return app_icon
     base_path = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parents[3]))
-    logo_icon = QIcon(str(base_path / "logo.png"))
+    logo_icon = QIcon(str(base_path / "resources" / "logo.png"))
     if not logo_icon.isNull():
         return logo_icon
     return QApplication.style().standardIcon(QStyle.StandardPixmap.SP_MediaStop)

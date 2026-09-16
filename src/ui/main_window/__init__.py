@@ -51,7 +51,7 @@ class MainWindow(QMainWindow):
         import logging
         logging.info("Initializing MainWindow...")
         self.setWindowTitle("El Secretario")
-        self.setWindowIcon(QIcon("logo.png"))
+        self.setWindowIcon(QIcon("resources/logo.png"))
         self.resize(1450, 860)
 
         self.db = DBManager()

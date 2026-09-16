@@ -1,6 +1,6 @@
 # Implementation Plan: Native Packaging and Auto-Updating Installers
 
-Status: Draft
+Status: Implemented
 Last updated: 2026-09-15
 Spec: [spec_packaging.md](spec_packaging.md)
 

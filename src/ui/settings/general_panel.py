@@ -209,9 +209,9 @@ class GeneralSettingsPanel(QWidget):
         import platform
         try:
             if platform.system() == "Windows":
-                script = "install.bat"
+                script = "scripts/install/install.bat"
             else:
-                script = "./install.sh"
+                script = "./scripts/install/install.sh"
             subprocess.Popen([script], cwd=os.getcwd(), shell=platform.system() == "Windows")
             from PyQt6.QtWidgets import QMessageBox
             QMessageBox.information(self, "Shortcuts Repaired", "OS shortcuts repair triggered successfully.")
