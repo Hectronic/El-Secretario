@@ -328,23 +328,14 @@ class LocalAPIServerThread(QThread):
         if self.rag is None:
             self.rag = RAGEngine()
 
-        # Select dynamic available port starting at 12800
-        import socket
-        port = 12800
-        while port < 13000:
-            try:
-                s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                s.bind(("127.0.0.1", port))
-                s.close()
-                break
-            except socket.error:
-                port += 1
-
         token = secrets.token_hex(16)
 
-        # Start the ThreadingHTTPServer
+        # Start the ThreadingHTTPServer on port 0 to let the OS assign an available port instantly
         try:
-            self.server = ThreadingHTTPServer(("127.0.0.1", port), LocalAPIRequestHandler)
+            self.server = ThreadingHTTPServer(("127.0.0.1", 0), LocalAPIRequestHandler)
+            
+            # Read the dynamically assigned port from the server socket!
+            port = self.server.server_address[1]
             
             # Socket is bound and listening! Assign self.port and self.token now so tests/helpers can safely connect
             self.port = port

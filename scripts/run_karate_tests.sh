@@ -84,11 +84,10 @@ set -e
 echo "=========================================================="
 echo "🛑 Shutting down Test Server cleanly..."
 echo "=========================================================="
-# Send SIGINT (Ctrl+C) to trigger Python's clean signal handler and remove app.port
-kill -2 $SERVER_PID || true
-wait $SERVER_PID 2>/dev/null || true
+# Force terminate the background process to completely prevent wait hangs in CI/CD pipelines
+kill -9 $SERVER_PID || true
 
-# Double check cleanup
+# Clean up discovery file manually since server process is force-killed
 if [ -f "$PORT_FILE" ]; then
     rm -f "$PORT_FILE"
 fi
