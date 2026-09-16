@@ -1,50 +1,215 @@
 # SPEC-024: Local REST API
 
-Status: Draft
-Owner: TBD
-Last updated: 2026-09-12
+Status: Approved
+Owner: Héctor Álvarez López <hector.alvarez@diagroup.com>
+Last updated: 2026-09-15
 
 ## Problem
 
-"El Secretario" currently operates as a standalone Qt desktop application. To allow external tools (like other AI agents, scripts, or external clients) to interact with it, read live data, or trigger actions (like starting a recording), the application needs a localized interface for communication. While external tools could theoretically read the SQLite database directly, doing so bypasses business logic, cannot interact with live runtime state (like current recording status), and risks database locking issues.
+"El Secretario" currently operates as an isolated desktop-only Qt application. To enable integration with external workflows—such as personal automation tools (e.g. keyboard shortcuts, Stream Decks), external AI assistants, browser extensions, or local scripting—the application needs a robust, local loopback communication channel. 
+
+Directly accessing the SQLite database is highly discouraged as it bypasses the core application business rules, cannot retrieve live runtime status (e.g., active recording duration), and risks concurrency lockups. A local REST API provides an isolated, secure, and performant loopback integration edge.
 
 ## Scope
 
-- In scope: 
-  - A lightweight local REST API over HTTP running alongside or within the main Qt event loop.
-  - Read endpoints for database entities: Transcriptions, Recordings, Tasks, Summaries.
-  - Read endpoints for live application state: Current recording status, active microphone.
-  - Action endpoints: Start/stop recording, create task, trigger summary.
-  - A UI toggle in the application's Settings to enable or disable the REST API.
-- Out of scope: Public internet exposure, complex GraphQL APIs, external authentication (assumes local loopback access only).
+- **In scope:**
+  - A lightweight local HTTP/REST API server built entirely using Python's standard library (`http.server`) to avoid adding bloated third-party web frameworks to `requirements.txt`.
+  - The server runs on an isolated background `QThread` and strictly binds to `127.0.0.1` on a dynamically allocated, safe port.
+  - Port discovery: Writes the current active port to a local file (`~/.local/share/El-Secretario/app.port` or `%LocalAppData%\El-Secretario\app.port`) so external scripts can automatically discover the endpoint.
+  - Read endpoints: Fetch historical recordings, specific transcripts, daily/weekly summaries, and tasks.
+  - Live state endpoints: Retrieve active recording state, mic volume, and current processing queue length.
+  - Action endpoints: Remotely trigger start/stop/pause recording and programmatically append tasks.
+  - Safe Thread Bridging: Employs PyQt signals to safely forward action requests from the HTTP handler thread to the main GUI thread.
+  - Setting general panel toggle to enable or disable the local API server in `QSettings`.
+- **Out of scope:**
+  - Public network exposure (bindings other than `127.0.0.1` are blocked for security).
+  - External authentication (standard token-based handshake is sufficient for localhost loopback security).
 
-## User Stories
+## REST API Endpoint Specifications
 
-- As a developer, I want to query the application for the latest transcriptions via a local REST endpoint so I can use that data in my own scripts.
-- As an external AI tool, I want to check if the user is currently recording before I interrupt them with a notification.
-- As a power user, I want to trigger a recording from a custom keyboard shortcut via a simple `curl` command.
-- As a privacy-conscious user, I want the ability to turn off the REST API entirely from the Settings menu.
+All endpoints are prefixed with `/api/v1`. All payloads use standard `application/json` format.
 
-## Acceptance Criteria
+### 1. System & State Endpoints
 
-- Given the application is running and the API is enabled in settings, when a local client makes a GET request to `/api/v1/recordings`, then it receives a JSON list of recent recordings.
-- Given the application is running and the API is enabled, when a local client makes a POST request to `/api/v1/record/start`, then the UI updates and a recording actually begins.
-- Given the user disables the REST API in Settings, then the local server stops listening on its port, and all subsequent API requests fail (Connection Refused).
-- Given the application starts, it checks the persisted setting to decide whether to launch the API background thread.
+#### `GET /api/v1/status`
+Returns the real-time runtime status of the desktop application.
+- **Response Code:** `200 OK`
+- **Payload:**
+  ```json
+  {
+    "app_name": "El Secretario",
+    "version": "1.0.0",
+    "status": "idle" | "recording" | "transcribing" | "indexing",
+    "active_recording": {
+      "elapsed_seconds": 124,
+      "audio_device": "Default Microphone"
+    },
+    "processing_queue_backlog": 2
+  }
+  ```
 
-## Architecture Notes
+### 2. Recording & Transcription Endpoints
 
-- Run a lightweight Python ASGI/WSGI server (like FastAPI/Uvicorn) in a separate `QThread`.
-- Bind the server to `127.0.0.1` and a discoverable port (e.g., written to `~/.local/share/El-Secretario/app.port`).
-- Use Qt's Signal/Slot mechanism to bridge thread communication safely between the REST endpoints and the Qt Main Event Loop.
-- Integrate with `src/ui/settings_runtime.py` (or similar) to persist the `enable_rest_api` flag in `QSettings`. The main application will start or stop the Uvicorn/API thread when this setting is toggled.
+#### `GET /api/v1/recordings`
+Retrieves a paginated list of metadata for completed recordings in the database.
+- **Parameters:**
+  - `limit` (Query parameter, default: 50)
+  - `offset` (Query parameter, default: 0)
+- **Response Code:** `200 OK`
+- **Payload:**
+  ```json
+  [
+    {
+      "id": 42,
+      "title": "Weekly Team Sync",
+      "date": "2026-09-15 10:00:00",
+      "duration_seconds": 1824,
+      "summary_generated": true,
+      "tags": ["sync", "weekly"]
+    }
+  ]
+  ```
 
-## Test Plan
+#### `GET /api/v1/recordings/{id}`
+Retrieves the full transcript, notes, and aggregate data for a specific recording.
+- **Response Code:** `200 OK` / `404 Not Found`
+- **Payload:**
+  ```json
+  {
+    "id": 42,
+    "title": "Weekly Team Sync",
+    "date": "2026-09-15 10:00:00",
+    "duration_seconds": 1824,
+    "transcript": "Speaker 1: Welcome everyone... Speaker 2: Yes, let's start.",
+    "notes": "Action items: Hector to package installers.",
+    "summary": "This was a sync meeting discussing packaging...",
+    "tags": ["sync", "weekly"]
+  }
+  ```
 
-- Unit: Test the API thread's ability to emit correct signals based on HTTP requests.
-- Integration: Toggle the setting on/off and verify the port opens and closes. Make real HTTP requests to verify state changes.
-- Security: Verify that the server strictly rejects non-loopback connections.
+### 3. Action / Control Endpoints
 
-## Documentation
+#### `POST /api/v1/record/start`
+Triggers the application to start recording immediately.
+- **Response Code:** `200 OK` / `409 Conflict` (if already recording)
+- **Payload:**
+  ```json
+  {
+    "success": true,
+    "message": "Recording session initiated successfully."
+  }
+  ```
 
-- Create `docs/api.md` detailing available endpoints, payloads, how to discover the port, and how to enable it in Settings.
+#### `POST /api/v1/record/stop`
+Stops the current recording session, triggers the transcription queue, and saves metadata.
+- **Response Code:** `200 OK` / `409 Conflict` (if not currently recording)
+- **Payload:**
+  ```json
+  {
+    "success": true,
+    "message": "Recording stopped. Sent to transcription queue.",
+    "temp_record_id": 43
+  }
+  ```
+
+### 4. Tasks Board Endpoints
+
+#### `GET /api/v1/tasks`
+Retrieves a list of all active task cards on the board.
+- **Response Code:** `200 OK`
+- **Payload:**
+  ```json
+  [
+    {
+      "id": 105,
+      "title": "Review spec-021 PR",
+      "description": "Verify installers on multiple environments.",
+      "due_date": "2026-09-18",
+      "completed": false
+    }
+  ]
+  ```
+
+#### `POST /api/v1/tasks`
+Programmatically inserts a new task card onto the tasks board database.
+- **Request Payload:**
+  ```json
+  {
+    "title": "Review spec-021 PR",
+    "description": "Verify installers on multiple environments.",
+    "due_date": "2026-09-18"
+  }
+  ```
+- **Response Code:** `201 Created`
+- **Response Payload:**
+  ```json
+  {
+    "success": true,
+    "task_id": 105,
+    "message": "Task created successfully on the board."
+  }
+  ```
+
+### 5. Search / Knowledge Endpoints
+
+#### `GET /api/v1/search`
+Queries El Secretario's transcripts and notes using semantic (RAG) and keyword search.
+- **Parameters:**
+  - `query` (Query parameter, string, required)
+- **Response Code:** `200 OK` / `400 Bad Request` (if query missing)
+- **Payload:**
+  ```json
+  {
+    "query": "installer tasks",
+    "results": [
+      {
+        "source": "recording",
+        "source_id": 42,
+        "title": "Weekly Team Sync",
+        "text": "...discussing installer scripts and native packages...",
+        "relevance_score": 0.89
+      }
+    ]
+  }
+  ```
+
+## Architecture & Safe Threading Design
+
+The server is fully decoupled from the PyQt GUI main thread via an active subclass of `QThread`.
+
+```
+  +-----------------------+              +------------------------+
+  |    Local REST API     |              |     PyQt main thread   |
+  |  (Background QThread) |              |      (Main GUI Loop)   |
+  |                       |              |                        |
+  |   HTTP Request Received --------Signal-------> Starts/Stops   |
+  |   (e.g., POST /start) |              |         Recording      |
+  |                       |              |                        |
+  |   Returns JSON        |<---Callback--|         MainWindow     |
+  |   response to client  |              |                        |
+  +-----------------------+              +------------------------+
+```
+
+### Safe Signal Bridging
+1. The HTTP request comes in on the `QThread`'s HTTP Server worker thread.
+2. The handler parses the action and emits a custom PyqtSignal:
+   `sig_trigger_record_start = pyqtSignal()`
+3. In `MainWindow`, this signal is connected to the native start recording action slot:
+   `self.api_thread.sig_trigger_record_start.connect(self.recording_widget.start_recording)`
+4. Since the signal crosses a thread boundary, PyQt automatically queues it, executing the slot safely on the **Main GUI Thread** without risking multi-threaded painter crashes or memory corruptions!
+
+### Local Loopback Security
+- The HTTP Server socket is initialized strictly binding to `127.0.0.1`.
+- Any connection requests originating from external IP interfaces are rejected instantly by the OS TCP stack.
+- To prevent unauthorized localhost processes from hitting critical actions, a random single-use API Bearer token is generated on startup and written to the `app.port` file. Local scripts must read this token to authorize their requests.
+
+## Test and Validation Plan
+
+- **Thread Startup & Shutdown Tests:**
+  - Verify toggling the "Enable Local REST API" checkbox in settings opens and closes the loopback TCP port cleanly.
+- **Port Discovery Validation:**
+  - Ensure the file `app.port` is written correctly with format `port=XXXX\ntoken=YYYY` on launch.
+- **Mocked HTTP Request Suite:**
+  - Send HTTP requests to retrieve recordings, fetch transcripts, and verify status responses are correct.
+- **Action Safe-threading verification:**
+  - Programmatically trigger `POST /record/start` via curl and verify that PyQt safely triggers the GUI microphone capture and updates the layout.

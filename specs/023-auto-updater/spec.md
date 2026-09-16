@@ -1,8 +1,8 @@
 # SPEC-023: Transparent Auto-Updater
 
-Status: Draft
-Owner: TBD
-Last updated: 2026-09-12
+Status: Implemented
+Owner: Héctor Álvarez López <hector.alvarez@diagroup.com>
+Last updated: 2026-09-15
 
 ## Problem
 
@@ -31,14 +31,21 @@ Because the application is distributed as a source clone, updates require the us
 
 ## Architecture Notes
 
-- The updating logic should ideally reside in the OS-level launcher script (e.g., a `.bat` or `.sh` wrapper) that runs before the Python environment is fully loaded. This prevents issues with updating files that are currently in use by the Python process (especially on Windows).
-- Flow:
-  1. `git fetch origin main`
-  2. Check if local `main` is behind `origin/main`.
-  3. If behind: `git pull origin main`.
-  4. If `requirements.txt` changed in the diff: update virtual environment.
-  5. Launch the actual application (`python main.py`).
-- Hide console output during this process unless an unrecoverable error occurs.
+The transparent auto-updater is implemented across three coordinated architectural layers:
+
+### 1. Early Startup Module (`src/auto_updater.py`)
+- Executes before the GUI loaded or any PyQt window is created.
+- Runs `git fetch origin main` with a strict 3-second connection timeout, handling offline scenarios silently.
+- Compares commit hashes (`git merge-base --is-ancestor`) to see if the local branch `main` is behind `origin/main`.
+- If behind, executes a clean `git pull`. If `requirements.txt` was modified, runs the virtualenv's pip executable directly (`.venv/bin/pip` or equivalent via `sys.executable`) to update packages.
+
+### 2. Process Replacement in `main.py`
+- On startup, if an update was successfully applied, the app immediately reloads itself by calling `os.execv(sys.executable, [sys.executable] + sys.argv)`. This prevents files in use or "half-loaded" modules, solving Windows locks.
+
+### 3. Background Threads & Settings Integration
+- Added an `UpdateCheckerThread` (`QThread`) running in the background while the UI is open.
+- Integrated an "Enable automatic updates" checkbox in the Settings General Panel, saving `enable_auto_update` in QSettings.
+- Added a "Check for Updates" button to let users trigger updates in real-time and prompt for immediate restart.
 
 ## Test Plan
 
