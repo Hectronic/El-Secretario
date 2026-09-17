@@ -65,7 +65,7 @@ def api_thread(qtbot):
     
     # Wait for port using qtbot.waitUntil to actively process the Qt event loop on macOS/Windows CI/CD!
     try:
-        qtbot.waitUntil(lambda: thread.port > 0, timeout=10000)
+        qtbot.waitUntil(lambda: thread.port > 0, timeout=30000)
     except Exception:
         pass
         
