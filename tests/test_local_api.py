@@ -50,11 +50,11 @@ def api_thread(qtbot):
     # Start the thread and wait for it to assign a port
     thread.start()
     
-    # Wait for app.port file to be generated or port assigned (up to 10 seconds for slower VM runners)
-    attempts = 0
-    while thread.port == 0 and attempts < 500:
-        time.sleep(0.02)
-        attempts += 1
+    # Wait for port using qtbot.waitUntil to actively process the Qt event loop on macOS/Windows CI/CD!
+    try:
+        qtbot.waitUntil(lambda: thread.port > 0, timeout=10000)
+    except Exception:
+        pass
         
     assert thread.port > 0
     yield thread
