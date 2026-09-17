@@ -1,6 +1,6 @@
 # Implementation Plan: Custom Title Bar and Menus
 
-Status: Draft
+Status: Implemented
 Last updated: 2026-09-15
 Spec: [spec.md](spec.md)
 
