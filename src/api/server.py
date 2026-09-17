@@ -361,6 +361,7 @@ class LocalAPIServerThread(QThread):
             self.server.serve_forever()
 
         except Exception as e:
+            self.start_error = str(e)
             logger.error(f"Error inside local REST API server thread: {e}")
         finally:
             self.cleanup()

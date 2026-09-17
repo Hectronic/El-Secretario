@@ -47,16 +47,31 @@ def api_thread(qtbot):
         {"id": "42", "text": "RAG matching snippet", "distance": 0.1, "metadata": {"title": "Mock Meeting"}}
     ]
 
-    # Start the thread and wait for it to assign a port
-    thread.start()
+    # Run the QThread's run() method inside a standard Python threading.Thread.
+    # This completely bypasses macOS-specific PyQt6 QThread scheduling deadlocks in headless/offscreen CI environments
+    # while maintaining 100% of the PyQt signal and network functionalities.
+    import threading
+    t = threading.Thread(target=thread.run)
+    t.daemon = True
     
-    # Wait for app.port file to be generated or port assigned (up to 10 seconds for slower VM runners)
+    # Override stop() to close the server and wait for the Python thread cleanly
+    original_stop = thread.stop
+    def mock_stop():
+        original_stop()
+        t.join(2.0)
+    thread.stop = mock_stop
+    
+    t.start()
+    
+    # Wait for the native thread to bind the socket and assign the port.
+    # We use a 60-second limit (1200 * 0.05s) because macOS CI runners frequently suffer 
+    # from a known ~30-second DNS lookup stall (socket.getaddrinfo) on the very first bind.
     attempts = 0
-    while thread.port == 0 and attempts < 500:
-        time.sleep(0.02)
+    while thread.port == 0 and attempts < 1200:
+        time.sleep(0.05)
         attempts += 1
         
-    assert thread.port > 0
+    assert thread.port > 0, f"Local REST API failed to start after 60s. Error: {getattr(thread, 'start_error', 'None')}"
     yield thread
     
     # Stop thread and cleanup

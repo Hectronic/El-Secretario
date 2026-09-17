@@ -1,6 +1,6 @@
 # SPEC-025: Model Context Protocol (MCP) Server Integration
 
-Status: Approved
+Status: Implemented
 Owner: Héctor Álvarez López <hectoralvarez.me>
 Last updated: 2026-09-15
 
