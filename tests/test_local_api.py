@@ -56,7 +56,7 @@ def api_thread(qtbot):
     except Exception:
         pass
         
-    assert thread.port > 0
+    assert thread.port > 0, f"Local REST API failed to start. Error: {getattr(thread, 'start_error', 'None')}"
     yield thread
     
     # Stop thread and cleanup
