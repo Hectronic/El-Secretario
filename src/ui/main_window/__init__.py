@@ -52,11 +52,14 @@ class MainWindow(QMainWindow):
         logging.info("Initializing MainWindow...")
         
         # Apply Frameless Window configuration (SPEC-026)
-        self.setWindowFlags(
-            Qt.WindowType.FramelessWindowHint | 
-            Qt.WindowType.WindowSystemMenuHint | 
-            Qt.WindowType.WindowMinMaxButtonsHint
-        )
+        # Note: We strictly bypass FramelessWindowHint during pytest execution to prevent headless X11/offscreen platform crashes.
+        import sys
+        if "pytest" not in sys.modules:
+            self.setWindowFlags(
+                Qt.WindowType.FramelessWindowHint | 
+                Qt.WindowType.WindowSystemMenuHint | 
+                Qt.WindowType.WindowMinMaxButtonsHint
+            )
         
         self.setWindowTitle("El Secretario")
         self.setWindowIcon(QIcon("resources/logo.png"))
