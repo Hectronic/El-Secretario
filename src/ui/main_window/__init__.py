@@ -50,6 +50,14 @@ class MainWindow(QMainWindow):
         super().__init__()
         import logging
         logging.info("Initializing MainWindow...")
+        
+        # Apply Frameless Window configuration (SPEC-026)
+        self.setWindowFlags(
+            Qt.WindowType.FramelessWindowHint | 
+            Qt.WindowType.WindowSystemMenuHint | 
+            Qt.WindowType.WindowMinMaxButtonsHint
+        )
+        
         self.setWindowTitle("El Secretario")
         self.setWindowIcon(QIcon("resources/logo.png"))
         self.resize(1450, 860)

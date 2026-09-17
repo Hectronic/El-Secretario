@@ -32,6 +32,11 @@ def build_main_window_layout(window):
         main_layout.setContentsMargins(0, 0, 0, 0)
         main_layout.setSpacing(0)
 
+        # Import and inject Custom Title Bar (SPEC-026)
+        from src.ui.main_window.title_bar import TitleBarWidget
+        window.title_bar = TitleBarWidget(window)
+        main_layout.addWidget(window.title_bar)
+
         window.splitter = QSplitter(Qt.Orientation.Horizontal)
         main_layout.addWidget(window.splitter)
 

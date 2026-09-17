@@ -1,6 +1,6 @@
-# SPEC-027: Custom Window Title Bar and Native Menus
+# SPEC-026: Custom Window Title Bar and Native Menus
 
-Status: Draft
+Status: Implemented
 Owner: Héctor Álvarez López <hector.alvarez@diagroup.com>
 Last updated: 2026-09-15
 
