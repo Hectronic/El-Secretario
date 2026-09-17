@@ -181,6 +181,27 @@ class GeneralSettingsPanel(QWidget):
         self.enable_local_api_check.setToolTip("Enables a loopback-only REST API server to query data and control recording remotely.")
         layout.addWidget(self.enable_local_api_check)
 
+        # Model Context Protocol (SPEC-025)
+        mcp_section_label = QLabel("🤖 Model Context Protocol (MCP)")
+        mcp_section_label.setStyleSheet("font-size: 18px; font-weight: bold; color: #607D8B; margin-top: 20px;")
+        layout.addWidget(mcp_section_label)
+
+        self.enable_mcp_server_check = QCheckBox("Enable Model Context Protocol (MCP) Server Integration")
+        self.enable_mcp_server_check.setChecked(
+            self.settings.value("enable_mcp_server", False, type=bool)
+        )
+        self.enable_mcp_server_check.setToolTip("Allows external AI clients (like Claude Desktop) to connect via stdio and query transcripts or control the app.")
+        layout.addWidget(self.enable_mcp_server_check)
+
+        mcp_row = QHBoxLayout()
+        self.copy_mcp_config_btn = QPushButton("Copy Claude Desktop Config")
+        self.copy_mcp_config_btn.clicked.connect(self._copy_claude_config)
+        self.mcp_status_label = QLabel("Click to copy Claude configuration.")
+        self.mcp_status_label.setStyleSheet("color: gray; font-size: 13px;")
+        mcp_row.addWidget(self.copy_mcp_config_btn)
+        mcp_row.addWidget(self.mcp_status_label, 1)
+        layout.addLayout(mcp_row)
+
         # Auto-Updater (SPEC-023)
         updater_section_label = QLabel("🔄 Auto-Updater")
         updater_section_label.setStyleSheet("font-size: 18px; font-weight: bold; color: #607D8B; margin-top: 20px;")
@@ -230,6 +251,40 @@ class GeneralSettingsPanel(QWidget):
         except Exception as e:
             from PyQt6.QtWidgets import QMessageBox
             QMessageBox.warning(self, "Repair Failed", f"Failed to run installer script: {e}")
+
+    def _copy_claude_config(self):
+        import sys
+        import os
+        import json
+        try:
+            python_executable = sys.executable
+            # Resolve absolute path to mcp_server.py and project root reliably
+            mcp_script_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "api", "mcp_server.py"))
+            project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
+            
+            config = {
+                "mcpServers": {
+                    "el-secretario": {
+                        "command": python_executable,
+                        "args": [mcp_script_path],
+                        "env": {
+                            "PYTHONPATH": project_root
+                        }
+                    }
+                }
+            }
+            
+            config_str = json.dumps(config, indent=2)
+            from PyQt6.QtWidgets import QApplication
+            QApplication.clipboard().setText(config_str)
+            
+            self.mcp_status_label.setText("Copied to clipboard!")
+            self.mcp_status_label.setStyleSheet("color: green; font-weight: bold; font-size: 13px;")
+        except Exception as e:
+            self.mcp_status_label.setText("Copy failed.")
+            self.mcp_status_label.setStyleSheet("color: red; font-size: 13px;")
+            from PyQt6.QtWidgets import QMessageBox
+            QMessageBox.warning(self, "Copy Failed", f"Failed to generate Claude Desktop configuration: {e}")
 
     def _check_for_updates(self):
         self.check_update_btn.setEnabled(False)
@@ -371,5 +426,11 @@ class GeneralSettingsPanel(QWidget):
                     mw.toggle_local_api(new_api)
             except Exception:
                 pass
+
+        # Save MCP Server Integration setting
+        self.settings.setValue(
+            "enable_mcp_server",
+            self.enable_mcp_server_check.isChecked(),
+        )
 
         apply_theme(selected_theme)
