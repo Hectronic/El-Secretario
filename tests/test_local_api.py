@@ -63,13 +63,15 @@ def api_thread(qtbot):
     
     t.start()
     
-    # Wait for port using qtbot.waitUntil to actively process the Qt event loop on macOS/Windows CI/CD!
-    try:
-        qtbot.waitUntil(lambda: thread.port > 0, timeout=30000)
-    except Exception:
-        pass
+    # Wait for the native thread to bind the socket and assign the port.
+    # We use a 60-second limit (1200 * 0.05s) because macOS CI runners frequently suffer 
+    # from a known ~30-second DNS lookup stall (socket.getaddrinfo) on the very first bind.
+    attempts = 0
+    while thread.port == 0 and attempts < 1200:
+        time.sleep(0.05)
+        attempts += 1
         
-    assert thread.port > 0, f"Local REST API failed to start. Error: {getattr(thread, 'start_error', 'None')}"
+    assert thread.port > 0, f"Local REST API failed to start after 60s. Error: {getattr(thread, 'start_error', 'None')}"
     yield thread
     
     # Stop thread and cleanup
