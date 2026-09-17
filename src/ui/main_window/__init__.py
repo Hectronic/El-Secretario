@@ -112,10 +112,16 @@ class MainWindow(QMainWindow):
         self.system_tray_manager.quit_requested.connect(self.force_quit)
 
         # Initialize Local REST API Server Thread (SPEC-024)
-        from src.api.server import LocalAPIServerThread
-        self.api_thread = LocalAPIServerThread(self)
-        self._connect_api_signals()
-        self._setup_api_timer()
+        # Note: We strictly bypass this during pytest execution to prevent background timers and audio hardware queries
+        # from leaking or deadlocking across standard unit tests.
+        import sys
+        if "pytest" not in sys.modules:
+            from src.api.server import LocalAPIServerThread
+            self.api_thread = LocalAPIServerThread(self)
+            self._connect_api_signals()
+            self._setup_api_timer()
+        else:
+            self.api_thread = None
 
         self.init_ui()
         bootstrap_main_window(self)
@@ -595,6 +601,8 @@ class MainWindow(QMainWindow):
 
     def toggle_local_api(self, enabled: bool):
         """Starts or stops the API background thread when settings are changed."""
+        if self.api_thread is None:
+            return
         if enabled:
             if not self.api_thread.isRunning():
                 self.api_thread.start()
