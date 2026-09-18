@@ -157,16 +157,16 @@ class TitleBarWidget(QWidget):
         layout.addStretch()
 
         # 3. Window Control Buttons
-        self.btn_minimize = QPushButton("🗕")
-        self.btn_minimize.setFixedSize(40, 35)
-        self.btn_minimize.clicked.connect(self._minimize_window)
-        layout.addWidget(self.btn_minimize)
-
         self.btn_tray = QPushButton("📥") # Minimize to tray
         self.btn_tray.setToolTip("Minimize to System Tray")
         self.btn_tray.setFixedSize(40, 35)
         self.btn_tray.clicked.connect(self._minimize_to_tray)
         layout.addWidget(self.btn_tray)
+
+        self.btn_minimize = QPushButton("🗕")
+        self.btn_minimize.setFixedSize(40, 35)
+        self.btn_minimize.clicked.connect(self._minimize_window)
+        layout.addWidget(self.btn_minimize)
 
         self.btn_maximize = QPushButton("🗖")
         self.btn_maximize.setFixedSize(40, 35)
@@ -258,7 +258,18 @@ class TitleBarWidget(QWidget):
             self.btn_maximize.setText("🗗") # Restore icon
 
     def _close_window(self):
-        self.main_window.close()
+        reply = QMessageBox.question(
+            self,
+            "Confirm Close",
+            "Are you sure you want to close El Secretario completely?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No
+        )
+        if reply == QMessageBox.StandardButton.Yes:
+            if hasattr(self.main_window, "force_quit"):
+                self.main_window.force_quit()
+            else:
+                self.main_window.close()
 
     # --- Mouse Event Overrides for Dragging ---
     def mousePressEvent(self, event):
