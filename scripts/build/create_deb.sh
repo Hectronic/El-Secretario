@@ -102,6 +102,7 @@ Comment=Intelligent audio transcription and organization tool
 Exec=/usr/bin/el-secretario
 Icon=/usr/share/pixmaps/el-secretario.png
 Terminal=false
+StartupWMClass=el-secretario
 Categories=Utility;AudioVideo;Office;
 EOF
 
