@@ -14,7 +14,7 @@
 
 import logging
 from PyQt6.QtWidgets import QMainWindow, QApplication
-from PyQt6.QtCore import QTimer
+from PyQt6.QtCore import QTimer, Qt
 from PyQt6.QtGui import QIcon
 
 from src.database import DBManager
