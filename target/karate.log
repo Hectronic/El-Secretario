@@ -1,0 +1,1962 @@
+15:30:24.989 [main]  INFO  com.intuit.karate - Karate version: 1.4.1
+15:30:27.248 [main]  ERROR com.intuit.karate - tests/integration/karate/local-api.feature:4
+* url apiBaseUrl
+js failed:
+>>>>
+01: apiBaseUrl
+<<<<
+org.graalvm.polyglot.PolyglotException: ReferenceError: "apiBaseUrl" is not defined
+- <js>.:program(Unnamed:1)
+
+tests/integration/karate/local-api.feature:4
+15:30:27.267 [main]  ERROR com.intuit.karate - tests/integration/karate/local-api.feature:4
+* url apiBaseUrl
+js failed:
+>>>>
+01: apiBaseUrl
+<<<<
+org.graalvm.polyglot.PolyglotException: ReferenceError: "apiBaseUrl" is not defined
+- <js>.:program(Unnamed:1)
+
+tests/integration/karate/local-api.feature:4
+15:30:27.280 [main]  ERROR com.intuit.karate - tests/integration/karate/local-api.feature:4
+* url apiBaseUrl
+js failed:
+>>>>
+01: apiBaseUrl
+<<<<
+org.graalvm.polyglot.PolyglotException: ReferenceError: "apiBaseUrl" is not defined
+- <js>.:program(Unnamed:1)
+
+tests/integration/karate/local-api.feature:4
+15:30:27.291 [main]  ERROR com.intuit.karate - tests/integration/karate/local-api.feature:4
+* url apiBaseUrl
+js failed:
+>>>>
+01: apiBaseUrl
+<<<<
+org.graalvm.polyglot.PolyglotException: ReferenceError: "apiBaseUrl" is not defined
+- <js>.:program(Unnamed:1)
+
+tests/integration/karate/local-api.feature:4
+15:30:27.301 [main]  ERROR com.intuit.karate - tests/integration/karate/local-api.feature:4
+* url apiBaseUrl
+js failed:
+>>>>
+01: apiBaseUrl
+<<<<
+org.graalvm.polyglot.PolyglotException: ReferenceError: "apiBaseUrl" is not defined
+- <js>.:program(Unnamed:1)
+
+tests/integration/karate/local-api.feature:4
+15:30:27.310 [main]  ERROR com.intuit.karate - tests/integration/karate/local-api.feature:4
+* url apiBaseUrl
+js failed:
+>>>>
+01: apiBaseUrl
+<<<<
+org.graalvm.polyglot.PolyglotException: ReferenceError: "apiBaseUrl" is not defined
+- <js>.:program(Unnamed:1)
+
+tests/integration/karate/local-api.feature:4
+15:30:27.319 [main]  ERROR com.intuit.karate - tests/integration/karate/local-api.feature:4
+* url apiBaseUrl
+js failed:
+>>>>
+01: apiBaseUrl
+<<<<
+org.graalvm.polyglot.PolyglotException: ReferenceError: "apiBaseUrl" is not defined
+- <js>.:program(Unnamed:1)
+
+tests/integration/karate/local-api.feature:4
+15:30:27.329 [main]  ERROR com.intuit.karate - tests/integration/karate/local-api.feature:4
+* url apiBaseUrl
+js failed:
+>>>>
+01: apiBaseUrl
+<<<<
+org.graalvm.polyglot.PolyglotException: ReferenceError: "apiBaseUrl" is not defined
+- <js>.:program(Unnamed:1)
+
+tests/integration/karate/local-api.feature:4
+15:30:28.678 [main]  INFO  com.intuit.karate.Suite - <<fail>> feature 1 of 1 (0 remaining) tests/integration/karate/local-api.feature
+15:35:47.084 [main]  INFO  com.intuit.karate - Karate version: 1.4.1
+15:35:47.682 [main]  INFO  com.intuit.karate.Suite - backed up existing 'target/karate-reports' dir to: target/karate-reports_1789565747678
+15:35:49.267 [main]  ERROR com.intuit.karate - tests/integration/karate/local-api.feature:4
+* url apiBaseUrl
+js failed:
+>>>>
+01: apiBaseUrl
+<<<<
+org.graalvm.polyglot.PolyglotException: ReferenceError: "apiBaseUrl" is not defined
+- <js>.:program(Unnamed:1)
+
+tests/integration/karate/local-api.feature:4
+15:35:49.287 [main]  ERROR com.intuit.karate - tests/integration/karate/local-api.feature:4
+* url apiBaseUrl
+js failed:
+>>>>
+01: apiBaseUrl
+<<<<
+org.graalvm.polyglot.PolyglotException: ReferenceError: "apiBaseUrl" is not defined
+- <js>.:program(Unnamed:1)
+
+tests/integration/karate/local-api.feature:4
+15:35:49.297 [main]  ERROR com.intuit.karate - tests/integration/karate/local-api.feature:4
+* url apiBaseUrl
+js failed:
+>>>>
+01: apiBaseUrl
+<<<<
+org.graalvm.polyglot.PolyglotException: ReferenceError: "apiBaseUrl" is not defined
+- <js>.:program(Unnamed:1)
+
+tests/integration/karate/local-api.feature:4
+15:35:49.307 [main]  ERROR com.intuit.karate - tests/integration/karate/local-api.feature:4
+* url apiBaseUrl
+js failed:
+>>>>
+01: apiBaseUrl
+<<<<
+org.graalvm.polyglot.PolyglotException: ReferenceError: "apiBaseUrl" is not defined
+- <js>.:program(Unnamed:1)
+
+tests/integration/karate/local-api.feature:4
+15:35:49.317 [main]  ERROR com.intuit.karate - tests/integration/karate/local-api.feature:4
+* url apiBaseUrl
+js failed:
+>>>>
+01: apiBaseUrl
+<<<<
+org.graalvm.polyglot.PolyglotException: ReferenceError: "apiBaseUrl" is not defined
+- <js>.:program(Unnamed:1)
+
+tests/integration/karate/local-api.feature:4
+15:35:49.326 [main]  ERROR com.intuit.karate - tests/integration/karate/local-api.feature:4
+* url apiBaseUrl
+js failed:
+>>>>
+01: apiBaseUrl
+<<<<
+org.graalvm.polyglot.PolyglotException: ReferenceError: "apiBaseUrl" is not defined
+- <js>.:program(Unnamed:1)
+
+tests/integration/karate/local-api.feature:4
+15:35:49.336 [main]  ERROR com.intuit.karate - tests/integration/karate/local-api.feature:4
+* url apiBaseUrl
+js failed:
+>>>>
+01: apiBaseUrl
+<<<<
+org.graalvm.polyglot.PolyglotException: ReferenceError: "apiBaseUrl" is not defined
+- <js>.:program(Unnamed:1)
+
+tests/integration/karate/local-api.feature:4
+15:35:49.345 [main]  ERROR com.intuit.karate - tests/integration/karate/local-api.feature:4
+* url apiBaseUrl
+js failed:
+>>>>
+01: apiBaseUrl
+<<<<
+org.graalvm.polyglot.PolyglotException: ReferenceError: "apiBaseUrl" is not defined
+- <js>.:program(Unnamed:1)
+
+tests/integration/karate/local-api.feature:4
+15:35:50.577 [main]  INFO  com.intuit.karate.Suite - <<fail>> feature 1 of 1 (0 remaining) tests/integration/karate/local-api.feature
+15:41:09.126 [main]  INFO  com.intuit.karate - Karate version: 1.4.1
+15:41:09.538 [main]  INFO  com.intuit.karate.Runner - using system property 'karate.config.dir': tests/integration/karate/
+15:41:09.670 [main]  DEBUG com.intuit.karate.Suite - [config] tests/integration/karate/karate-config.js
+15:41:09.674 [main]  INFO  com.intuit.karate.Suite - backed up existing 'target/karate-reports' dir to: target/karate-reports_1789566069671
+15:41:11.321 [main]  ERROR com.intuit.karate - tests/integration/karate/local-api.feature:5
+* configure headers = { 'Authorization': 'Bearer ' + apiToken, 'Accept': 'application/json' }
+net.minidev.json.parser.ParseException: Unexpected token + at position 28.
+tests/integration/karate/local-api.feature:5
+15:41:11.344 [main]  ERROR com.intuit.karate - tests/integration/karate/local-api.feature:5
+* configure headers = { 'Authorization': 'Bearer ' + apiToken, 'Accept': 'application/json' }
+net.minidev.json.parser.ParseException: Unexpected token + at position 28.
+tests/integration/karate/local-api.feature:5
+15:41:11.356 [main]  ERROR com.intuit.karate - tests/integration/karate/local-api.feature:5
+* configure headers = { 'Authorization': 'Bearer ' + apiToken, 'Accept': 'application/json' }
+net.minidev.json.parser.ParseException: Unexpected token + at position 28.
+tests/integration/karate/local-api.feature:5
+15:41:11.367 [main]  ERROR com.intuit.karate - tests/integration/karate/local-api.feature:5
+* configure headers = { 'Authorization': 'Bearer ' + apiToken, 'Accept': 'application/json' }
+net.minidev.json.parser.ParseException: Unexpected token + at position 28.
+tests/integration/karate/local-api.feature:5
+15:41:11.377 [main]  ERROR com.intuit.karate - tests/integration/karate/local-api.feature:5
+* configure headers = { 'Authorization': 'Bearer ' + apiToken, 'Accept': 'application/json' }
+net.minidev.json.parser.ParseException: Unexpected token + at position 28.
+tests/integration/karate/local-api.feature:5
+15:41:11.387 [main]  ERROR com.intuit.karate - tests/integration/karate/local-api.feature:5
+* configure headers = { 'Authorization': 'Bearer ' + apiToken, 'Accept': 'application/json' }
+net.minidev.json.parser.ParseException: Unexpected token + at position 28.
+tests/integration/karate/local-api.feature:5
+15:41:11.397 [main]  ERROR com.intuit.karate - tests/integration/karate/local-api.feature:5
+* configure headers = { 'Authorization': 'Bearer ' + apiToken, 'Accept': 'application/json' }
+net.minidev.json.parser.ParseException: Unexpected token + at position 28.
+tests/integration/karate/local-api.feature:5
+15:41:11.409 [main]  ERROR com.intuit.karate - tests/integration/karate/local-api.feature:5
+* configure headers = { 'Authorization': 'Bearer ' + apiToken, 'Accept': 'application/json' }
+net.minidev.json.parser.ParseException: Unexpected token + at position 28.
+tests/integration/karate/local-api.feature:5
+15:41:12.553 [main]  INFO  com.intuit.karate.Suite - <<fail>> feature 1 of 1 (0 remaining) tests/integration/karate/local-api.feature
+15:48:52.423 [main]  INFO  com.intuit.karate - Karate version: 1.4.1
+15:48:52.819 [main]  INFO  com.intuit.karate.Runner - using system property 'karate.config.dir': tests/integration/karate/
+15:48:52.945 [main]  DEBUG com.intuit.karate.Suite - [config] tests/integration/karate/karate-config.js
+15:48:52.950 [main]  INFO  com.intuit.karate.Suite - backed up existing 'target/karate-reports' dir to: target/karate-reports_1789566532946
+15:48:55.024 [main]  DEBUG com.intuit.karate - request:
+1 > GET http://127.0.0.1:12800/api/v1/status
+1 > Authorization: Bearer 89ae6aa4c805640e916e58992e9392d8
+1 > Accept: application/json
+1 > Host: 127.0.0.1:12800
+1 > Connection: Keep-Alive
+1 > User-Agent: Apache-HttpClient/4.5.14 (Java/21.0.12)
+1 > Accept-Encoding: gzip,deflate
+
+
+15:48:55.079 [main]  DEBUG com.intuit.karate - response time in milliseconds: 50
+1 < 200
+1 < Server: BaseHTTP/0.6 Python/3.12.3
+1 < Date: Wed, 16 Sep 2026 13:48:55 GMT
+1 < Content-Type: application/json
+1 < Content-Length: 124
+1 < Access-Control-Allow-Origin: *
+1 < Access-Control-Allow-Methods: GET, POST, OPTIONS
+1 < Access-Control-Allow-Headers: Authorization, Content-Type
+{"app_name": "El Secretario", "version": "1.0.0", "status": "idle", "active_recording": null, "processing_queue_backlog": 0}
+
+15:48:55.145 [main]  DEBUG com.intuit.karate - request:
+1 > GET http://127.0.0.1:12800/api/v1/recordings
+1 > Authorization: Bearer 89ae6aa4c805640e916e58992e9392d8
+1 > Accept: application/json
+1 > Host: 127.0.0.1:12800
+1 > Connection: Keep-Alive
+1 > User-Agent: Apache-HttpClient/4.5.14 (Java/21.0.12)
+1 > Accept-Encoding: gzip,deflate
+
+
+15:48:55.148 [main]  DEBUG com.intuit.karate - response time in milliseconds: 2
+1 < 200
+1 < Server: BaseHTTP/0.6 Python/3.12.3
+1 < Date: Wed, 16 Sep 2026 13:48:55 GMT
+1 < Content-Type: application/json
+1 < Content-Length: 146
+1 < Access-Control-Allow-Origin: *
+1 < Access-Control-Allow-Methods: GET, POST, OPTIONS
+1 < Access-Control-Allow-Headers: Authorization, Content-Type
+[{"id": 42, "title": "Mock Meeting", "date": "2026-09-15 10:00:00", "duration_seconds": 120, "summary_generated": true, "tags": ["sync", "test"]}]
+
+15:48:55.180 [main]  DEBUG com.intuit.karate - request:
+1 > GET http://127.0.0.1:12800/api/v1/recordings/42
+1 > Authorization: Bearer 89ae6aa4c805640e916e58992e9392d8
+1 > Accept: application/json
+1 > Host: 127.0.0.1:12800
+1 > Connection: Keep-Alive
+1 > User-Agent: Apache-HttpClient/4.5.14 (Java/21.0.12)
+1 > Accept-Encoding: gzip,deflate
+
+
+15:48:55.183 [main]  DEBUG com.intuit.karate - response time in milliseconds: 2
+1 < 200
+1 < Server: BaseHTTP/0.6 Python/3.12.3
+1 < Date: Wed, 16 Sep 2026 13:48:55 GMT
+1 < Content-Type: application/json
+1 < Content-Length: 184
+1 < Access-Control-Allow-Origin: *
+1 < Access-Control-Allow-Methods: GET, POST, OPTIONS
+1 < Access-Control-Allow-Headers: Authorization, Content-Type
+{"id": 42, "title": "Mock Meeting", "date": "2026-09-15 10:00:00", "duration_seconds": 120, "transcript": "Hello", "notes": "None", "summary": "Some summary", "tags": ["sync", "test"]}
+
+15:48:55.203 [main]  DEBUG com.intuit.karate - request:
+1 > GET http://127.0.0.1:12800/api/v1/tasks
+1 > Authorization: Bearer 89ae6aa4c805640e916e58992e9392d8
+1 > Accept: application/json
+1 > Host: 127.0.0.1:12800
+1 > Connection: Keep-Alive
+1 > User-Agent: Apache-HttpClient/4.5.14 (Java/21.0.12)
+1 > Accept-Encoding: gzip,deflate
+
+
+15:48:55.206 [main]  DEBUG com.intuit.karate - response time in milliseconds: 2
+1 < 200
+1 < Server: BaseHTTP/0.6 Python/3.12.3
+1 < Date: Wed, 16 Sep 2026 13:48:55 GMT
+1 < Content-Type: application/json
+1 < Content-Length: 116
+1 < Access-Control-Allow-Origin: *
+1 < Access-Control-Allow-Methods: GET, POST, OPTIONS
+1 < Access-Control-Allow-Headers: Authorization, Content-Type
+[{"id": 1, "title": "Complete Spec 24", "description": "Write tests", "due_date": "2026-09-15", "completed": false}]
+
+15:48:55.298 [main]  DEBUG com.intuit.karate - request:
+1 > POST http://127.0.0.1:12800/api/v1/tasks
+1 > Authorization: Bearer 89ae6aa4c805640e916e58992e9392d8
+1 > Accept: application/json
+1 > Content-Type: application/json; charset=UTF-8
+1 > Content-Length: 106
+1 > Host: 127.0.0.1:12800
+1 > Connection: Keep-Alive
+1 > User-Agent: Apache-HttpClient/4.5.14 (Java/21.0.12)
+1 > Accept-Encoding: gzip,deflate
+{"title":"Integration Test Task","description":"Written via Karate Contract Test","due_date":"2026-09-30"}
+
+15:48:55.301 [main]  DEBUG com.intuit.karate - response time in milliseconds: 3
+1 < 201
+1 < Server: BaseHTTP/0.6 Python/3.12.3
+1 < Date: Wed, 16 Sep 2026 13:48:55 GMT
+1 < Content-Type: application/json
+1 < Content-Length: 87
+1 < Access-Control-Allow-Origin: *
+1 < Access-Control-Allow-Methods: GET, POST, OPTIONS
+1 < Access-Control-Allow-Headers: Authorization, Content-Type
+{"success": true, "task_id": 100, "message": "Task created successfully on the board."}
+
+15:48:55.317 [main]  DEBUG com.intuit.karate - request:
+1 > GET http://127.0.0.1:12800/api/v1/search?query=hello
+1 > Authorization: Bearer 89ae6aa4c805640e916e58992e9392d8
+1 > Accept: application/json
+1 > Host: 127.0.0.1:12800
+1 > Connection: Keep-Alive
+1 > User-Agent: Apache-HttpClient/4.5.14 (Java/21.0.12)
+1 > Accept-Encoding: gzip,deflate
+
+
+15:48:55.320 [main]  DEBUG com.intuit.karate - response time in milliseconds: 2
+1 < 200
+1 < Server: BaseHTTP/0.6 Python/3.12.3
+1 < Date: Wed, 16 Sep 2026 13:48:55 GMT
+1 < Content-Type: application/json
+1 < Content-Length: 154
+1 < Access-Control-Allow-Origin: *
+1 < Access-Control-Allow-Methods: GET, POST, OPTIONS
+1 < Access-Control-Allow-Headers: Authorization, Content-Type
+{"query": "hello", "results": [{"source": "recording", "source_id": 42, "title": "Mock Meeting", "text": "RAG matching snippet", "relevance_score": 0.9}]}
+
+15:48:55.335 [main]  DEBUG com.intuit.karate - request:
+1 > POST http://127.0.0.1:12800/api/v1/record/start
+1 > Authorization: Bearer 89ae6aa4c805640e916e58992e9392d8
+1 > Accept: application/json
+1 > Host: 127.0.0.1:12800
+1 > Connection: Keep-Alive
+1 > User-Agent: Apache-HttpClient/4.5.14 (Java/21.0.12)
+1 > Accept-Encoding: gzip,deflate
+
+
+15:48:55.338 [main]  DEBUG com.intuit.karate - response time in milliseconds: 2
+1 < 200
+1 < Server: BaseHTTP/0.6 Python/3.12.3
+1 < Date: Wed, 16 Sep 2026 13:48:55 GMT
+1 < Content-Type: application/json
+1 < Content-Length: 73
+1 < Access-Control-Allow-Origin: *
+1 < Access-Control-Allow-Methods: GET, POST, OPTIONS
+1 < Access-Control-Allow-Headers: Authorization, Content-Type
+{"success": true, "message": "Recording session initiated successfully."}
+
+15:48:55.342 [main]  DEBUG com.intuit.karate - request:
+2 > POST http://127.0.0.1:12800/api/v1/record/stop
+2 > Authorization: Bearer 89ae6aa4c805640e916e58992e9392d8
+2 > Accept: application/json
+2 > Host: 127.0.0.1:12800
+2 > Connection: Keep-Alive
+2 > User-Agent: Apache-HttpClient/4.5.14 (Java/21.0.12)
+2 > Accept-Encoding: gzip,deflate
+
+
+15:48:55.345 [main]  DEBUG com.intuit.karate - response time in milliseconds: 1
+2 < 409
+2 < Server: BaseHTTP/0.6 Python/3.12.3
+2 < Date: Wed, 16 Sep 2026 13:48:55 GMT
+2 < Content-Type: application/json
+2 < Content-Length: 70
+2 < Access-Control-Allow-Origin: *
+2 < Access-Control-Allow-Methods: GET, POST, OPTIONS
+2 < Access-Control-Allow-Headers: Authorization, Content-Type
+{"success": false, "error": "Application is not currently recording."}
+
+15:48:55.360 [main]  ERROR com.intuit.karate - tests/integration/karate/local-api.feature:66
+Then status 200
+status code was: 409, expected: 200, response time in milliseconds: 1, url: http://127.0.0.1:12800/api/v1/record/stop, response: 
+{"success": false, "error": "Application is not currently recording."}
+tests/integration/karate/local-api.feature:66
+15:48:55.377 [main]  DEBUG com.intuit.karate - request:
+1 > GET http://127.0.0.1:12800/api/v1/status
+1 > Accept: application/json
+1 > Host: 127.0.0.1:12800
+1 > Connection: Keep-Alive
+1 > User-Agent: Apache-HttpClient/4.5.14 (Java/21.0.12)
+1 > Accept-Encoding: gzip,deflate
+
+
+15:48:55.380 [main]  DEBUG com.intuit.karate - response time in milliseconds: 2
+1 < 401
+1 < Server: BaseHTTP/0.6 Python/3.12.3
+1 < Date: Wed, 16 Sep 2026 13:48:55 GMT
+1 < Content-Type: application/json
+1 < Content-Length: 66
+1 < Access-Control-Allow-Origin: *
+1 < Access-Control-Allow-Methods: GET, POST, OPTIONS
+1 < Access-Control-Allow-Headers: Authorization, Content-Type
+{"success": false, "error": "Unauthorized: Missing Bearer token."}
+
+15:48:56.456 [main]  INFO  com.intuit.karate.Suite - <<fail>> feature 1 of 1 (0 remaining) tests/integration/karate/local-api.feature
+15:54:35.049 [main]  INFO  com.intuit.karate - Karate version: 1.4.1
+15:54:35.449 [main]  INFO  com.intuit.karate.Runner - using system property 'karate.config.dir': tests/integration/karate/
+15:54:35.583 [main]  DEBUG com.intuit.karate.Suite - [config] tests/integration/karate/karate-config.js
+15:54:35.588 [main]  INFO  com.intuit.karate.Suite - backed up existing 'target/karate-reports' dir to: target/karate-reports_1789566875584
+15:54:37.621 [main]  DEBUG com.intuit.karate - request:
+1 > GET http://127.0.0.1:12800/api/v1/status
+1 > Authorization: Bearer 1e96ba1a1bc329a00c86ab5e8766fb13
+1 > Accept: application/json
+1 > Host: 127.0.0.1:12800
+1 > Connection: Keep-Alive
+1 > User-Agent: Apache-HttpClient/4.5.14 (Java/21.0.12)
+1 > Accept-Encoding: gzip,deflate
+
+
+15:54:37.676 [main]  DEBUG com.intuit.karate - response time in milliseconds: 50
+1 < 200
+1 < Server: BaseHTTP/0.6 Python/3.12.3
+1 < Date: Wed, 16 Sep 2026 13:54:37 GMT
+1 < Content-Type: application/json
+1 < Content-Length: 124
+1 < Access-Control-Allow-Origin: *
+1 < Access-Control-Allow-Methods: GET, POST, OPTIONS
+1 < Access-Control-Allow-Headers: Authorization, Content-Type
+{"app_name": "El Secretario", "version": "1.0.0", "status": "idle", "active_recording": null, "processing_queue_backlog": 0}
+
+15:54:37.739 [main]  DEBUG com.intuit.karate - request:
+1 > GET http://127.0.0.1:12800/api/v1/recordings
+1 > Authorization: Bearer 1e96ba1a1bc329a00c86ab5e8766fb13
+1 > Accept: application/json
+1 > Host: 127.0.0.1:12800
+1 > Connection: Keep-Alive
+1 > User-Agent: Apache-HttpClient/4.5.14 (Java/21.0.12)
+1 > Accept-Encoding: gzip,deflate
+
+
+15:54:37.742 [main]  DEBUG com.intuit.karate - response time in milliseconds: 2
+1 < 200
+1 < Server: BaseHTTP/0.6 Python/3.12.3
+1 < Date: Wed, 16 Sep 2026 13:54:37 GMT
+1 < Content-Type: application/json
+1 < Content-Length: 146
+1 < Access-Control-Allow-Origin: *
+1 < Access-Control-Allow-Methods: GET, POST, OPTIONS
+1 < Access-Control-Allow-Headers: Authorization, Content-Type
+[{"id": 42, "title": "Mock Meeting", "date": "2026-09-15 10:00:00", "duration_seconds": 120, "summary_generated": true, "tags": ["sync", "test"]}]
+
+15:54:37.773 [main]  DEBUG com.intuit.karate - request:
+1 > GET http://127.0.0.1:12800/api/v1/recordings/42
+1 > Authorization: Bearer 1e96ba1a1bc329a00c86ab5e8766fb13
+1 > Accept: application/json
+1 > Host: 127.0.0.1:12800
+1 > Connection: Keep-Alive
+1 > User-Agent: Apache-HttpClient/4.5.14 (Java/21.0.12)
+1 > Accept-Encoding: gzip,deflate
+
+
+15:54:37.776 [main]  DEBUG com.intuit.karate - response time in milliseconds: 2
+1 < 200
+1 < Server: BaseHTTP/0.6 Python/3.12.3
+1 < Date: Wed, 16 Sep 2026 13:54:37 GMT
+1 < Content-Type: application/json
+1 < Content-Length: 184
+1 < Access-Control-Allow-Origin: *
+1 < Access-Control-Allow-Methods: GET, POST, OPTIONS
+1 < Access-Control-Allow-Headers: Authorization, Content-Type
+{"id": 42, "title": "Mock Meeting", "date": "2026-09-15 10:00:00", "duration_seconds": 120, "transcript": "Hello", "notes": "None", "summary": "Some summary", "tags": ["sync", "test"]}
+
+15:54:37.798 [main]  DEBUG com.intuit.karate - request:
+1 > GET http://127.0.0.1:12800/api/v1/tasks
+1 > Authorization: Bearer 1e96ba1a1bc329a00c86ab5e8766fb13
+1 > Accept: application/json
+1 > Host: 127.0.0.1:12800
+1 > Connection: Keep-Alive
+1 > User-Agent: Apache-HttpClient/4.5.14 (Java/21.0.12)
+1 > Accept-Encoding: gzip,deflate
+
+
+15:54:37.801 [main]  DEBUG com.intuit.karate - response time in milliseconds: 2
+1 < 200
+1 < Server: BaseHTTP/0.6 Python/3.12.3
+1 < Date: Wed, 16 Sep 2026 13:54:37 GMT
+1 < Content-Type: application/json
+1 < Content-Length: 116
+1 < Access-Control-Allow-Origin: *
+1 < Access-Control-Allow-Methods: GET, POST, OPTIONS
+1 < Access-Control-Allow-Headers: Authorization, Content-Type
+[{"id": 1, "title": "Complete Spec 24", "description": "Write tests", "due_date": "2026-09-15", "completed": false}]
+
+15:54:37.870 [main]  DEBUG com.intuit.karate - request:
+1 > POST http://127.0.0.1:12800/api/v1/tasks
+1 > Authorization: Bearer 1e96ba1a1bc329a00c86ab5e8766fb13
+1 > Accept: application/json
+1 > Content-Type: application/json; charset=UTF-8
+1 > Content-Length: 106
+1 > Host: 127.0.0.1:12800
+1 > Connection: Keep-Alive
+1 > User-Agent: Apache-HttpClient/4.5.14 (Java/21.0.12)
+1 > Accept-Encoding: gzip,deflate
+{"title":"Integration Test Task","description":"Written via Karate Contract Test","due_date":"2026-09-30"}
+
+15:54:37.873 [main]  DEBUG com.intuit.karate - response time in milliseconds: 3
+1 < 201
+1 < Server: BaseHTTP/0.6 Python/3.12.3
+1 < Date: Wed, 16 Sep 2026 13:54:37 GMT
+1 < Content-Type: application/json
+1 < Content-Length: 87
+1 < Access-Control-Allow-Origin: *
+1 < Access-Control-Allow-Methods: GET, POST, OPTIONS
+1 < Access-Control-Allow-Headers: Authorization, Content-Type
+{"success": true, "task_id": 100, "message": "Task created successfully on the board."}
+
+15:54:37.890 [main]  DEBUG com.intuit.karate - request:
+1 > GET http://127.0.0.1:12800/api/v1/search?query=hello
+1 > Authorization: Bearer 1e96ba1a1bc329a00c86ab5e8766fb13
+1 > Accept: application/json
+1 > Host: 127.0.0.1:12800
+1 > Connection: Keep-Alive
+1 > User-Agent: Apache-HttpClient/4.5.14 (Java/21.0.12)
+1 > Accept-Encoding: gzip,deflate
+
+
+15:54:37.893 [main]  DEBUG com.intuit.karate - response time in milliseconds: 2
+1 < 200
+1 < Server: BaseHTTP/0.6 Python/3.12.3
+1 < Date: Wed, 16 Sep 2026 13:54:37 GMT
+1 < Content-Type: application/json
+1 < Content-Length: 154
+1 < Access-Control-Allow-Origin: *
+1 < Access-Control-Allow-Methods: GET, POST, OPTIONS
+1 < Access-Control-Allow-Headers: Authorization, Content-Type
+{"query": "hello", "results": [{"source": "recording", "source_id": 42, "title": "Mock Meeting", "text": "RAG matching snippet", "relevance_score": 0.9}]}
+
+15:54:37.908 [main]  DEBUG com.intuit.karate - request:
+1 > POST http://127.0.0.1:12800/api/v1/record/start
+1 > Authorization: Bearer 1e96ba1a1bc329a00c86ab5e8766fb13
+1 > Accept: application/json
+1 > Host: 127.0.0.1:12800
+1 > Connection: Keep-Alive
+1 > User-Agent: Apache-HttpClient/4.5.14 (Java/21.0.12)
+1 > Accept-Encoding: gzip,deflate
+
+
+15:54:37.911 [main]  DEBUG com.intuit.karate - response time in milliseconds: 2
+1 < 200
+1 < Server: BaseHTTP/0.6 Python/3.12.3
+1 < Date: Wed, 16 Sep 2026 13:54:37 GMT
+1 < Content-Type: application/json
+1 < Content-Length: 73
+1 < Access-Control-Allow-Origin: *
+1 < Access-Control-Allow-Methods: GET, POST, OPTIONS
+1 < Access-Control-Allow-Headers: Authorization, Content-Type
+{"success": true, "message": "Recording session initiated successfully."}
+
+15:54:37.916 [main]  DEBUG com.intuit.karate - request:
+2 > POST http://127.0.0.1:12800/api/v1/record/stop
+2 > Authorization: Bearer 1e96ba1a1bc329a00c86ab5e8766fb13
+2 > Accept: application/json
+2 > Host: 127.0.0.1:12800
+2 > Connection: Keep-Alive
+2 > User-Agent: Apache-HttpClient/4.5.14 (Java/21.0.12)
+2 > Accept-Encoding: gzip,deflate
+
+
+15:54:37.919 [main]  DEBUG com.intuit.karate - response time in milliseconds: 2
+2 < 200
+2 < Server: BaseHTTP/0.6 Python/3.12.3
+2 < Date: Wed, 16 Sep 2026 13:54:37 GMT
+2 < Content-Type: application/json
+2 < Content-Length: 79
+2 < Access-Control-Allow-Origin: *
+2 < Access-Control-Allow-Methods: GET, POST, OPTIONS
+2 < Access-Control-Allow-Headers: Authorization, Content-Type
+{"success": true, "message": "Recording stopped. Sent to transcription queue."}
+
+15:54:37.934 [main]  DEBUG com.intuit.karate - request:
+1 > GET http://127.0.0.1:12800/api/v1/status
+1 > Accept: application/json
+1 > Host: 127.0.0.1:12800
+1 > Connection: Keep-Alive
+1 > User-Agent: Apache-HttpClient/4.5.14 (Java/21.0.12)
+1 > Accept-Encoding: gzip,deflate
+
+
+15:54:37.937 [main]  DEBUG com.intuit.karate - response time in milliseconds: 2
+1 < 401
+1 < Server: BaseHTTP/0.6 Python/3.12.3
+1 < Date: Wed, 16 Sep 2026 13:54:37 GMT
+1 < Content-Type: application/json
+1 < Content-Length: 66
+1 < Access-Control-Allow-Origin: *
+1 < Access-Control-Allow-Methods: GET, POST, OPTIONS
+1 < Access-Control-Allow-Headers: Authorization, Content-Type
+{"success": false, "error": "Unauthorized: Missing Bearer token."}
+
+15:54:39.009 [main]  INFO  com.intuit.karate.Suite - <<pass>> feature 1 of 1 (0 remaining) tests/integration/karate/local-api.feature
+16:01:53.376 [main]  INFO  com.intuit.karate - Karate version: 1.4.1
+16:01:53.784 [main]  INFO  com.intuit.karate.Runner - using system property 'karate.config.dir': tests/integration/karate/
+16:01:53.921 [main]  DEBUG com.intuit.karate.Suite - [config] tests/integration/karate/karate-config.js
+16:01:53.926 [main]  INFO  com.intuit.karate.Suite - backed up existing 'target/karate-reports' dir to: target/karate-reports_1789567313922
+16:01:55.959 [main]  DEBUG com.intuit.karate - request:
+1 > GET http://127.0.0.1:12800/api/v1/status
+1 > Authorization: Bearer e93440df09eec9e092233632b9a2a459
+1 > Accept: application/json
+1 > Host: 127.0.0.1:12800
+1 > Connection: Keep-Alive
+1 > User-Agent: Apache-HttpClient/4.5.14 (Java/21.0.12)
+1 > Accept-Encoding: gzip,deflate
+
+
+16:01:56.014 [main]  DEBUG com.intuit.karate - response time in milliseconds: 50
+1 < 200
+1 < Server: BaseHTTP/0.6 Python/3.12.3
+1 < Date: Wed, 16 Sep 2026 14:01:56 GMT
+1 < Content-Type: application/json
+1 < Content-Length: 124
+1 < Access-Control-Allow-Origin: *
+1 < Access-Control-Allow-Methods: GET, POST, OPTIONS
+1 < Access-Control-Allow-Headers: Authorization, Content-Type
+{"app_name": "El Secretario", "version": "1.0.0", "status": "idle", "active_recording": null, "processing_queue_backlog": 0}
+
+16:01:56.078 [main]  DEBUG com.intuit.karate - request:
+1 > GET http://127.0.0.1:12800/api/v1/recordings
+1 > Authorization: Bearer e93440df09eec9e092233632b9a2a459
+1 > Accept: application/json
+1 > Host: 127.0.0.1:12800
+1 > Connection: Keep-Alive
+1 > User-Agent: Apache-HttpClient/4.5.14 (Java/21.0.12)
+1 > Accept-Encoding: gzip,deflate
+
+
+16:01:56.081 [main]  DEBUG com.intuit.karate - response time in milliseconds: 3
+1 < 200
+1 < Server: BaseHTTP/0.6 Python/3.12.3
+1 < Date: Wed, 16 Sep 2026 14:01:56 GMT
+1 < Content-Type: application/json
+1 < Content-Length: 146
+1 < Access-Control-Allow-Origin: *
+1 < Access-Control-Allow-Methods: GET, POST, OPTIONS
+1 < Access-Control-Allow-Headers: Authorization, Content-Type
+[{"id": 42, "title": "Mock Meeting", "date": "2026-09-15 10:00:00", "duration_seconds": 120, "summary_generated": true, "tags": ["sync", "test"]}]
+
+16:01:56.114 [main]  DEBUG com.intuit.karate - request:
+1 > GET http://127.0.0.1:12800/api/v1/recordings/42
+1 > Authorization: Bearer e93440df09eec9e092233632b9a2a459
+1 > Accept: application/json
+1 > Host: 127.0.0.1:12800
+1 > Connection: Keep-Alive
+1 > User-Agent: Apache-HttpClient/4.5.14 (Java/21.0.12)
+1 > Accept-Encoding: gzip,deflate
+
+
+16:01:56.117 [main]  DEBUG com.intuit.karate - response time in milliseconds: 3
+1 < 200
+1 < Server: BaseHTTP/0.6 Python/3.12.3
+1 < Date: Wed, 16 Sep 2026 14:01:56 GMT
+1 < Content-Type: application/json
+1 < Content-Length: 184
+1 < Access-Control-Allow-Origin: *
+1 < Access-Control-Allow-Methods: GET, POST, OPTIONS
+1 < Access-Control-Allow-Headers: Authorization, Content-Type
+{"id": 42, "title": "Mock Meeting", "date": "2026-09-15 10:00:00", "duration_seconds": 120, "transcript": "Hello", "notes": "None", "summary": "Some summary", "tags": ["sync", "test"]}
+
+16:01:56.140 [main]  DEBUG com.intuit.karate - request:
+1 > GET http://127.0.0.1:12800/api/v1/tasks
+1 > Authorization: Bearer e93440df09eec9e092233632b9a2a459
+1 > Accept: application/json
+1 > Host: 127.0.0.1:12800
+1 > Connection: Keep-Alive
+1 > User-Agent: Apache-HttpClient/4.5.14 (Java/21.0.12)
+1 > Accept-Encoding: gzip,deflate
+
+
+16:01:56.143 [main]  DEBUG com.intuit.karate - response time in milliseconds: 2
+1 < 200
+1 < Server: BaseHTTP/0.6 Python/3.12.3
+1 < Date: Wed, 16 Sep 2026 14:01:56 GMT
+1 < Content-Type: application/json
+1 < Content-Length: 116
+1 < Access-Control-Allow-Origin: *
+1 < Access-Control-Allow-Methods: GET, POST, OPTIONS
+1 < Access-Control-Allow-Headers: Authorization, Content-Type
+[{"id": 1, "title": "Complete Spec 24", "description": "Write tests", "due_date": "2026-09-15", "completed": false}]
+
+16:01:56.212 [main]  DEBUG com.intuit.karate - request:
+1 > POST http://127.0.0.1:12800/api/v1/tasks
+1 > Authorization: Bearer e93440df09eec9e092233632b9a2a459
+1 > Accept: application/json
+1 > Content-Type: application/json; charset=UTF-8
+1 > Content-Length: 106
+1 > Host: 127.0.0.1:12800
+1 > Connection: Keep-Alive
+1 > User-Agent: Apache-HttpClient/4.5.14 (Java/21.0.12)
+1 > Accept-Encoding: gzip,deflate
+{"title":"Integration Test Task","description":"Written via Karate Contract Test","due_date":"2026-09-30"}
+
+16:01:56.216 [main]  DEBUG com.intuit.karate - response time in milliseconds: 3
+1 < 201
+1 < Server: BaseHTTP/0.6 Python/3.12.3
+1 < Date: Wed, 16 Sep 2026 14:01:56 GMT
+1 < Content-Type: application/json
+1 < Content-Length: 87
+1 < Access-Control-Allow-Origin: *
+1 < Access-Control-Allow-Methods: GET, POST, OPTIONS
+1 < Access-Control-Allow-Headers: Authorization, Content-Type
+{"success": true, "task_id": 100, "message": "Task created successfully on the board."}
+
+16:01:56.233 [main]  DEBUG com.intuit.karate - request:
+1 > GET http://127.0.0.1:12800/api/v1/search?query=hello
+1 > Authorization: Bearer e93440df09eec9e092233632b9a2a459
+1 > Accept: application/json
+1 > Host: 127.0.0.1:12800
+1 > Connection: Keep-Alive
+1 > User-Agent: Apache-HttpClient/4.5.14 (Java/21.0.12)
+1 > Accept-Encoding: gzip,deflate
+
+
+16:01:56.236 [main]  DEBUG com.intuit.karate - response time in milliseconds: 2
+1 < 200
+1 < Server: BaseHTTP/0.6 Python/3.12.3
+1 < Date: Wed, 16 Sep 2026 14:01:56 GMT
+1 < Content-Type: application/json
+1 < Content-Length: 154
+1 < Access-Control-Allow-Origin: *
+1 < Access-Control-Allow-Methods: GET, POST, OPTIONS
+1 < Access-Control-Allow-Headers: Authorization, Content-Type
+{"query": "hello", "results": [{"source": "recording", "source_id": 42, "title": "Mock Meeting", "text": "RAG matching snippet", "relevance_score": 0.9}]}
+
+16:01:56.252 [main]  DEBUG com.intuit.karate - request:
+1 > POST http://127.0.0.1:12800/api/v1/record/start
+1 > Authorization: Bearer e93440df09eec9e092233632b9a2a459
+1 > Accept: application/json
+1 > Host: 127.0.0.1:12800
+1 > Connection: Keep-Alive
+1 > User-Agent: Apache-HttpClient/4.5.14 (Java/21.0.12)
+1 > Accept-Encoding: gzip,deflate
+
+
+16:01:56.255 [main]  DEBUG com.intuit.karate - response time in milliseconds: 2
+1 < 200
+1 < Server: BaseHTTP/0.6 Python/3.12.3
+1 < Date: Wed, 16 Sep 2026 14:01:56 GMT
+1 < Content-Type: application/json
+1 < Content-Length: 73
+1 < Access-Control-Allow-Origin: *
+1 < Access-Control-Allow-Methods: GET, POST, OPTIONS
+1 < Access-Control-Allow-Headers: Authorization, Content-Type
+{"success": true, "message": "Recording session initiated successfully."}
+
+16:01:56.260 [main]  DEBUG com.intuit.karate - request:
+2 > POST http://127.0.0.1:12800/api/v1/record/stop
+2 > Authorization: Bearer e93440df09eec9e092233632b9a2a459
+2 > Accept: application/json
+2 > Host: 127.0.0.1:12800
+2 > Connection: Keep-Alive
+2 > User-Agent: Apache-HttpClient/4.5.14 (Java/21.0.12)
+2 > Accept-Encoding: gzip,deflate
+
+
+16:01:56.262 [main]  DEBUG com.intuit.karate - response time in milliseconds: 2
+2 < 200
+2 < Server: BaseHTTP/0.6 Python/3.12.3
+2 < Date: Wed, 16 Sep 2026 14:01:56 GMT
+2 < Content-Type: application/json
+2 < Content-Length: 79
+2 < Access-Control-Allow-Origin: *
+2 < Access-Control-Allow-Methods: GET, POST, OPTIONS
+2 < Access-Control-Allow-Headers: Authorization, Content-Type
+{"success": true, "message": "Recording stopped. Sent to transcription queue."}
+
+16:01:56.275 [main]  DEBUG com.intuit.karate - request:
+1 > GET http://127.0.0.1:12800/api/v1/status
+1 > Accept: application/json
+1 > Host: 127.0.0.1:12800
+1 > Connection: Keep-Alive
+1 > User-Agent: Apache-HttpClient/4.5.14 (Java/21.0.12)
+1 > Accept-Encoding: gzip,deflate
+
+
+16:01:56.278 [main]  DEBUG com.intuit.karate - response time in milliseconds: 2
+1 < 401
+1 < Server: BaseHTTP/0.6 Python/3.12.3
+1 < Date: Wed, 16 Sep 2026 14:01:56 GMT
+1 < Content-Type: application/json
+1 < Content-Length: 66
+1 < Access-Control-Allow-Origin: *
+1 < Access-Control-Allow-Methods: GET, POST, OPTIONS
+1 < Access-Control-Allow-Headers: Authorization, Content-Type
+{"success": false, "error": "Unauthorized: Missing Bearer token."}
+
+16:01:57.392 [main]  INFO  com.intuit.karate.Suite - <<pass>> feature 1 of 1 (0 remaining) tests/integration/karate/local-api.feature
+17:02:16.689 [main]  INFO  com.intuit.karate - Karate version: 1.4.1
+17:02:17.160 [main]  INFO  com.intuit.karate.Runner - using system property 'karate.config.dir': tests/integration/karate/
+17:02:17.287 [main]  DEBUG com.intuit.karate.Suite - [config] tests/integration/karate/karate-config.js
+17:02:17.291 [main]  INFO  com.intuit.karate.Suite - backed up existing 'target/karate-reports' dir to: target/karate-reports_1789570937288
+17:02:18.806 [main]  DEBUG com.intuit.karate - request:
+1 > GET http://127.0.0.1:12800/api/v1/status
+1 > Authorization: Bearer 5fda18e186ae92d21e7eb9176c72603a
+1 > Accept: application/json
+1 > Host: 127.0.0.1:12800
+1 > Connection: Keep-Alive
+1 > User-Agent: Apache-HttpClient/4.5.14 (Java/21.0.12)
+1 > Accept-Encoding: gzip,deflate
+
+
+17:02:18.836 [main]  DEBUG com.intuit.karate - response time in milliseconds: 27
+1 < 200
+1 < Server: BaseHTTP/0.6 Python/3.12.3
+1 < Date: Wed, 16 Sep 2026 15:02:18 GMT
+1 < Content-Type: application/json
+1 < Content-Length: 124
+1 < Access-Control-Allow-Origin: *
+1 < Access-Control-Allow-Methods: GET, POST, OPTIONS
+1 < Access-Control-Allow-Headers: Authorization, Content-Type
+{"app_name": "El Secretario", "version": "1.0.0", "status": "idle", "active_recording": null, "processing_queue_backlog": 0}
+
+17:02:18.871 [main]  DEBUG com.intuit.karate - request:
+1 > GET http://127.0.0.1:12800/api/v1/recordings
+1 > Authorization: Bearer 5fda18e186ae92d21e7eb9176c72603a
+1 > Accept: application/json
+1 > Host: 127.0.0.1:12800
+1 > Connection: Keep-Alive
+1 > User-Agent: Apache-HttpClient/4.5.14 (Java/21.0.12)
+1 > Accept-Encoding: gzip,deflate
+
+
+17:02:18.873 [main]  DEBUG com.intuit.karate - response time in milliseconds: 1
+1 < 200
+1 < Server: BaseHTTP/0.6 Python/3.12.3
+1 < Date: Wed, 16 Sep 2026 15:02:18 GMT
+1 < Content-Type: application/json
+1 < Content-Length: 146
+1 < Access-Control-Allow-Origin: *
+1 < Access-Control-Allow-Methods: GET, POST, OPTIONS
+1 < Access-Control-Allow-Headers: Authorization, Content-Type
+[{"id": 42, "title": "Mock Meeting", "date": "2026-09-15 10:00:00", "duration_seconds": 120, "summary_generated": true, "tags": ["sync", "test"]}]
+
+17:02:18.892 [main]  DEBUG com.intuit.karate - request:
+1 > GET http://127.0.0.1:12800/api/v1/recordings/42
+1 > Authorization: Bearer 5fda18e186ae92d21e7eb9176c72603a
+1 > Accept: application/json
+1 > Host: 127.0.0.1:12800
+1 > Connection: Keep-Alive
+1 > User-Agent: Apache-HttpClient/4.5.14 (Java/21.0.12)
+1 > Accept-Encoding: gzip,deflate
+
+
+17:02:18.894 [main]  DEBUG com.intuit.karate - response time in milliseconds: 2
+1 < 200
+1 < Server: BaseHTTP/0.6 Python/3.12.3
+1 < Date: Wed, 16 Sep 2026 15:02:18 GMT
+1 < Content-Type: application/json
+1 < Content-Length: 184
+1 < Access-Control-Allow-Origin: *
+1 < Access-Control-Allow-Methods: GET, POST, OPTIONS
+1 < Access-Control-Allow-Headers: Authorization, Content-Type
+{"id": 42, "title": "Mock Meeting", "date": "2026-09-15 10:00:00", "duration_seconds": 120, "transcript": "Hello", "notes": "None", "summary": "Some summary", "tags": ["sync", "test"]}
+
+17:02:18.906 [main]  DEBUG com.intuit.karate - request:
+1 > GET http://127.0.0.1:12800/api/v1/tasks
+1 > Authorization: Bearer 5fda18e186ae92d21e7eb9176c72603a
+1 > Accept: application/json
+1 > Host: 127.0.0.1:12800
+1 > Connection: Keep-Alive
+1 > User-Agent: Apache-HttpClient/4.5.14 (Java/21.0.12)
+1 > Accept-Encoding: gzip,deflate
+
+
+17:02:18.907 [main]  DEBUG com.intuit.karate - response time in milliseconds: 1
+1 < 200
+1 < Server: BaseHTTP/0.6 Python/3.12.3
+1 < Date: Wed, 16 Sep 2026 15:02:18 GMT
+1 < Content-Type: application/json
+1 < Content-Length: 116
+1 < Access-Control-Allow-Origin: *
+1 < Access-Control-Allow-Methods: GET, POST, OPTIONS
+1 < Access-Control-Allow-Headers: Authorization, Content-Type
+[{"id": 1, "title": "Complete Spec 24", "description": "Write tests", "due_date": "2026-09-15", "completed": false}]
+
+17:02:18.957 [main]  DEBUG com.intuit.karate - request:
+1 > POST http://127.0.0.1:12800/api/v1/tasks
+1 > Authorization: Bearer 5fda18e186ae92d21e7eb9176c72603a
+1 > Accept: application/json
+1 > Content-Type: application/json; charset=UTF-8
+1 > Content-Length: 106
+1 > Host: 127.0.0.1:12800
+1 > Connection: Keep-Alive
+1 > User-Agent: Apache-HttpClient/4.5.14 (Java/21.0.12)
+1 > Accept-Encoding: gzip,deflate
+{"title":"Integration Test Task","description":"Written via Karate Contract Test","due_date":"2026-09-30"}
+
+17:02:18.959 [main]  DEBUG com.intuit.karate - response time in milliseconds: 1
+1 < 201
+1 < Server: BaseHTTP/0.6 Python/3.12.3
+1 < Date: Wed, 16 Sep 2026 15:02:18 GMT
+1 < Content-Type: application/json
+1 < Content-Length: 87
+1 < Access-Control-Allow-Origin: *
+1 < Access-Control-Allow-Methods: GET, POST, OPTIONS
+1 < Access-Control-Allow-Headers: Authorization, Content-Type
+{"success": true, "task_id": 100, "message": "Task created successfully on the board."}
+
+17:02:18.969 [main]  DEBUG com.intuit.karate - request:
+1 > GET http://127.0.0.1:12800/api/v1/search?query=hello
+1 > Authorization: Bearer 5fda18e186ae92d21e7eb9176c72603a
+1 > Accept: application/json
+1 > Host: 127.0.0.1:12800
+1 > Connection: Keep-Alive
+1 > User-Agent: Apache-HttpClient/4.5.14 (Java/21.0.12)
+1 > Accept-Encoding: gzip,deflate
+
+
+17:02:18.970 [main]  DEBUG com.intuit.karate - response time in milliseconds: 1
+1 < 200
+1 < Server: BaseHTTP/0.6 Python/3.12.3
+1 < Date: Wed, 16 Sep 2026 15:02:18 GMT
+1 < Content-Type: application/json
+1 < Content-Length: 154
+1 < Access-Control-Allow-Origin: *
+1 < Access-Control-Allow-Methods: GET, POST, OPTIONS
+1 < Access-Control-Allow-Headers: Authorization, Content-Type
+{"query": "hello", "results": [{"source": "recording", "source_id": 42, "title": "Mock Meeting", "text": "RAG matching snippet", "relevance_score": 0.9}]}
+
+17:02:18.979 [main]  DEBUG com.intuit.karate - request:
+1 > POST http://127.0.0.1:12800/api/v1/record/start
+1 > Authorization: Bearer 5fda18e186ae92d21e7eb9176c72603a
+1 > Accept: application/json
+1 > Host: 127.0.0.1:12800
+1 > Connection: Keep-Alive
+1 > User-Agent: Apache-HttpClient/4.5.14 (Java/21.0.12)
+1 > Accept-Encoding: gzip,deflate
+
+
+17:02:18.980 [main]  DEBUG com.intuit.karate - response time in milliseconds: 1
+1 < 200
+1 < Server: BaseHTTP/0.6 Python/3.12.3
+1 < Date: Wed, 16 Sep 2026 15:02:18 GMT
+1 < Content-Type: application/json
+1 < Content-Length: 73
+1 < Access-Control-Allow-Origin: *
+1 < Access-Control-Allow-Methods: GET, POST, OPTIONS
+1 < Access-Control-Allow-Headers: Authorization, Content-Type
+{"success": true, "message": "Recording session initiated successfully."}
+
+17:02:18.983 [main]  DEBUG com.intuit.karate - request:
+2 > POST http://127.0.0.1:12800/api/v1/record/stop
+2 > Authorization: Bearer 5fda18e186ae92d21e7eb9176c72603a
+2 > Accept: application/json
+2 > Host: 127.0.0.1:12800
+2 > Connection: Keep-Alive
+2 > User-Agent: Apache-HttpClient/4.5.14 (Java/21.0.12)
+2 > Accept-Encoding: gzip,deflate
+
+
+17:02:18.984 [main]  DEBUG com.intuit.karate - response time in milliseconds: 1
+2 < 200
+2 < Server: BaseHTTP/0.6 Python/3.12.3
+2 < Date: Wed, 16 Sep 2026 15:02:18 GMT
+2 < Content-Type: application/json
+2 < Content-Length: 79
+2 < Access-Control-Allow-Origin: *
+2 < Access-Control-Allow-Methods: GET, POST, OPTIONS
+2 < Access-Control-Allow-Headers: Authorization, Content-Type
+{"success": true, "message": "Recording stopped. Sent to transcription queue."}
+
+17:02:18.991 [main]  DEBUG com.intuit.karate - request:
+1 > GET http://127.0.0.1:12800/api/v1/status
+1 > Accept: application/json
+1 > Host: 127.0.0.1:12800
+1 > Connection: Keep-Alive
+1 > User-Agent: Apache-HttpClient/4.5.14 (Java/21.0.12)
+1 > Accept-Encoding: gzip,deflate
+
+
+17:02:18.993 [main]  DEBUG com.intuit.karate - response time in milliseconds: 2
+1 < 401
+1 < Server: BaseHTTP/0.6 Python/3.12.3
+1 < Date: Wed, 16 Sep 2026 15:02:18 GMT
+1 < Content-Type: application/json
+1 < Content-Length: 66
+1 < Access-Control-Allow-Origin: *
+1 < Access-Control-Allow-Methods: GET, POST, OPTIONS
+1 < Access-Control-Allow-Headers: Authorization, Content-Type
+{"success": false, "error": "Unauthorized: Missing Bearer token."}
+
+17:02:19.497 [main]  INFO  com.intuit.karate.Suite - <<pass>> feature 1 of 1 (0 remaining) tests/integration/karate/local-api.feature
+17:22:52.250 [main]  INFO  com.intuit.karate - Karate version: 1.4.1
+17:22:52.680 [main]  INFO  com.intuit.karate.Runner - using system property 'karate.config.dir': tests/integration/karate/
+17:22:52.826 [main]  DEBUG com.intuit.karate.Suite - [config] tests/integration/karate/karate-config.js
+17:22:52.831 [main]  INFO  com.intuit.karate.Suite - backed up existing 'target/karate-reports' dir to: target/karate-reports_1789572172827
+17:22:54.995 [main]  DEBUG com.intuit.karate - request:
+1 > GET http://127.0.0.1:12800/api/v1/status
+1 > Authorization: Bearer 80eceace97b3cab7c23d4176c3f0c6b0
+1 > Accept: application/json
+1 > Host: 127.0.0.1:12800
+1 > Connection: Keep-Alive
+1 > User-Agent: Apache-HttpClient/4.5.14 (Java/21.0.12)
+1 > Accept-Encoding: gzip,deflate
+
+
+17:22:55.049 [main]  DEBUG com.intuit.karate - response time in milliseconds: 49
+1 < 200
+1 < Server: BaseHTTP/0.6 Python/3.12.3
+1 < Date: Wed, 16 Sep 2026 15:22:55 GMT
+1 < Content-Type: application/json
+1 < Content-Length: 124
+1 < Access-Control-Allow-Origin: *
+1 < Access-Control-Allow-Methods: GET, POST, OPTIONS
+1 < Access-Control-Allow-Headers: Authorization, Content-Type
+{"app_name": "El Secretario", "version": "1.0.0", "status": "idle", "active_recording": null, "processing_queue_backlog": 0}
+
+17:22:55.125 [main]  DEBUG com.intuit.karate - request:
+1 > GET http://127.0.0.1:12800/api/v1/recordings
+1 > Authorization: Bearer 80eceace97b3cab7c23d4176c3f0c6b0
+1 > Accept: application/json
+1 > Host: 127.0.0.1:12800
+1 > Connection: Keep-Alive
+1 > User-Agent: Apache-HttpClient/4.5.14 (Java/21.0.12)
+1 > Accept-Encoding: gzip,deflate
+
+
+17:22:55.128 [main]  DEBUG com.intuit.karate - response time in milliseconds: 2
+1 < 200
+1 < Server: BaseHTTP/0.6 Python/3.12.3
+1 < Date: Wed, 16 Sep 2026 15:22:55 GMT
+1 < Content-Type: application/json
+1 < Content-Length: 146
+1 < Access-Control-Allow-Origin: *
+1 < Access-Control-Allow-Methods: GET, POST, OPTIONS
+1 < Access-Control-Allow-Headers: Authorization, Content-Type
+[{"id": 42, "title": "Mock Meeting", "date": "2026-09-15 10:00:00", "duration_seconds": 120, "summary_generated": true, "tags": ["sync", "test"]}]
+
+17:22:55.166 [main]  DEBUG com.intuit.karate - request:
+1 > GET http://127.0.0.1:12800/api/v1/recordings/42
+1 > Authorization: Bearer 80eceace97b3cab7c23d4176c3f0c6b0
+1 > Accept: application/json
+1 > Host: 127.0.0.1:12800
+1 > Connection: Keep-Alive
+1 > User-Agent: Apache-HttpClient/4.5.14 (Java/21.0.12)
+1 > Accept-Encoding: gzip,deflate
+
+
+17:22:55.169 [main]  DEBUG com.intuit.karate - response time in milliseconds: 2
+1 < 200
+1 < Server: BaseHTTP/0.6 Python/3.12.3
+1 < Date: Wed, 16 Sep 2026 15:22:55 GMT
+1 < Content-Type: application/json
+1 < Content-Length: 184
+1 < Access-Control-Allow-Origin: *
+1 < Access-Control-Allow-Methods: GET, POST, OPTIONS
+1 < Access-Control-Allow-Headers: Authorization, Content-Type
+{"id": 42, "title": "Mock Meeting", "date": "2026-09-15 10:00:00", "duration_seconds": 120, "transcript": "Hello", "notes": "None", "summary": "Some summary", "tags": ["sync", "test"]}
+
+17:22:55.194 [main]  DEBUG com.intuit.karate - request:
+1 > GET http://127.0.0.1:12800/api/v1/tasks
+1 > Authorization: Bearer 80eceace97b3cab7c23d4176c3f0c6b0
+1 > Accept: application/json
+1 > Host: 127.0.0.1:12800
+1 > Connection: Keep-Alive
+1 > User-Agent: Apache-HttpClient/4.5.14 (Java/21.0.12)
+1 > Accept-Encoding: gzip,deflate
+
+
+17:22:55.197 [main]  DEBUG com.intuit.karate - response time in milliseconds: 2
+1 < 200
+1 < Server: BaseHTTP/0.6 Python/3.12.3
+1 < Date: Wed, 16 Sep 2026 15:22:55 GMT
+1 < Content-Type: application/json
+1 < Content-Length: 116
+1 < Access-Control-Allow-Origin: *
+1 < Access-Control-Allow-Methods: GET, POST, OPTIONS
+1 < Access-Control-Allow-Headers: Authorization, Content-Type
+[{"id": 1, "title": "Complete Spec 24", "description": "Write tests", "due_date": "2026-09-15", "completed": false}]
+
+17:22:55.274 [main]  DEBUG com.intuit.karate - request:
+1 > POST http://127.0.0.1:12800/api/v1/tasks
+1 > Authorization: Bearer 80eceace97b3cab7c23d4176c3f0c6b0
+1 > Accept: application/json
+1 > Content-Type: application/json; charset=UTF-8
+1 > Content-Length: 106
+1 > Host: 127.0.0.1:12800
+1 > Connection: Keep-Alive
+1 > User-Agent: Apache-HttpClient/4.5.14 (Java/21.0.12)
+1 > Accept-Encoding: gzip,deflate
+{"title":"Integration Test Task","description":"Written via Karate Contract Test","due_date":"2026-09-30"}
+
+17:22:55.278 [main]  DEBUG com.intuit.karate - response time in milliseconds: 3
+1 < 201
+1 < Server: BaseHTTP/0.6 Python/3.12.3
+1 < Date: Wed, 16 Sep 2026 15:22:55 GMT
+1 < Content-Type: application/json
+1 < Content-Length: 87
+1 < Access-Control-Allow-Origin: *
+1 < Access-Control-Allow-Methods: GET, POST, OPTIONS
+1 < Access-Control-Allow-Headers: Authorization, Content-Type
+{"success": true, "task_id": 100, "message": "Task created successfully on the board."}
+
+17:22:55.298 [main]  DEBUG com.intuit.karate - request:
+1 > GET http://127.0.0.1:12800/api/v1/search?query=hello
+1 > Authorization: Bearer 80eceace97b3cab7c23d4176c3f0c6b0
+1 > Accept: application/json
+1 > Host: 127.0.0.1:12800
+1 > Connection: Keep-Alive
+1 > User-Agent: Apache-HttpClient/4.5.14 (Java/21.0.12)
+1 > Accept-Encoding: gzip,deflate
+
+
+17:22:55.301 [main]  DEBUG com.intuit.karate - response time in milliseconds: 2
+1 < 200
+1 < Server: BaseHTTP/0.6 Python/3.12.3
+1 < Date: Wed, 16 Sep 2026 15:22:55 GMT
+1 < Content-Type: application/json
+1 < Content-Length: 154
+1 < Access-Control-Allow-Origin: *
+1 < Access-Control-Allow-Methods: GET, POST, OPTIONS
+1 < Access-Control-Allow-Headers: Authorization, Content-Type
+{"query": "hello", "results": [{"source": "recording", "source_id": 42, "title": "Mock Meeting", "text": "RAG matching snippet", "relevance_score": 0.9}]}
+
+17:22:55.319 [main]  DEBUG com.intuit.karate - request:
+1 > POST http://127.0.0.1:12800/api/v1/record/start
+1 > Authorization: Bearer 80eceace97b3cab7c23d4176c3f0c6b0
+1 > Accept: application/json
+1 > Host: 127.0.0.1:12800
+1 > Connection: Keep-Alive
+1 > User-Agent: Apache-HttpClient/4.5.14 (Java/21.0.12)
+1 > Accept-Encoding: gzip,deflate
+
+
+17:22:55.322 [main]  DEBUG com.intuit.karate - response time in milliseconds: 2
+1 < 200
+1 < Server: BaseHTTP/0.6 Python/3.12.3
+1 < Date: Wed, 16 Sep 2026 15:22:55 GMT
+1 < Content-Type: application/json
+1 < Content-Length: 73
+1 < Access-Control-Allow-Origin: *
+1 < Access-Control-Allow-Methods: GET, POST, OPTIONS
+1 < Access-Control-Allow-Headers: Authorization, Content-Type
+{"success": true, "message": "Recording session initiated successfully."}
+
+17:22:55.327 [main]  DEBUG com.intuit.karate - request:
+2 > POST http://127.0.0.1:12800/api/v1/record/stop
+2 > Authorization: Bearer 80eceace97b3cab7c23d4176c3f0c6b0
+2 > Accept: application/json
+2 > Host: 127.0.0.1:12800
+2 > Connection: Keep-Alive
+2 > User-Agent: Apache-HttpClient/4.5.14 (Java/21.0.12)
+2 > Accept-Encoding: gzip,deflate
+
+
+17:22:55.330 [main]  DEBUG com.intuit.karate - response time in milliseconds: 2
+2 < 200
+2 < Server: BaseHTTP/0.6 Python/3.12.3
+2 < Date: Wed, 16 Sep 2026 15:22:55 GMT
+2 < Content-Type: application/json
+2 < Content-Length: 79
+2 < Access-Control-Allow-Origin: *
+2 < Access-Control-Allow-Methods: GET, POST, OPTIONS
+2 < Access-Control-Allow-Headers: Authorization, Content-Type
+{"success": true, "message": "Recording stopped. Sent to transcription queue."}
+
+17:22:55.346 [main]  DEBUG com.intuit.karate - request:
+1 > GET http://127.0.0.1:12800/api/v1/status
+1 > Accept: application/json
+1 > Host: 127.0.0.1:12800
+1 > Connection: Keep-Alive
+1 > User-Agent: Apache-HttpClient/4.5.14 (Java/21.0.12)
+1 > Accept-Encoding: gzip,deflate
+
+
+17:22:55.349 [main]  DEBUG com.intuit.karate - response time in milliseconds: 2
+1 < 401
+1 < Server: BaseHTTP/0.6 Python/3.12.3
+1 < Date: Wed, 16 Sep 2026 15:22:55 GMT
+1 < Content-Type: application/json
+1 < Content-Length: 66
+1 < Access-Control-Allow-Origin: *
+1 < Access-Control-Allow-Methods: GET, POST, OPTIONS
+1 < Access-Control-Allow-Headers: Authorization, Content-Type
+{"success": false, "error": "Unauthorized: Missing Bearer token."}
+
+17:22:56.434 [main]  INFO  com.intuit.karate.Suite - <<pass>> feature 1 of 1 (0 remaining) tests/integration/karate/local-api.feature
+17:38:59.189 [main]  INFO  com.intuit.karate - Karate version: 1.4.1
+17:38:59.381 [main]  INFO  com.intuit.karate.Runner - using system property 'karate.config.dir': tests/integration/karate/
+17:38:59.435 [main]  DEBUG com.intuit.karate.Suite - [config] tests/integration/karate/karate-config.js
+17:38:59.438 [main]  INFO  com.intuit.karate.Suite - backed up existing 'target/karate-reports' dir to: target/karate-reports_1789573139436
+17:39:00.394 [main]  DEBUG com.intuit.karate - request:
+1 > GET http://127.0.0.1:12800/api/v1/status
+1 > Authorization: Bearer 2e766a5830281070689993f25f720cbe
+1 > Accept: application/json
+1 > Host: 127.0.0.1:12800
+1 > Connection: Keep-Alive
+1 > User-Agent: Apache-HttpClient/4.5.14 (Java/21.0.12)
+1 > Accept-Encoding: gzip,deflate
+
+
+17:39:00.420 [main]  DEBUG com.intuit.karate - response time in milliseconds: 23
+1 < 200
+1 < Server: BaseHTTP/0.6 Python/3.12.3
+1 < Date: Wed, 16 Sep 2026 15:39:00 GMT
+1 < Content-Type: application/json
+1 < Content-Length: 124
+1 < Access-Control-Allow-Origin: *
+1 < Access-Control-Allow-Methods: GET, POST, OPTIONS
+1 < Access-Control-Allow-Headers: Authorization, Content-Type
+{"app_name": "El Secretario", "version": "1.0.0", "status": "idle", "active_recording": null, "processing_queue_backlog": 0}
+
+17:39:00.454 [main]  DEBUG com.intuit.karate - request:
+1 > GET http://127.0.0.1:12800/api/v1/recordings
+1 > Authorization: Bearer 2e766a5830281070689993f25f720cbe
+1 > Accept: application/json
+1 > Host: 127.0.0.1:12800
+1 > Connection: Keep-Alive
+1 > User-Agent: Apache-HttpClient/4.5.14 (Java/21.0.12)
+1 > Accept-Encoding: gzip,deflate
+
+
+17:39:00.456 [main]  DEBUG com.intuit.karate - response time in milliseconds: 1
+1 < 200
+1 < Server: BaseHTTP/0.6 Python/3.12.3
+1 < Date: Wed, 16 Sep 2026 15:39:00 GMT
+1 < Content-Type: application/json
+1 < Content-Length: 146
+1 < Access-Control-Allow-Origin: *
+1 < Access-Control-Allow-Methods: GET, POST, OPTIONS
+1 < Access-Control-Allow-Headers: Authorization, Content-Type
+[{"id": 42, "title": "Mock Meeting", "date": "2026-09-15 10:00:00", "duration_seconds": 120, "summary_generated": true, "tags": ["sync", "test"]}]
+
+17:39:00.472 [main]  DEBUG com.intuit.karate - request:
+1 > GET http://127.0.0.1:12800/api/v1/recordings/42
+1 > Authorization: Bearer 2e766a5830281070689993f25f720cbe
+1 > Accept: application/json
+1 > Host: 127.0.0.1:12800
+1 > Connection: Keep-Alive
+1 > User-Agent: Apache-HttpClient/4.5.14 (Java/21.0.12)
+1 > Accept-Encoding: gzip,deflate
+
+
+17:39:00.473 [main]  DEBUG com.intuit.karate - response time in milliseconds: 1
+1 < 200
+1 < Server: BaseHTTP/0.6 Python/3.12.3
+1 < Date: Wed, 16 Sep 2026 15:39:00 GMT
+1 < Content-Type: application/json
+1 < Content-Length: 184
+1 < Access-Control-Allow-Origin: *
+1 < Access-Control-Allow-Methods: GET, POST, OPTIONS
+1 < Access-Control-Allow-Headers: Authorization, Content-Type
+{"id": 42, "title": "Mock Meeting", "date": "2026-09-15 10:00:00", "duration_seconds": 120, "transcript": "Hello", "notes": "None", "summary": "Some summary", "tags": ["sync", "test"]}
+
+17:39:00.484 [main]  DEBUG com.intuit.karate - request:
+1 > GET http://127.0.0.1:12800/api/v1/tasks
+1 > Authorization: Bearer 2e766a5830281070689993f25f720cbe
+1 > Accept: application/json
+1 > Host: 127.0.0.1:12800
+1 > Connection: Keep-Alive
+1 > User-Agent: Apache-HttpClient/4.5.14 (Java/21.0.12)
+1 > Accept-Encoding: gzip,deflate
+
+
+17:39:00.486 [main]  DEBUG com.intuit.karate - response time in milliseconds: 1
+1 < 200
+1 < Server: BaseHTTP/0.6 Python/3.12.3
+1 < Date: Wed, 16 Sep 2026 15:39:00 GMT
+1 < Content-Type: application/json
+1 < Content-Length: 116
+1 < Access-Control-Allow-Origin: *
+1 < Access-Control-Allow-Methods: GET, POST, OPTIONS
+1 < Access-Control-Allow-Headers: Authorization, Content-Type
+[{"id": 1, "title": "Complete Spec 24", "description": "Write tests", "due_date": "2026-09-15", "completed": false}]
+
+17:39:00.534 [main]  DEBUG com.intuit.karate - request:
+1 > POST http://127.0.0.1:12800/api/v1/tasks
+1 > Authorization: Bearer 2e766a5830281070689993f25f720cbe
+1 > Accept: application/json
+1 > Content-Type: application/json; charset=UTF-8
+1 > Content-Length: 106
+1 > Host: 127.0.0.1:12800
+1 > Connection: Keep-Alive
+1 > User-Agent: Apache-HttpClient/4.5.14 (Java/21.0.12)
+1 > Accept-Encoding: gzip,deflate
+{"title":"Integration Test Task","description":"Written via Karate Contract Test","due_date":"2026-09-30"}
+
+17:39:00.536 [main]  DEBUG com.intuit.karate - response time in milliseconds: 1
+1 < 201
+1 < Server: BaseHTTP/0.6 Python/3.12.3
+1 < Date: Wed, 16 Sep 2026 15:39:00 GMT
+1 < Content-Type: application/json
+1 < Content-Length: 87
+1 < Access-Control-Allow-Origin: *
+1 < Access-Control-Allow-Methods: GET, POST, OPTIONS
+1 < Access-Control-Allow-Headers: Authorization, Content-Type
+{"success": true, "task_id": 100, "message": "Task created successfully on the board."}
+
+17:39:00.544 [main]  DEBUG com.intuit.karate - request:
+1 > GET http://127.0.0.1:12800/api/v1/search?query=hello
+1 > Authorization: Bearer 2e766a5830281070689993f25f720cbe
+1 > Accept: application/json
+1 > Host: 127.0.0.1:12800
+1 > Connection: Keep-Alive
+1 > User-Agent: Apache-HttpClient/4.5.14 (Java/21.0.12)
+1 > Accept-Encoding: gzip,deflate
+
+
+17:39:00.546 [main]  DEBUG com.intuit.karate - response time in milliseconds: 1
+1 < 200
+1 < Server: BaseHTTP/0.6 Python/3.12.3
+1 < Date: Wed, 16 Sep 2026 15:39:00 GMT
+1 < Content-Type: application/json
+1 < Content-Length: 154
+1 < Access-Control-Allow-Origin: *
+1 < Access-Control-Allow-Methods: GET, POST, OPTIONS
+1 < Access-Control-Allow-Headers: Authorization, Content-Type
+{"query": "hello", "results": [{"source": "recording", "source_id": 42, "title": "Mock Meeting", "text": "RAG matching snippet", "relevance_score": 0.9}]}
+
+17:39:00.553 [main]  DEBUG com.intuit.karate - request:
+1 > POST http://127.0.0.1:12800/api/v1/record/start
+1 > Authorization: Bearer 2e766a5830281070689993f25f720cbe
+1 > Accept: application/json
+1 > Host: 127.0.0.1:12800
+1 > Connection: Keep-Alive
+1 > User-Agent: Apache-HttpClient/4.5.14 (Java/21.0.12)
+1 > Accept-Encoding: gzip,deflate
+
+
+17:39:00.555 [main]  DEBUG com.intuit.karate - response time in milliseconds: 1
+1 < 200
+1 < Server: BaseHTTP/0.6 Python/3.12.3
+1 < Date: Wed, 16 Sep 2026 15:39:00 GMT
+1 < Content-Type: application/json
+1 < Content-Length: 73
+1 < Access-Control-Allow-Origin: *
+1 < Access-Control-Allow-Methods: GET, POST, OPTIONS
+1 < Access-Control-Allow-Headers: Authorization, Content-Type
+{"success": true, "message": "Recording session initiated successfully."}
+
+17:39:00.557 [main]  DEBUG com.intuit.karate - request:
+2 > POST http://127.0.0.1:12800/api/v1/record/stop
+2 > Authorization: Bearer 2e766a5830281070689993f25f720cbe
+2 > Accept: application/json
+2 > Host: 127.0.0.1:12800
+2 > Connection: Keep-Alive
+2 > User-Agent: Apache-HttpClient/4.5.14 (Java/21.0.12)
+2 > Accept-Encoding: gzip,deflate
+
+
+17:39:00.559 [main]  DEBUG com.intuit.karate - response time in milliseconds: 1
+2 < 200
+2 < Server: BaseHTTP/0.6 Python/3.12.3
+2 < Date: Wed, 16 Sep 2026 15:39:00 GMT
+2 < Content-Type: application/json
+2 < Content-Length: 79
+2 < Access-Control-Allow-Origin: *
+2 < Access-Control-Allow-Methods: GET, POST, OPTIONS
+2 < Access-Control-Allow-Headers: Authorization, Content-Type
+{"success": true, "message": "Recording stopped. Sent to transcription queue."}
+
+17:39:00.566 [main]  DEBUG com.intuit.karate - request:
+1 > GET http://127.0.0.1:12800/api/v1/status
+1 > Accept: application/json
+1 > Host: 127.0.0.1:12800
+1 > Connection: Keep-Alive
+1 > User-Agent: Apache-HttpClient/4.5.14 (Java/21.0.12)
+1 > Accept-Encoding: gzip,deflate
+
+
+17:39:00.567 [main]  DEBUG com.intuit.karate - response time in milliseconds: 1
+1 < 401
+1 < Server: BaseHTTP/0.6 Python/3.12.3
+1 < Date: Wed, 16 Sep 2026 15:39:00 GMT
+1 < Content-Type: application/json
+1 < Content-Length: 66
+1 < Access-Control-Allow-Origin: *
+1 < Access-Control-Allow-Methods: GET, POST, OPTIONS
+1 < Access-Control-Allow-Headers: Authorization, Content-Type
+{"success": false, "error": "Unauthorized: Missing Bearer token."}
+
+17:39:01.048 [main]  INFO  com.intuit.karate.Suite - <<pass>> feature 1 of 1 (0 remaining) tests/integration/karate/local-api.feature
+17:53:48.919 [main]  INFO  com.intuit.karate - Karate version: 1.4.1
+17:53:49.052 [main]  INFO  com.intuit.karate.Runner - using system property 'karate.config.dir': tests/integration/karate/
+17:53:49.106 [main]  DEBUG com.intuit.karate.Suite - [config] tests/integration/karate/karate-config.js
+17:53:49.107 [main]  INFO  com.intuit.karate.Suite - backed up existing 'target/karate-reports' dir to: target/karate-reports_1789574029106
+17:53:49.873 [main]  DEBUG com.intuit.karate - request:
+1 > GET http://127.0.0.1:12800/api/v1/status
+1 > Authorization: Bearer fa203a51963e9d381747fe00ae9d0bc1
+1 > Accept: application/json
+1 > Host: 127.0.0.1:12800
+1 > Connection: Keep-Alive
+1 > User-Agent: Apache-HttpClient/4.5.14 (Java/21.0.12)
+1 > Accept-Encoding: gzip,deflate
+
+
+17:53:49.893 [main]  DEBUG com.intuit.karate - response time in milliseconds: 19
+1 < 200
+1 < Server: BaseHTTP/0.6 Python/3.12.3
+1 < Date: Wed, 16 Sep 2026 15:53:49 GMT
+1 < Content-Type: application/json
+1 < Content-Length: 124
+1 < Access-Control-Allow-Origin: *
+1 < Access-Control-Allow-Methods: GET, POST, OPTIONS
+1 < Access-Control-Allow-Headers: Authorization, Content-Type
+{"app_name": "El Secretario", "version": "1.0.0", "status": "idle", "active_recording": null, "processing_queue_backlog": 0}
+
+17:53:49.924 [main]  DEBUG com.intuit.karate - request:
+1 > GET http://127.0.0.1:12800/api/v1/recordings
+1 > Authorization: Bearer fa203a51963e9d381747fe00ae9d0bc1
+1 > Accept: application/json
+1 > Host: 127.0.0.1:12800
+1 > Connection: Keep-Alive
+1 > User-Agent: Apache-HttpClient/4.5.14 (Java/21.0.12)
+1 > Accept-Encoding: gzip,deflate
+
+
+17:53:49.925 [main]  DEBUG com.intuit.karate - response time in milliseconds: 1
+1 < 200
+1 < Server: BaseHTTP/0.6 Python/3.12.3
+1 < Date: Wed, 16 Sep 2026 15:53:49 GMT
+1 < Content-Type: application/json
+1 < Content-Length: 146
+1 < Access-Control-Allow-Origin: *
+1 < Access-Control-Allow-Methods: GET, POST, OPTIONS
+1 < Access-Control-Allow-Headers: Authorization, Content-Type
+[{"id": 42, "title": "Mock Meeting", "date": "2026-09-15 10:00:00", "duration_seconds": 120, "summary_generated": true, "tags": ["sync", "test"]}]
+
+17:53:49.940 [main]  DEBUG com.intuit.karate - request:
+1 > GET http://127.0.0.1:12800/api/v1/recordings/42
+1 > Authorization: Bearer fa203a51963e9d381747fe00ae9d0bc1
+1 > Accept: application/json
+1 > Host: 127.0.0.1:12800
+1 > Connection: Keep-Alive
+1 > User-Agent: Apache-HttpClient/4.5.14 (Java/21.0.12)
+1 > Accept-Encoding: gzip,deflate
+
+
+17:53:49.941 [main]  DEBUG com.intuit.karate - response time in milliseconds: 1
+1 < 200
+1 < Server: BaseHTTP/0.6 Python/3.12.3
+1 < Date: Wed, 16 Sep 2026 15:53:49 GMT
+1 < Content-Type: application/json
+1 < Content-Length: 184
+1 < Access-Control-Allow-Origin: *
+1 < Access-Control-Allow-Methods: GET, POST, OPTIONS
+1 < Access-Control-Allow-Headers: Authorization, Content-Type
+{"id": 42, "title": "Mock Meeting", "date": "2026-09-15 10:00:00", "duration_seconds": 120, "transcript": "Hello", "notes": "None", "summary": "Some summary", "tags": ["sync", "test"]}
+
+17:53:49.955 [main]  DEBUG com.intuit.karate - request:
+1 > GET http://127.0.0.1:12800/api/v1/tasks
+1 > Authorization: Bearer fa203a51963e9d381747fe00ae9d0bc1
+1 > Accept: application/json
+1 > Host: 127.0.0.1:12800
+1 > Connection: Keep-Alive
+1 > User-Agent: Apache-HttpClient/4.5.14 (Java/21.0.12)
+1 > Accept-Encoding: gzip,deflate
+
+
+17:53:49.956 [main]  DEBUG com.intuit.karate - response time in milliseconds: 1
+1 < 200
+1 < Server: BaseHTTP/0.6 Python/3.12.3
+1 < Date: Wed, 16 Sep 2026 15:53:49 GMT
+1 < Content-Type: application/json
+1 < Content-Length: 116
+1 < Access-Control-Allow-Origin: *
+1 < Access-Control-Allow-Methods: GET, POST, OPTIONS
+1 < Access-Control-Allow-Headers: Authorization, Content-Type
+[{"id": 1, "title": "Complete Spec 24", "description": "Write tests", "due_date": "2026-09-15", "completed": false}]
+
+17:53:49.989 [main]  DEBUG com.intuit.karate - request:
+1 > POST http://127.0.0.1:12800/api/v1/tasks
+1 > Authorization: Bearer fa203a51963e9d381747fe00ae9d0bc1
+1 > Accept: application/json
+1 > Content-Type: application/json; charset=UTF-8
+1 > Content-Length: 106
+1 > Host: 127.0.0.1:12800
+1 > Connection: Keep-Alive
+1 > User-Agent: Apache-HttpClient/4.5.14 (Java/21.0.12)
+1 > Accept-Encoding: gzip,deflate
+{"title":"Integration Test Task","description":"Written via Karate Contract Test","due_date":"2026-09-30"}
+
+17:53:49.991 [main]  DEBUG com.intuit.karate - response time in milliseconds: 1
+1 < 201
+1 < Server: BaseHTTP/0.6 Python/3.12.3
+1 < Date: Wed, 16 Sep 2026 15:53:49 GMT
+1 < Content-Type: application/json
+1 < Content-Length: 87
+1 < Access-Control-Allow-Origin: *
+1 < Access-Control-Allow-Methods: GET, POST, OPTIONS
+1 < Access-Control-Allow-Headers: Authorization, Content-Type
+{"success": true, "task_id": 100, "message": "Task created successfully on the board."}
+
+17:53:50.000 [main]  DEBUG com.intuit.karate - request:
+1 > GET http://127.0.0.1:12800/api/v1/search?query=hello
+1 > Authorization: Bearer fa203a51963e9d381747fe00ae9d0bc1
+1 > Accept: application/json
+1 > Host: 127.0.0.1:12800
+1 > Connection: Keep-Alive
+1 > User-Agent: Apache-HttpClient/4.5.14 (Java/21.0.12)
+1 > Accept-Encoding: gzip,deflate
+
+
+17:53:50.001 [main]  DEBUG com.intuit.karate - response time in milliseconds: 1
+1 < 200
+1 < Server: BaseHTTP/0.6 Python/3.12.3
+1 < Date: Wed, 16 Sep 2026 15:53:50 GMT
+1 < Content-Type: application/json
+1 < Content-Length: 154
+1 < Access-Control-Allow-Origin: *
+1 < Access-Control-Allow-Methods: GET, POST, OPTIONS
+1 < Access-Control-Allow-Headers: Authorization, Content-Type
+{"query": "hello", "results": [{"source": "recording", "source_id": 42, "title": "Mock Meeting", "text": "RAG matching snippet", "relevance_score": 0.9}]}
+
+17:53:50.009 [main]  DEBUG com.intuit.karate - request:
+1 > POST http://127.0.0.1:12800/api/v1/record/start
+1 > Authorization: Bearer fa203a51963e9d381747fe00ae9d0bc1
+1 > Accept: application/json
+1 > Host: 127.0.0.1:12800
+1 > Connection: Keep-Alive
+1 > User-Agent: Apache-HttpClient/4.5.14 (Java/21.0.12)
+1 > Accept-Encoding: gzip,deflate
+
+
+17:53:50.012 [main]  DEBUG com.intuit.karate - response time in milliseconds: 1
+1 < 200
+1 < Server: BaseHTTP/0.6 Python/3.12.3
+1 < Date: Wed, 16 Sep 2026 15:53:50 GMT
+1 < Content-Type: application/json
+1 < Content-Length: 73
+1 < Access-Control-Allow-Origin: *
+1 < Access-Control-Allow-Methods: GET, POST, OPTIONS
+1 < Access-Control-Allow-Headers: Authorization, Content-Type
+{"success": true, "message": "Recording session initiated successfully."}
+
+17:53:50.014 [main]  DEBUG com.intuit.karate - request:
+2 > POST http://127.0.0.1:12800/api/v1/record/stop
+2 > Authorization: Bearer fa203a51963e9d381747fe00ae9d0bc1
+2 > Accept: application/json
+2 > Host: 127.0.0.1:12800
+2 > Connection: Keep-Alive
+2 > User-Agent: Apache-HttpClient/4.5.14 (Java/21.0.12)
+2 > Accept-Encoding: gzip,deflate
+
+
+17:53:50.016 [main]  DEBUG com.intuit.karate - response time in milliseconds: 1
+2 < 200
+2 < Server: BaseHTTP/0.6 Python/3.12.3
+2 < Date: Wed, 16 Sep 2026 15:53:50 GMT
+2 < Content-Type: application/json
+2 < Content-Length: 79
+2 < Access-Control-Allow-Origin: *
+2 < Access-Control-Allow-Methods: GET, POST, OPTIONS
+2 < Access-Control-Allow-Headers: Authorization, Content-Type
+{"success": true, "message": "Recording stopped. Sent to transcription queue."}
+
+17:53:50.022 [main]  DEBUG com.intuit.karate - request:
+1 > GET http://127.0.0.1:12800/api/v1/status
+1 > Accept: application/json
+1 > Host: 127.0.0.1:12800
+1 > Connection: Keep-Alive
+1 > User-Agent: Apache-HttpClient/4.5.14 (Java/21.0.12)
+1 > Accept-Encoding: gzip,deflate
+
+
+17:53:50.024 [main]  DEBUG com.intuit.karate - response time in milliseconds: 1
+1 < 401
+1 < Server: BaseHTTP/0.6 Python/3.12.3
+1 < Date: Wed, 16 Sep 2026 15:53:50 GMT
+1 < Content-Type: application/json
+1 < Content-Length: 66
+1 < Access-Control-Allow-Origin: *
+1 < Access-Control-Allow-Methods: GET, POST, OPTIONS
+1 < Access-Control-Allow-Headers: Authorization, Content-Type
+{"success": false, "error": "Unauthorized: Missing Bearer token."}
+
+17:53:50.465 [main]  INFO  com.intuit.karate.Suite - <<pass>> feature 1 of 1 (0 remaining) tests/integration/karate/local-api.feature
+18:46:28.139 [main]  INFO  com.intuit.karate - Karate version: 1.4.1
+18:46:28.288 [main]  INFO  com.intuit.karate.Runner - using system property 'karate.config.dir': tests/integration/karate/
+18:46:28.335 [main]  DEBUG com.intuit.karate.Suite - [config] tests/integration/karate/karate-config.js
+18:46:28.337 [main]  INFO  com.intuit.karate.Suite - backed up existing 'target/karate-reports' dir to: target/karate-reports_1789577188335
+18:46:29.084 [main]  DEBUG com.intuit.karate - request:
+1 > GET http://127.0.0.1:46703/api/v1/status
+1 > Authorization: Bearer 50eaea4e08f1ef74177ee5becbf1f5c5
+1 > Accept: application/json
+1 > Host: 127.0.0.1:46703
+1 > Connection: Keep-Alive
+1 > User-Agent: Apache-HttpClient/4.5.14 (Java/21.0.12)
+1 > Accept-Encoding: gzip,deflate
+
+
+18:46:29.106 [main]  DEBUG com.intuit.karate - response time in milliseconds: 19
+1 < 200
+1 < Server: BaseHTTP/0.6 Python/3.12.3
+1 < Date: Wed, 16 Sep 2026 16:46:29 GMT
+1 < Content-Type: application/json
+1 < Content-Length: 124
+1 < Access-Control-Allow-Origin: *
+1 < Access-Control-Allow-Methods: GET, POST, OPTIONS
+1 < Access-Control-Allow-Headers: Authorization, Content-Type
+{"app_name": "El Secretario", "version": "1.0.0", "status": "idle", "active_recording": null, "processing_queue_backlog": 0}
+
+18:46:29.136 [main]  DEBUG com.intuit.karate - request:
+1 > GET http://127.0.0.1:46703/api/v1/recordings
+1 > Authorization: Bearer 50eaea4e08f1ef74177ee5becbf1f5c5
+1 > Accept: application/json
+1 > Host: 127.0.0.1:46703
+1 > Connection: Keep-Alive
+1 > User-Agent: Apache-HttpClient/4.5.14 (Java/21.0.12)
+1 > Accept-Encoding: gzip,deflate
+
+
+18:46:29.137 [main]  DEBUG com.intuit.karate - response time in milliseconds: 1
+1 < 200
+1 < Server: BaseHTTP/0.6 Python/3.12.3
+1 < Date: Wed, 16 Sep 2026 16:46:29 GMT
+1 < Content-Type: application/json
+1 < Content-Length: 146
+1 < Access-Control-Allow-Origin: *
+1 < Access-Control-Allow-Methods: GET, POST, OPTIONS
+1 < Access-Control-Allow-Headers: Authorization, Content-Type
+[{"id": 42, "title": "Mock Meeting", "date": "2026-09-15 10:00:00", "duration_seconds": 120, "summary_generated": true, "tags": ["sync", "test"]}]
+
+18:46:29.152 [main]  DEBUG com.intuit.karate - request:
+1 > GET http://127.0.0.1:46703/api/v1/recordings/42
+1 > Authorization: Bearer 50eaea4e08f1ef74177ee5becbf1f5c5
+1 > Accept: application/json
+1 > Host: 127.0.0.1:46703
+1 > Connection: Keep-Alive
+1 > User-Agent: Apache-HttpClient/4.5.14 (Java/21.0.12)
+1 > Accept-Encoding: gzip,deflate
+
+
+18:46:29.153 [main]  DEBUG com.intuit.karate - response time in milliseconds: 1
+1 < 200
+1 < Server: BaseHTTP/0.6 Python/3.12.3
+1 < Date: Wed, 16 Sep 2026 16:46:29 GMT
+1 < Content-Type: application/json
+1 < Content-Length: 184
+1 < Access-Control-Allow-Origin: *
+1 < Access-Control-Allow-Methods: GET, POST, OPTIONS
+1 < Access-Control-Allow-Headers: Authorization, Content-Type
+{"id": 42, "title": "Mock Meeting", "date": "2026-09-15 10:00:00", "duration_seconds": 120, "transcript": "Hello", "notes": "None", "summary": "Some summary", "tags": ["sync", "test"]}
+
+18:46:29.163 [main]  DEBUG com.intuit.karate - request:
+1 > GET http://127.0.0.1:46703/api/v1/tasks
+1 > Authorization: Bearer 50eaea4e08f1ef74177ee5becbf1f5c5
+1 > Accept: application/json
+1 > Host: 127.0.0.1:46703
+1 > Connection: Keep-Alive
+1 > User-Agent: Apache-HttpClient/4.5.14 (Java/21.0.12)
+1 > Accept-Encoding: gzip,deflate
+
+
+18:46:29.164 [main]  DEBUG com.intuit.karate - response time in milliseconds: 1
+1 < 200
+1 < Server: BaseHTTP/0.6 Python/3.12.3
+1 < Date: Wed, 16 Sep 2026 16:46:29 GMT
+1 < Content-Type: application/json
+1 < Content-Length: 116
+1 < Access-Control-Allow-Origin: *
+1 < Access-Control-Allow-Methods: GET, POST, OPTIONS
+1 < Access-Control-Allow-Headers: Authorization, Content-Type
+[{"id": 1, "title": "Complete Spec 24", "description": "Write tests", "due_date": "2026-09-15", "completed": false}]
+
+18:46:29.193 [main]  DEBUG com.intuit.karate - request:
+1 > POST http://127.0.0.1:46703/api/v1/tasks
+1 > Authorization: Bearer 50eaea4e08f1ef74177ee5becbf1f5c5
+1 > Accept: application/json
+1 > Content-Type: application/json; charset=UTF-8
+1 > Content-Length: 106
+1 > Host: 127.0.0.1:46703
+1 > Connection: Keep-Alive
+1 > User-Agent: Apache-HttpClient/4.5.14 (Java/21.0.12)
+1 > Accept-Encoding: gzip,deflate
+{"title":"Integration Test Task","description":"Written via Karate Contract Test","due_date":"2026-09-30"}
+
+18:46:29.194 [main]  DEBUG com.intuit.karate - response time in milliseconds: 1
+1 < 201
+1 < Server: BaseHTTP/0.6 Python/3.12.3
+1 < Date: Wed, 16 Sep 2026 16:46:29 GMT
+1 < Content-Type: application/json
+1 < Content-Length: 87
+1 < Access-Control-Allow-Origin: *
+1 < Access-Control-Allow-Methods: GET, POST, OPTIONS
+1 < Access-Control-Allow-Headers: Authorization, Content-Type
+{"success": true, "task_id": 100, "message": "Task created successfully on the board."}
+
+18:46:29.202 [main]  DEBUG com.intuit.karate - request:
+1 > GET http://127.0.0.1:46703/api/v1/search?query=hello
+1 > Authorization: Bearer 50eaea4e08f1ef74177ee5becbf1f5c5
+1 > Accept: application/json
+1 > Host: 127.0.0.1:46703
+1 > Connection: Keep-Alive
+1 > User-Agent: Apache-HttpClient/4.5.14 (Java/21.0.12)
+1 > Accept-Encoding: gzip,deflate
+
+
+18:46:29.204 [main]  DEBUG com.intuit.karate - response time in milliseconds: 2
+1 < 200
+1 < Server: BaseHTTP/0.6 Python/3.12.3
+1 < Date: Wed, 16 Sep 2026 16:46:29 GMT
+1 < Content-Type: application/json
+1 < Content-Length: 154
+1 < Access-Control-Allow-Origin: *
+1 < Access-Control-Allow-Methods: GET, POST, OPTIONS
+1 < Access-Control-Allow-Headers: Authorization, Content-Type
+{"query": "hello", "results": [{"source": "recording", "source_id": 42, "title": "Mock Meeting", "text": "RAG matching snippet", "relevance_score": 0.9}]}
+
+18:46:29.211 [main]  DEBUG com.intuit.karate - request:
+1 > POST http://127.0.0.1:46703/api/v1/record/start
+1 > Authorization: Bearer 50eaea4e08f1ef74177ee5becbf1f5c5
+1 > Accept: application/json
+1 > Host: 127.0.0.1:46703
+1 > Connection: Keep-Alive
+1 > User-Agent: Apache-HttpClient/4.5.14 (Java/21.0.12)
+1 > Accept-Encoding: gzip,deflate
+
+
+18:46:29.212 [main]  DEBUG com.intuit.karate - response time in milliseconds: 1
+1 < 200
+1 < Server: BaseHTTP/0.6 Python/3.12.3
+1 < Date: Wed, 16 Sep 2026 16:46:29 GMT
+1 < Content-Type: application/json
+1 < Content-Length: 73
+1 < Access-Control-Allow-Origin: *
+1 < Access-Control-Allow-Methods: GET, POST, OPTIONS
+1 < Access-Control-Allow-Headers: Authorization, Content-Type
+{"success": true, "message": "Recording session initiated successfully."}
+
+18:46:29.215 [main]  DEBUG com.intuit.karate - request:
+2 > POST http://127.0.0.1:46703/api/v1/record/stop
+2 > Authorization: Bearer 50eaea4e08f1ef74177ee5becbf1f5c5
+2 > Accept: application/json
+2 > Host: 127.0.0.1:46703
+2 > Connection: Keep-Alive
+2 > User-Agent: Apache-HttpClient/4.5.14 (Java/21.0.12)
+2 > Accept-Encoding: gzip,deflate
+
+
+18:46:29.216 [main]  DEBUG com.intuit.karate - response time in milliseconds: 1
+2 < 200
+2 < Server: BaseHTTP/0.6 Python/3.12.3
+2 < Date: Wed, 16 Sep 2026 16:46:29 GMT
+2 < Content-Type: application/json
+2 < Content-Length: 79
+2 < Access-Control-Allow-Origin: *
+2 < Access-Control-Allow-Methods: GET, POST, OPTIONS
+2 < Access-Control-Allow-Headers: Authorization, Content-Type
+{"success": true, "message": "Recording stopped. Sent to transcription queue."}
+
+18:46:29.224 [main]  DEBUG com.intuit.karate - request:
+1 > GET http://127.0.0.1:46703/api/v1/status
+1 > Accept: application/json
+1 > Host: 127.0.0.1:46703
+1 > Connection: Keep-Alive
+1 > User-Agent: Apache-HttpClient/4.5.14 (Java/21.0.12)
+1 > Accept-Encoding: gzip,deflate
+
+
+18:46:29.225 [main]  DEBUG com.intuit.karate - response time in milliseconds: 1
+1 < 401
+1 < Server: BaseHTTP/0.6 Python/3.12.3
+1 < Date: Wed, 16 Sep 2026 16:46:29 GMT
+1 < Content-Type: application/json
+1 < Content-Length: 66
+1 < Access-Control-Allow-Origin: *
+1 < Access-Control-Allow-Methods: GET, POST, OPTIONS
+1 < Access-Control-Allow-Headers: Authorization, Content-Type
+{"success": false, "error": "Unauthorized: Missing Bearer token."}
+
+18:46:29.618 [main]  INFO  com.intuit.karate.Suite - <<pass>> feature 1 of 1 (0 remaining) tests/integration/karate/local-api.feature
+16:39:29.286 [main]  INFO  com.intuit.karate - Karate version: 1.4.1
+16:39:29.456 [main]  INFO  com.intuit.karate.Runner - using system property 'karate.config.dir': tests/integration/karate/
+16:39:29.513 [main]  DEBUG com.intuit.karate.Suite - [config] tests/integration/karate/karate-config.js
+16:39:29.516 [main]  INFO  com.intuit.karate.Suite - backed up existing 'target/karate-reports' dir to: target/karate-reports_1789655969514
+16:39:30.388 [main]  DEBUG com.intuit.karate - request:
+1 > GET http://127.0.0.1:45975/api/v1/status
+1 > Authorization: Bearer b1bf56ca57ad6cc9434bf73c6424b576
+1 > Accept: application/json
+1 > Host: 127.0.0.1:45975
+1 > Connection: Keep-Alive
+1 > User-Agent: Apache-HttpClient/4.5.14 (Java/21.0.12)
+1 > Accept-Encoding: gzip,deflate
+
+
+16:39:30.411 [main]  DEBUG com.intuit.karate - response time in milliseconds: 22
+1 < 200
+1 < Server: BaseHTTP/0.6 Python/3.12.3
+1 < Date: Thu, 17 Sep 2026 14:39:30 GMT
+1 < Content-Type: application/json
+1 < Content-Length: 124
+1 < Access-Control-Allow-Origin: *
+1 < Access-Control-Allow-Methods: GET, POST, OPTIONS
+1 < Access-Control-Allow-Headers: Authorization, Content-Type
+{"app_name": "El Secretario", "version": "1.0.0", "status": "idle", "active_recording": null, "processing_queue_backlog": 0}
+
+16:39:30.440 [main]  DEBUG com.intuit.karate - request:
+1 > GET http://127.0.0.1:45975/api/v1/recordings
+1 > Authorization: Bearer b1bf56ca57ad6cc9434bf73c6424b576
+1 > Accept: application/json
+1 > Host: 127.0.0.1:45975
+1 > Connection: Keep-Alive
+1 > User-Agent: Apache-HttpClient/4.5.14 (Java/21.0.12)
+1 > Accept-Encoding: gzip,deflate
+
+
+16:39:30.442 [main]  DEBUG com.intuit.karate - response time in milliseconds: 1
+1 < 200
+1 < Server: BaseHTTP/0.6 Python/3.12.3
+1 < Date: Thu, 17 Sep 2026 14:39:30 GMT
+1 < Content-Type: application/json
+1 < Content-Length: 146
+1 < Access-Control-Allow-Origin: *
+1 < Access-Control-Allow-Methods: GET, POST, OPTIONS
+1 < Access-Control-Allow-Headers: Authorization, Content-Type
+[{"id": 42, "title": "Mock Meeting", "date": "2026-09-15 10:00:00", "duration_seconds": 120, "summary_generated": true, "tags": ["sync", "test"]}]
+
+16:39:30.456 [main]  DEBUG com.intuit.karate - request:
+1 > GET http://127.0.0.1:45975/api/v1/recordings/42
+1 > Authorization: Bearer b1bf56ca57ad6cc9434bf73c6424b576
+1 > Accept: application/json
+1 > Host: 127.0.0.1:45975
+1 > Connection: Keep-Alive
+1 > User-Agent: Apache-HttpClient/4.5.14 (Java/21.0.12)
+1 > Accept-Encoding: gzip,deflate
+
+
+16:39:30.458 [main]  DEBUG com.intuit.karate - response time in milliseconds: 1
+1 < 200
+1 < Server: BaseHTTP/0.6 Python/3.12.3
+1 < Date: Thu, 17 Sep 2026 14:39:30 GMT
+1 < Content-Type: application/json
+1 < Content-Length: 184
+1 < Access-Control-Allow-Origin: *
+1 < Access-Control-Allow-Methods: GET, POST, OPTIONS
+1 < Access-Control-Allow-Headers: Authorization, Content-Type
+{"id": 42, "title": "Mock Meeting", "date": "2026-09-15 10:00:00", "duration_seconds": 120, "transcript": "Hello", "notes": "None", "summary": "Some summary", "tags": ["sync", "test"]}
+
+16:39:30.470 [main]  DEBUG com.intuit.karate - request:
+1 > GET http://127.0.0.1:45975/api/v1/tasks
+1 > Authorization: Bearer b1bf56ca57ad6cc9434bf73c6424b576
+1 > Accept: application/json
+1 > Host: 127.0.0.1:45975
+1 > Connection: Keep-Alive
+1 > User-Agent: Apache-HttpClient/4.5.14 (Java/21.0.12)
+1 > Accept-Encoding: gzip,deflate
+
+
+16:39:30.471 [main]  DEBUG com.intuit.karate - response time in milliseconds: 1
+1 < 200
+1 < Server: BaseHTTP/0.6 Python/3.12.3
+1 < Date: Thu, 17 Sep 2026 14:39:30 GMT
+1 < Content-Type: application/json
+1 < Content-Length: 116
+1 < Access-Control-Allow-Origin: *
+1 < Access-Control-Allow-Methods: GET, POST, OPTIONS
+1 < Access-Control-Allow-Headers: Authorization, Content-Type
+[{"id": 1, "title": "Complete Spec 24", "description": "Write tests", "due_date": "2026-09-15", "completed": false}]
+
+16:39:30.517 [main]  DEBUG com.intuit.karate - request:
+1 > POST http://127.0.0.1:45975/api/v1/tasks
+1 > Authorization: Bearer b1bf56ca57ad6cc9434bf73c6424b576
+1 > Accept: application/json
+1 > Content-Type: application/json; charset=UTF-8
+1 > Content-Length: 106
+1 > Host: 127.0.0.1:45975
+1 > Connection: Keep-Alive
+1 > User-Agent: Apache-HttpClient/4.5.14 (Java/21.0.12)
+1 > Accept-Encoding: gzip,deflate
+{"title":"Integration Test Task","description":"Written via Karate Contract Test","due_date":"2026-09-30"}
+
+16:39:30.519 [main]  DEBUG com.intuit.karate - response time in milliseconds: 2
+1 < 201
+1 < Server: BaseHTTP/0.6 Python/3.12.3
+1 < Date: Thu, 17 Sep 2026 14:39:30 GMT
+1 < Content-Type: application/json
+1 < Content-Length: 87
+1 < Access-Control-Allow-Origin: *
+1 < Access-Control-Allow-Methods: GET, POST, OPTIONS
+1 < Access-Control-Allow-Headers: Authorization, Content-Type
+{"success": true, "task_id": 100, "message": "Task created successfully on the board."}
+
+16:39:30.528 [main]  DEBUG com.intuit.karate - request:
+1 > GET http://127.0.0.1:45975/api/v1/search?query=hello
+1 > Authorization: Bearer b1bf56ca57ad6cc9434bf73c6424b576
+1 > Accept: application/json
+1 > Host: 127.0.0.1:45975
+1 > Connection: Keep-Alive
+1 > User-Agent: Apache-HttpClient/4.5.14 (Java/21.0.12)
+1 > Accept-Encoding: gzip,deflate
+
+
+16:39:30.530 [main]  DEBUG com.intuit.karate - response time in milliseconds: 2
+1 < 200
+1 < Server: BaseHTTP/0.6 Python/3.12.3
+1 < Date: Thu, 17 Sep 2026 14:39:30 GMT
+1 < Content-Type: application/json
+1 < Content-Length: 154
+1 < Access-Control-Allow-Origin: *
+1 < Access-Control-Allow-Methods: GET, POST, OPTIONS
+1 < Access-Control-Allow-Headers: Authorization, Content-Type
+{"query": "hello", "results": [{"source": "recording", "source_id": 42, "title": "Mock Meeting", "text": "RAG matching snippet", "relevance_score": 0.9}]}
+
+16:39:30.537 [main]  DEBUG com.intuit.karate - request:
+1 > POST http://127.0.0.1:45975/api/v1/record/start
+1 > Authorization: Bearer b1bf56ca57ad6cc9434bf73c6424b576
+1 > Accept: application/json
+1 > Host: 127.0.0.1:45975
+1 > Connection: Keep-Alive
+1 > User-Agent: Apache-HttpClient/4.5.14 (Java/21.0.12)
+1 > Accept-Encoding: gzip,deflate
+
+
+16:39:30.538 [main]  DEBUG com.intuit.karate - response time in milliseconds: 1
+1 < 200
+1 < Server: BaseHTTP/0.6 Python/3.12.3
+1 < Date: Thu, 17 Sep 2026 14:39:30 GMT
+1 < Content-Type: application/json
+1 < Content-Length: 73
+1 < Access-Control-Allow-Origin: *
+1 < Access-Control-Allow-Methods: GET, POST, OPTIONS
+1 < Access-Control-Allow-Headers: Authorization, Content-Type
+{"success": true, "message": "Recording session initiated successfully."}
+
+16:39:30.540 [main]  DEBUG com.intuit.karate - request:
+2 > POST http://127.0.0.1:45975/api/v1/record/stop
+2 > Authorization: Bearer b1bf56ca57ad6cc9434bf73c6424b576
+2 > Accept: application/json
+2 > Host: 127.0.0.1:45975
+2 > Connection: Keep-Alive
+2 > User-Agent: Apache-HttpClient/4.5.14 (Java/21.0.12)
+2 > Accept-Encoding: gzip,deflate
+
+
+16:39:30.541 [main]  DEBUG com.intuit.karate - response time in milliseconds: 1
+2 < 200
+2 < Server: BaseHTTP/0.6 Python/3.12.3
+2 < Date: Thu, 17 Sep 2026 14:39:30 GMT
+2 < Content-Type: application/json
+2 < Content-Length: 79
+2 < Access-Control-Allow-Origin: *
+2 < Access-Control-Allow-Methods: GET, POST, OPTIONS
+2 < Access-Control-Allow-Headers: Authorization, Content-Type
+{"success": true, "message": "Recording stopped. Sent to transcription queue."}
+
+16:39:30.547 [main]  DEBUG com.intuit.karate - request:
+1 > GET http://127.0.0.1:45975/api/v1/status
+1 > Accept: application/json
+1 > Host: 127.0.0.1:45975
+1 > Connection: Keep-Alive
+1 > User-Agent: Apache-HttpClient/4.5.14 (Java/21.0.12)
+1 > Accept-Encoding: gzip,deflate
+
+
+16:39:30.548 [main]  DEBUG com.intuit.karate - response time in milliseconds: 1
+1 < 401
+1 < Server: BaseHTTP/0.6 Python/3.12.3
+1 < Date: Thu, 17 Sep 2026 14:39:30 GMT
+1 < Content-Type: application/json
+1 < Content-Length: 66
+1 < Access-Control-Allow-Origin: *
+1 < Access-Control-Allow-Methods: GET, POST, OPTIONS
+1 < Access-Control-Allow-Headers: Authorization, Content-Type
+{"success": false, "error": "Unauthorized: Missing Bearer token."}
+
+16:39:30.982 [main]  INFO  com.intuit.karate.Suite - <<pass>> feature 1 of 1 (0 remaining) tests/integration/karate/local-api.feature

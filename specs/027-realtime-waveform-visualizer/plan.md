@@ -1,22 +1,32 @@
 # Implementation Plan: Real-Time Audio Waveform Visualizer
 
-Status: Draft
-Last updated: 2026-09-17
+Status: Implemented and validated
+Last updated: 2026-09-18
 Spec: [spec.md](spec.md)
 
-## Phases
+## Ownership and implementation
+- Add the visualizer to the existing `recording_in_progress` feature package;
+  no file moves, compatibility shims, new dependencies or capture changes.
+- Keep a bounded deque of normalized RMS display levels. Paint cubic segments
+  with horizontal control tangents so interpolated levels cannot overshoot.
+- Use the live widget palette and responsive maximum widths in the layout.
+- Feed levels through the capture widget's decorated Qt slot. Connect pause and
+  cleanup to the visualizer's parent-owned, finite-duration decay timer.
+- Update existing layout/lifecycle tests to assert waveform outcomes instead of
+  progress-bar values. Add widget tests and real-signal integration contracts.
+- Update all three README languages. No additional refactor follow-up required.
 
-### Phase 1: Custom Widget Creation
-- Subclass `QWidget` to create `RealTimeWaveformVisualizer`.
-- Set fixed or layout-stretching dimensions appropriate for the recording view header.
-- Implement a circular buffer (e.g., `collections.deque` with a `maxlen` of 80) to store amplitude values.
+## Validation
+`QT_QPA_PLATFORM=offscreen PYTHONUNBUFFERED=1 ./.venv/bin/python -m pytest -q tests/ui/recording_in_progress tests/test_recording_in_progress_layout.py tests/integration/test_recording_in_progress_lifecycle.py`
 
-### Phase 2: Painting Mechanics
-- Implement `paintEvent` inside the custom widget.
-- Use `QPainterPath` to render a double-sided (top and bottom) symmetric wave around a middle horizontal axis.
-- Apply `QPainter.RenderHint.Antialiasing` to make wave edges perfectly smooth.
-- Retrieve active palette colors (window, mid, highlight) to theme the wave pen and fill brush.
+`QT_QPA_PLATFORM=offscreen PYTHONUNBUFFERED=1 ./.venv/bin/python -m pytest -q`
 
-### Phase 3: Signal Wiring
-- Connect the `amplitude_changed(float)` signal from the active recording instance to append values to the visualizer deque and trigger `update()`.
-- Add a smooth-decay timer to fade the wave down to a quiet baseline when the recorder is paused.
+## Results (2026-09-18)
+- Focused: 36 passed.
+- Full suite: 887 passed, 1 skipped (system tray unavailable), 11 subtests passed.
+- Initial full collection was blocked by the missing declared `mcp<2` dependency;
+  installed it with `./.venv/bin/python -m pip install 'mcp<2'`, then reran successfully.
+- Rendered the widget under Light, Dark and SNES; inspected the Dark capture.
+- `git diff --check` passed. No files moved; layout and lifecycle wiring updated.
+- Validation ran on Linux with Qt offscreen; native Windows/macOS UI behavior
+  and physical audio input were not exercised.

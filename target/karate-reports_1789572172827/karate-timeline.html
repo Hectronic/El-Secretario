@@ -1,0 +1,32 @@
+<!DOCTYPE HTML>
+<html lang="en">
+  <head>
+    <meta charset="utf-8"/>
+    <title>Karate Timeline</title>
+    <style>
+      body, html { font-family: arial, sans-serif; font-size: 11pt; }
+      #visualization { box-sizing: border-box; width: 100%; height: 300px; }
+      .vis-item.failed { background-color: #F2928C; }
+      .page-heading { padding: 0.5em; margin-bottom: 0.5em; background-color: lightcyan; border: 1px solid gray; }
+    </style>
+    <script src="res/vis.min.js"></script>
+    <link href="res/vis.min.css" rel="stylesheet" type="text/css" />
+  </head>
+  <body>
+    <div class="page-heading">
+      <a href="karate-summary.html">Summary</a>
+    </div>     
+    <div id="visualization"></div>
+    <script>
+var groups = [{"content":"main","id":1}];
+var items = [{"id":1,"group":1,"content":"tests\/integration\/karate\/local-api[1:7]","start":1789570938365,"end":1789570938861,"title":"tests\/integration\/karate\/local-api[1:7] 17:02:18.365-17:02:18.861 GET status returns standard application metadata and status"},{"id":2,"group":1,"content":"tests\/integration\/karate\/local-api[2:16]","start":1789570938866,"end":1789570938879,"title":"tests\/integration\/karate\/local-api[2:16] 17:02:18.866-17:02:18.879 GET recordings returns array of recording summaries"},{"id":3,"group":1,"content":"tests\/integration\/karate\/local-api[3:23]","start":1789570938885,"end":1789570938898,"title":"tests\/integration\/karate\/local-api[3:23] 17:02:18.885-17:02:18.898 GET recordings\/{id} retrieves full details of a specific record"},{"id":4,"group":1,"content":"tests\/integration\/karate\/local-api[4:34]","start":1789570938903,"end":1789570938909,"title":"tests\/integration\/karate\/local-api[4:34] 17:02:18.903-17:02:18.909 GET tasks board lists active tasks"},{"id":5,"group":1,"content":"tests\/integration\/karate\/local-api[5:41]","start":1789570938913,"end":1789570938960,"title":"tests\/integration\/karate\/local-api[5:41] 17:02:18.913-17:02:18.960 POST tasks programmatically inserts a card on the board"},{"id":6,"group":1,"content":"tests\/integration\/karate\/local-api[6:48]","start":1789570938964,"end":1789570938972,"title":"tests\/integration\/karate\/local-api[6:48] 17:02:18.964-17:02:18.972 GET search retrieves semantic RAG matches with scores"},{"id":7,"group":1,"content":"tests\/integration\/karate\/local-api[7:57]","start":1789570938976,"end":1789570938984,"title":"tests\/integration\/karate\/local-api[7:57] 17:02:18.976-17:02:18.984 POST record\/start triggers microphone and POST record\/stop ceases it"},{"id":8,"group":1,"content":"tests\/integration\/karate\/local-api[8:69]","start":1789570938988,"end":1789570938993,"title":"tests\/integration\/karate\/local-api[8:69] 17:02:18.988-17:02:18.993 GET status without Bearer token returns 401 Unauthorized"}];
+</script>
+    <script>
+      var container = document.getElementById('visualization');
+      var timeline = new vis.Timeline(container);
+      timeline.setOptions({groupOrder: 'content'});
+      timeline.setGroups(new vis.DataSet(groups));
+      timeline.setItems(new vis.DataSet(items));
+    </script>
+  </body>
+</html>
