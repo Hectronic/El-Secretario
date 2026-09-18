@@ -9,7 +9,7 @@ Spec: [spec.md](spec.md)
   no file moves, compatibility shims, new dependencies or capture changes.
 - Keep a bounded deque of normalized RMS display levels. Paint cubic segments
   with horizontal control tangents so interpolated levels cannot overshoot.
-- Use the live widget palette and responsive maximum widths in the layout.
+- Use the live widget palette and an expanding, centered waveform in the layout.
 - Feed levels through the capture widget's decorated Qt slot. Connect pause and
   cleanup to the visualizer's parent-owned, finite-duration decay timer.
 - Update existing layout/lifecycle tests to assert waveform outcomes instead of
@@ -27,6 +27,7 @@ Spec: [spec.md](spec.md)
 - Initial full collection was blocked by the missing declared `mcp<2` dependency;
   installed it with `./.venv/bin/python -m pip install 'mcp<2'`, then reran successfully.
 - Rendered the widget under Light, Dark and SNES; inspected the Dark capture.
+- Follow-up on this branch removed the 320/400 px width cap; the waveform now expands across the available recording view and remains centered while keeping heights 48/64.
 - `git diff --check` passed. No files moved; layout and lifecycle wiring updated.
 - Validation ran on Linux with Qt offscreen; native Windows/macOS UI behavior
   and physical audio input were not exercised.

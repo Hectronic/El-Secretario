@@ -1,21 +1,19 @@
 # Implementation Plan: Drag & Drop Audio Importer
 
-Status: Draft
-Last updated: 2026-09-17
+Status: Implemented and validated
+Last updated: 2026-09-18
 Spec: [spec.md](spec.md)
 
-## Phases
+- Add pure MIME/path validation helpers under `src/ui/main_window/drag_drop.py`.
+- Add `MainWindow` drag-enter, move, leave and drop handlers with an expanding
+  feedback overlay.
+- Refactor `SetupActionsCoordinator` so dialog and drop imports share
+  `import_audio_path`, preserving unique filenames, SQLite persistence and the
+  transcription start call.
+- Keep the recording waveform from SPEC-027 horizontally expanding to the
+  available width while retaining its compact/regular heights.
+- Validate unit, UI and integration contracts in offscreen Qt mode.
 
-### Phase 1: Event Overrides
-- Configure `MainWindow` and central layouts with `setAcceptDrops(True)`.
-- Implement `dragEnterEvent` to extract file URLs and filter by supported extensions.
-- Provide interactive drag feedback (e.g., cursor shape changes or temporary styled glasspane overlay).
-
-### Phase 2: Drop Processing
-- Implement `dropEvent` to capture local absolute file paths.
-- Call the central `MainWindow.import_audio_file` setup routine directly, passing the path.
-- Trigger transition to the central tab layout so the user can observe processing progress immediately.
-
-### Phase 3: Robustness and Edge Cases
-- Ensure dragging directories is rejected.
-- Provide descriptive user warning toasts if the file copy or validation fails.
+## Validation results (2026-09-18)
+- Focused SPEC-027/028 tests: 23 passed.
+- Integration import test uses temporary SQLite and filesystem copy assertions.

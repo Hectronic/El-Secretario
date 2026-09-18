@@ -8,6 +8,7 @@ El Secretario ye una ferramienta intelixente de trescripción y organización d'
 
 ## Carauterístiques
 
+- **Importación d’audio por arrastre**: Suelta un ficheru d’audio local compatible sobre la ventana principal pa copialu, guardalu y entamar la trescripción al momentu.
 - **Historial d’amplitú en direuto**: La pantalla de grabación amuesa una onda colos niveles recientes d’audio, sigue la paleta actual y esvanézse hasta’l silenciu al pausar.
 - **Grabación ya Importación d'Audio**: Graba audio direutamente na aplicación o importa archivos esistentes.
 - **Guardían de seguridá de grabación**: Consulta l'indicador de grabación col iconu de l'aplicación na bandexa del sistema cuando tea disponible; pausa, anueva, fina/guarda o encancela con seguridá; recibe avisos configurables por duración o silenciu y activa opcionalmente la parada dempués d'un avisu de silenciu.

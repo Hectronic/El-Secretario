@@ -13,9 +13,10 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 import logging
-from PyQt6.QtWidgets import QMainWindow, QApplication
+from pathlib import Path
+from PyQt6.QtWidgets import QMainWindow, QApplication, QLabel
 from PyQt6.QtCore import QTimer, Qt
-from PyQt6.QtGui import QIcon
+from PyQt6.QtGui import QIcon, QDragEnterEvent, QDropEvent
 
 from src.database import DBManager
 from src.notebook_database import NotebookDBManager
@@ -27,6 +28,7 @@ from src.ui.main_window.sidebar_sync import SidebarSyncCoordinator
 from src.ui.main_window.sidebar_content import SidebarContentCoordinator
 from src.ui.main_window.sidebar_actions import SidebarActionsCoordinator
 from src.ui.main_window.setup_actions import SetupActionsCoordinator
+from src.ui.main_window.drag_drop import extract_supported_audio_path
 from src.ui.main_window.tab_lifecycle import TabLifecycleCoordinator
 from src.ui.main_window.search_actions import SearchActionsCoordinator
 from src.ui.main_window.selection_sync_actions import SelectionSyncActionsCoordinator
@@ -127,6 +129,7 @@ class MainWindow(QMainWindow):
             self.api_thread = None
 
         self.init_ui()
+        self._setup_drag_drop()
         bootstrap_main_window(self)
         logging.info("MainWindow initialized.")
 
@@ -200,6 +203,61 @@ class MainWindow(QMainWindow):
 
     def init_ui(self):
         build_main_window_layout(self)
+
+    def _setup_drag_drop(self):
+        self.setAcceptDrops(True)
+        self.drop_overlay = QLabel("Drop audio file to import", self)
+        self.drop_overlay.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.drop_overlay.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
+        self.drop_overlay.setStyleSheet(
+            "QLabel { background: rgba(33, 150, 243, 0.88); color: white; "
+            "font-size: 22px; font-weight: bold; border: 3px dashed white; "
+            "border-radius: 12px; padding: 24px; }"
+        )
+        self.drop_overlay.hide()
+        self._position_drop_overlay()
+
+    def _position_drop_overlay(self):
+        if hasattr(self, "drop_overlay"):
+            self.drop_overlay.setGeometry(self.rect().adjusted(18, 18, -18, -18))
+
+    def resizeEvent(self, event):
+        self._position_drop_overlay()
+        super().resizeEvent(event)
+
+    def dragEnterEvent(self, event: QDragEnterEvent):
+        path = extract_supported_audio_path(event.mimeData())
+        if path:
+            self.drop_overlay.setText(f"Drop to import {Path(path).name}")
+            self.drop_overlay.show()
+            self.drop_overlay.raise_()
+            event.acceptProposedAction()
+            return
+        self.drop_overlay.hide()
+        event.ignore()
+
+    def dragMoveEvent(self, event):
+        if extract_supported_audio_path(event.mimeData()):
+            event.acceptProposedAction()
+        else:
+            event.ignore()
+
+    def dragLeaveEvent(self, event):
+        self.drop_overlay.hide()
+        event.accept()
+
+    def dropEvent(self, event: QDropEvent):
+        path = extract_supported_audio_path(event.mimeData())
+        self.drop_overlay.hide()
+        if not path:
+            event.ignore()
+            return
+        record_id = self.setup_actions.import_audio_path(path)
+        if record_id is not None:
+            self.handle_status_message(f"Importing and transcribing: {Path(path).name}")
+            event.acceptProposedAction()
+        else:
+            event.ignore()
     def _on_right_section_header_clicked(self, section_key):
         self.shell_actions.on_right_section_header_clicked(section_key)
 
@@ -482,8 +540,8 @@ class MainWindow(QMainWindow):
     def open_settings_tab(self):
         self.setup_actions.open_settings_tab()
 
-    def import_audio_file(self, config):
-        self.setup_actions.import_audio_file(config)
+    def import_audio_file(self, config=None):
+        return self.setup_actions.import_audio_file(config)
 
     def open_collections_list(self):
         self.sidebar_content.open_collections_list()

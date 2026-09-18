@@ -5,7 +5,7 @@ import math
 
 from PyQt6.QtCore import QPointF, QTimer, pyqtSlot
 from PyQt6.QtGui import QPainter, QPainterPath, QPalette, QPen
-from PyQt6.QtWidgets import QWidget
+from PyQt6.QtWidgets import QSizePolicy, QWidget
 
 
 class RealTimeWaveformVisualizer(QWidget):
@@ -24,6 +24,7 @@ class RealTimeWaveformVisualizer(QWidget):
         self.decay_timer.timeout.connect(self._decay)
         self.setAccessibleName("Recording amplitude history")
         self.setMinimumWidth(80)
+        self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
 
     @pyqtSlot(float)
     def add_amplitude(self, amplitude):

@@ -8,6 +8,7 @@ El Secretario es una herramienta inteligente de transcripción y organización d
 
 ## Características
 
+- **Importación de audio por arrastre**: Suelta un archivo de audio local compatible sobre la ventana principal para copiarlo, guardarlo e iniciar la transcripción al instante.
 - **Historial de amplitud en directo**: La pantalla de grabación muestra una onda con los niveles recientes de audio, sigue la paleta actual y se desvanece hasta el silencio al pausar.
 - **Grabación e Importación de Audio**: Graba audio directamente en la aplicación o importa archivos existentes.
 - **Guardián de seguridad de grabación**: Consulta el indicador de grabación con el icono de la aplicación en la bandeja del sistema cuando esté disponible; pausa, reanuda, finaliza/guarda o cancela con seguridad; recibe avisos configurables por duración o silencio y activa opcionalmente la parada tras un aviso de silencio.

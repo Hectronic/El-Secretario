@@ -1,10 +1,11 @@
 # Tasks: Drag & Drop Audio Importer
 
-Status: Draft
-Last updated: 2026-09-17
+Status: Implemented and validated
+Last updated: 2026-09-18
 
-- [ ] T001 Configure main window frames to accept drag-and-drop actions.
-- [ ] T002 Program the MIME-type filtering inside `dragEnterEvent` supporting `.mp3`, `.wav`, `.m4a`, `.flac`, `.ogg`.
-- [ ] T003 Code `dropEvent` routing to extract paths and trigger the import flow.
-- [ ] T004 Implement an elegant drag visual overlay/glasspane on `MainWindow`.
-- [ ] T005 Write unit tests simulating QMimeData drops with varying file profiles and extensions.
+- [x] T001 Configure MainWindow to accept drag-and-drop events.
+- [x] T002 Filter local regular files by supported audio extension.
+- [x] T003 Route valid drops through the existing import/transcription flow.
+- [x] T004 Add a responsive visual drop overlay and status feedback.
+- [x] T005 Add Qt MIME/drop tests and SQLite/filesystem integration coverage.
+- [x] T006 Correct SPEC-027 waveform width and centering while retaining height behavior.

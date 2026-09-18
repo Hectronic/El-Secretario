@@ -1,20 +1,26 @@
 # SPEC-028: Drag & Drop Audio Importer
 
-Status: Draft
+Status: Implemented and validated
 Owner: Héctor Álvarez López <hector.alvarez@diagroup.com>
-Last updated: 2026-09-17
+Last updated: 2026-09-18
 
-## Problem
-Currently, importing a recording requires multiple clicks: opening the Tools or File menu, triggering the "Import Audio File" dialogue, and navigating the system directories to select a file. This traditional flow is tedious for users who frequently handle audio files generated on external recorders or received via messaging clients.
+## Product contract
+- `MainWindow` accepts one local regular audio file dragged over any part of the
+  application. Supported extensions are `.mp3`, `.wav`, `.m4a`, `.flac` and `.ogg`,
+  case-insensitively. Directories, remote URLs, multiple files and other formats
+  are rejected without opening dialogs or changing application state.
+- A translucent overlay identifies the accepted file and is hidden on leave/drop;
+  it expands with the window and does not intercept mouse input.
+- A valid drop routes directly to the existing import flow: copy to the unique
+  `recordings/` filename, persist the SQLite recording, open its recording tab and
+  call `start_transcription_with_config`. The status bar reports the file being
+  imported and transcribed.
+- The existing menu/dialog import remains available and shares the same copy,
+  persistence and transcription path. Import failures continue to use the existing
+  error dialog and return no record id.
 
-## Proposal
-Implement direct, seamless Drag & Drop capabilities across the entire `MainWindow` frame. Users can simply drag an audio file from their operating system's file browser and drop it onto any section of El Secretario to trigger an instant import.
-
-### Key Highlights
-- **Universal Drag & Drop:** Override Drag-and-Drop events on `MainWindow` so that dragging files into any part of the active interface is recognized.
-- **Audio Format Validation:** Intercept MIME types during dragging to only accept supported audio formats (e.g. `.mp3`, `.wav`, `.m4a`, `.flac`, `.ogg`). Reject any unsupported formats or directories visually.
-- **Instant Flow Triggering:** Once a valid file is dropped, the app copies the file into the user space recordings folder, initiates a new database recording entry, and enqueues it directly into the transcription worker thread.
-
-## User Scenarios & Testing
-- **Scenario:** The user drags `interview.mp3` from their Nautilus file browser over El Secretario. The window displays a subtle overlay saying "Drop to import interview.mp3". The user releases the mouse. The app switches to the processing queue showing "Transcribing: interview.mp3" instantly.
-- **Testing:** Add PyQt-QtBot tests simulating drop events with mock MIMEDict files containing both valid and invalid extensions, asserting routing outputs and file copy checks.
+## Scope and boundaries
+Validation covers the Qt drag event contract with deterministic MIME data, the
+copy/persistence/transcription boundary with a temporary SQLite database, and the
+existing dialog import behavior. Network, audio hardware and transcription models
+remain outside the test boundary.
