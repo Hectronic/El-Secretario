@@ -60,6 +60,11 @@ if __name__ == "__main__":
     logging.info("Application starting...")
     app = QApplication(sys.argv)
     
+    # Configure desktop entry associations for Linux launchers and GNOME dock mapping (SPEC-022)
+    app.setApplicationName("el-secretario")
+    if hasattr(app, "setDesktopFileName"):
+        app.setDesktopFileName("el-secretario")
+    
     # Use the helper to find the icon
     app_icon = QIcon(resource_path("resources/logo.png"))
     app.setWindowIcon(app_icon)
