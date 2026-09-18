@@ -12,10 +12,10 @@
 """Tests for the Custom Title Bar and Menus."""
 
 import pytest
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 from PyQt6.QtCore import Qt, QPoint, QPointF
 from PyQt6.QtGui import QMouseEvent
-from PyQt6.QtWidgets import QMainWindow, QApplication
+from PyQt6.QtWidgets import QMainWindow, QApplication, QMessageBox
 
 from src.ui.main_window.title_bar import TitleBarWidget, AboutDialog
 
@@ -82,12 +82,16 @@ def test_minimize_to_tray_action(title_bar, mock_main_window):
     )
 
 
-def test_close_window_action(title_bar, mock_main_window):
-    """Test close button action."""
-    # Patch close to prevent actual app teardown
-    mock_main_window.close = MagicMock()
+@patch("src.ui.main_window.title_bar.QMessageBox.question")
+def test_close_window_action(mock_question, title_bar, mock_main_window):
+    """Test close button action with confirmation."""
+    mock_question.return_value = QMessageBox.StandardButton.Yes
+    mock_main_window.force_quit = MagicMock()
+    
     title_bar._close_window()
-    mock_main_window.close.assert_called_once()
+    
+    mock_main_window.force_quit.assert_called_once()
+    mock_question.assert_called_once()
 
 
 def test_mouse_drag_arithmetic(title_bar, mock_main_window):
