@@ -115,6 +115,7 @@ Exec="$INSTALL_DIR/.venv/bin/python" "$INSTALL_DIR/main.py"
 Path=$INSTALL_DIR
 Icon=$INSTALL_DIR/logo.png
 Terminal=false
+StartupWMClass=el-secretario
 Categories=Utility;AudioVideo;
 EOF
     chmod +x "$DESKTOP_FILE"
