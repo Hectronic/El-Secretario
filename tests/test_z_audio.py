@@ -18,6 +18,7 @@ import types
 from unittest.mock import MagicMock
 
 import numpy as np
+import pytest
 
 
 def _load_audio_module_with_mocks(monkeypatch):
@@ -73,3 +74,29 @@ def test_pause_resume(monkeypatch):
 
     recorder.resume()
     assert recorder.is_paused is False
+
+
+def test_recorder_hardware_error_handling(monkeypatch):
+    """Test that if audio hardware is disconnected or stream initialization fails, Recorder resets states and raises exception."""
+    fake_sd = types.SimpleNamespace(
+        InputStream=MagicMock(side_effect=OSError("Device disconnected")),
+        query_devices=MagicMock(return_value=[]),
+    )
+    fake_sf = types.SimpleNamespace(
+        write=MagicMock(),
+        SoundFile=MagicMock(),
+    )
+
+    monkeypatch.setitem(sys.modules, "sounddevice", fake_sd)
+    monkeypatch.setitem(sys.modules, "soundfile", fake_sf)
+    monkeypatch.delitem(sys.modules, "src.audio", raising=False)
+
+    import importlib
+    audio_module = importlib.import_module("src.audio")
+    recorder = audio_module.Recorder()
+    
+    with pytest.raises(Exception) as excinfo:
+        recorder.start()
+        
+    assert "Could not initialize audio stream" in str(excinfo.value)
+    assert recorder.is_recording is False

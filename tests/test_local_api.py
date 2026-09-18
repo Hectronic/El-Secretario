@@ -321,3 +321,19 @@ def test_api_options_preflight(api_thread):
         assert res.headers.get("Access-Control-Allow-Origin") == "*"
         assert "GET" in res.headers.get("Access-Control-Allow-Methods")
 
+
+@patch("src.api.server.ThreadingHTTPServer")
+def test_api_port_collision_and_retries(mock_server):
+    """Test that port collisions (e.g. Address already in use) set start_error and terminate cleanly."""
+    mock_server.side_effect = OSError(98, "Address already in use")
+    
+    thread = LocalAPIServerThread()
+    thread.db = MagicMock()
+    thread.rag = MagicMock()
+    
+    # Execute run directly to capture outcomes instantly in the main thread
+    thread.run()
+    
+    assert thread.port == 0
+    assert "Address already in use" in getattr(thread, "start_error", "")
+
