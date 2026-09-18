@@ -1,10 +1,13 @@
 # Tasks: Real-Time Audio Waveform Visualizer
 
-Status: Draft
-Last updated: 2026-09-17
+Status: Implemented and validated
+Last updated: 2026-09-18
 
-- [ ] T001 Implement the basic QWidget subclass `RealTimeWaveformVisualizer` with a circular deque buffer.
-- [ ] T002 Program custom symmetric painting arithmetic using `QPainterPath` centered around the horizontal center.
-- [ ] T003 Wire theme-reactivity using application palette highlights.
-- [ ] T004 Connect the recording amplitude signals to drive the visualizer repainting.
-- [ ] T005 Write unit tests verifying rendering bounds and queue size constraints.
+- [x] T001 Implement bounded RMS display history and input normalization.
+- [x] T002 Paint a smooth symmetric envelope within widget bounds.
+- [x] T003 Read current palette and support compact/narrow layouts.
+- [x] T004 Wire Qt amplitude slot, pause/resume, terminal and failure cleanup.
+- [x] T005 Add unit tests for history, rendering, palette and timer lifecycle.
+- [x] T006 Add worker-signal / SQLite / capture lifecycle integration coverage.
+- [x] T007 Clarify RMS contract and update documentation in all languages.
+- [x] T008 Pass focused and complete offscreen test suites.

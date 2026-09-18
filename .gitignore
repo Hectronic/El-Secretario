@@ -26,3 +26,7 @@ log/
 .DS_Store
 
 models/
+
+# Karate test reports and generated execution logs
+target/karate-reports*/
+target/karate.log

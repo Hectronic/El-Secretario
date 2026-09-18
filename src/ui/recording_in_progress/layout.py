@@ -11,7 +11,6 @@ from PyQt6.QtWidgets import (
     QLabel,
     QLineEdit,
     QListWidget,
-    QProgressBar,
     QPushButton,
     QScrollArea,
     QSplitter,
@@ -21,6 +20,7 @@ from PyQt6.QtWidgets import (
 )
 
 from src.ui.component_widgets.tags import TagsLineEdit
+from src.ui.recording_in_progress.waveform import RealTimeWaveformVisualizer
 from src.transcription_options import (
     DEFAULT_TRANSCRIPTION_MODEL,
     get_transcription_model_options,
@@ -51,12 +51,10 @@ def build_recording_in_progress_layout(widget):
     widget.timer_label = QLabel("00:00")
     widget.timer_label.setStyleSheet("font-size: 64px; font-weight: bold; color: #eeeeee;")
     layout.addWidget(widget.timer_label, alignment=Qt.AlignmentFlag.AlignHCenter)
-    widget.vu_meter = QProgressBar()
-    widget.vu_meter.setRange(0, 100)
-    widget.vu_meter.setTextVisible(False)
-    widget.vu_meter.setFixedSize(400, 20)
-    widget.vu_meter.setStyleSheet("QProgressBar { border: 2px solid #555; border-radius: 5px; background-color: #333; } QProgressBar::chunk { background-color: #f44336; width: 10px; }")
-    layout.addWidget(widget.vu_meter, alignment=Qt.AlignmentFlag.AlignHCenter)
+    widget.waveform = RealTimeWaveformVisualizer()
+    widget.waveform.setMaximumWidth(400)
+    widget.waveform.setFixedHeight(64)
+    layout.addWidget(widget.waveform)
 
     controls_layout = QHBoxLayout()
     controls_layout.setSpacing(12)
@@ -157,7 +155,8 @@ def apply_layout_density(widget, is_windows, viewport_height=None):
         widget.main_content_layout.setSpacing(10)
         widget.status_label.setStyleSheet("font-size: 20px; color: #f44336; font-weight: bold;")
         widget.timer_label.setStyleSheet("font-size: 48px; font-weight: bold; color: #eeeeee;")
-        widget.vu_meter.setFixedSize(320, 16)
+        widget.waveform.setMaximumWidth(320)
+        widget.waveform.setFixedHeight(48)
         widget.notes_input.setMinimumHeight(160)
         widget.pause_btn.setFixedSize(112, 44)
         widget.stop_btn.setFixedSize(112, 44)
@@ -168,7 +167,8 @@ def apply_layout_density(widget, is_windows, viewport_height=None):
     widget.main_content_layout.setSpacing(14)
     widget.status_label.setStyleSheet("font-size: 24px; color: #f44336; font-weight: bold;")
     widget.timer_label.setStyleSheet("font-size: 64px; font-weight: bold; color: #eeeeee;")
-    widget.vu_meter.setFixedSize(400, 20)
+    widget.waveform.setMaximumWidth(400)
+    widget.waveform.setFixedHeight(64)
     widget.notes_input.setMinimumHeight(220)
     widget.pause_btn.setFixedSize(124, 50)
     widget.stop_btn.setFixedSize(124, 50)

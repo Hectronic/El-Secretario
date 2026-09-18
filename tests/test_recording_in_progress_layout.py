@@ -68,7 +68,7 @@ class TestRecordingInProgressLayout(unittest.TestCase):
         try:
             widget._apply_layout_density(viewport_height=700)
             self.assertTrue(widget._compact_mode_active)
-            self.assertEqual(widget.vu_meter.width(), 320)
+            self.assertEqual(widget.waveform.maximumWidth(), 320)
             self.assertEqual(widget.pause_btn.height(), 44)
             self.assertEqual(widget.stop_btn.height(), 44)
             self.assertEqual(widget.notes_input.minimumHeight(), 160)
@@ -76,7 +76,7 @@ class TestRecordingInProgressLayout(unittest.TestCase):
 
             widget._apply_layout_density(viewport_height=1200)
             self.assertFalse(widget._compact_mode_active)
-            self.assertEqual(widget.vu_meter.width(), 400)
+            self.assertEqual(widget.waveform.maximumWidth(), 400)
             self.assertEqual(widget.pause_btn.height(), 50)
             self.assertEqual(widget.stop_btn.height(), 50)
             self.assertEqual(widget.notes_input.minimumHeight(), 220)

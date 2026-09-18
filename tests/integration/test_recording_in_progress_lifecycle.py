@@ -96,9 +96,8 @@ def test_active_recording_emits_normalized_completion_payload_and_cleans_signal(
     assert payload["pending_tasks"] == ["Ship summary"]
     assert recorder.stop_calls == 1
     assert widget.recording_started is False
-    widget.vu_meter.setValue(0)
     recorder.amplitude_changed.emit(0.9)
-    assert widget.vu_meter.value() == 0
+    assert not any(widget.waveform.samples)
 
 
 def test_active_recording_cancel_stops_capture_and_emits_cancelled(qtbot, monkeypatch):
@@ -192,7 +191,7 @@ def test_silence_warning_recovers_on_activity_without_default_auto_stop(qtbot, m
     settings.remove("recording_guardian/auto_stop_after_silence")
 
 
-def test_real_capture_callback_throttles_qt_vu_updates_without_dropping_pcm(qtbot, monkeypatch):
+def test_real_capture_callback_throttles_qt_waveform_updates_without_dropping_pcm(qtbot, monkeypatch):
     monkeypatch.setattr("src.ui.recording_in_progress.widget.DBManager", _TagDatabase)
     clock = [0.0]
     recorder = Recorder(amplitude_update_hz=20, monotonic_clock=lambda: clock[0])
@@ -211,5 +210,46 @@ def test_real_capture_callback_throttles_qt_vu_updates_without_dropping_pcm(qtbo
 
     assert len(delivered) == 2
     assert len(recorder.recording) == 3
-    assert widget.vu_meter.value() == 100
+    assert list(widget.waveform.samples)[-2:] == [1.0, 1.0]
     widget.cleanup()
+
+
+def test_waveform_worker_signal_pause_resume_and_terminal_cleanup(qtbot, tmp_path):
+    from threading import Thread
+
+    db = DBManager(str(tmp_path / "waveform.sqlite"))
+    recorder = _Recorder()
+    widget = RecordingInProgressWidget(recorder=recorder, persistence=db, tray_port=_TrayPort())
+    qtbot.addWidget(widget)
+    worker = Thread(target=lambda: recorder.amplitude_changed.emit(0.04))
+    worker.start()
+    worker.join()
+    qtbot.waitUntil(lambda: widget.waveform.samples[-1] == 0.4)
+    widget.toggle_pause()
+    assert recorder.is_paused
+    qtbot.waitUntil(lambda: widget.waveform.samples[-1] < 0.4)
+    widget.toggle_pause()
+    assert not widget.waveform.decay_timer.isActive()
+    recorder.amplitude_changed.emit(0.02)
+    assert widget.waveform.samples[-1] == 0.2
+    widget.toggle_pause()
+    widget.cancel_recording()
+    recorder.amplitude_changed.emit(0.1)
+    assert not any(widget.waveform.samples)
+    assert not widget.waveform.decay_timer.isActive()
+
+
+def test_waveform_start_failure_stays_quiet(qtbot, tmp_path, monkeypatch):
+    recorder = _Recorder()
+    def fail_start():
+        raise RuntimeError("Device unavailable")
+    monkeypatch.setattr(recorder, "start", fail_start)
+    widget = RecordingInProgressWidget(
+        recorder=recorder, persistence=DBManager(str(tmp_path / 'failure.sqlite')),
+        tray_port=_TrayPort(),
+    )
+    qtbot.addWidget(widget)
+    recorder.amplitude_changed.emit(0.1)
+    assert "Device unavailable" in widget.status_label.text()
+    assert not any(widget.waveform.samples)
+    assert not widget.waveform.decay_timer.isActive()

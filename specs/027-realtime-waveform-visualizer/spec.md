@@ -1,21 +1,42 @@
 # SPEC-027: Real-Time Audio Waveform Visualizer
 
-Status: Draft
+Status: Implemented and validated
 Owner: Héctor Álvarez López <hector.alvarez@diagroup.com>
-Last updated: 2026-09-17
+Last updated: 2026-09-18
 
-## Problem
-The current VU-meter used during active recording sessions is a simple vertical/horizontal static green bar indicating instant sound level. While functionally correct, it lacks visual responsiveness, does not show audio frequency or wave historical trends, and feels aesthetically rigid. Modern recording applications use live sinusoidal waveform drawing to provide highly engaging visual feedback to the user.
+## Problem and scope
+The active recording screen displays only the instantaneous level. Replace its
+progress bar with a scrolling amplitude history owned by
+`src/ui/recording_in_progress/waveform.py`. The notebook and microphone setup
+meters remain outside this feature.
 
-## Proposal
-Replace the existing VU-meter widget with a custom QWidget-based `RealTimeWaveformVisualizer` that caches historical PCM amplitudes and renders a smooth, antialiased, scrolling wave graph inside the recording view.
+## Product contract
+- `RealTimeWaveformVisualizer` renders a symmetric, antialiased envelope using
+  QPainterPath, with the newest level at the right and a centered silent baseline.
+- Consume the existing `Recorder.amplitude_changed(float)` RMS signal, capped at
+  20 Hz. These are aggregated levels, not raw PCM, a frequency spectrum, or a
+  reconstruction of the original waveform. Do not change audio capture or storage.
+- Keep exactly 80 display levels (approximately four seconds at 20 Hz), initially
+  zero. Apply the previous meter's gain of 10, clamp to [0, 1], and treat nonfinite
+  values as silence. Geometry stays within the widget even at clipping levels.
+- Read Window, Mid and Highlight from the current Qt palette on every paint;
+  palette changes must take effect without recreating the widget.
+- Use maximum widths of 320/400 and heights of 48/64 for compact/regular layouts;
+  permit shrinking in narrow windows.
+- During pause ignore incoming levels and decay the existing envelope by 0.75
+  every 50 ms, snapping values below 0.001 to zero. Stop the timer when silent;
+  resume accepts new levels immediately and stops decay. No animation timer runs
+  during active capture or after cleanup.
+- Finish, cancel, close and failed startup leave a silent inactive visualizer.
+  Cleanup is idempotent; already queued amplitude deliveries cannot revive it.
+- Route recorder updates through a QObject slot on the UI thread; preserve
+  guardian activity handling and recorder signal disconnection.
 
-### Key Highlights
-- **Custom Painting with QPainter:** Use standard vector path rendering (`QPainterPath`) to draw symmetric picos and valles centered around a horizontal baseline.
-- **Historical Amplitude Buffer:** Maintain a circular buffer (e.g. 50-100 values) of raw PCM amplitudes, pushing new samples and popping oldest.
-- **Theme Reactivity:** Render the waveform using colors matching the currently active theme (Light, Dark, or SNES/Retro) dynamically read from the app palette.
-- **High responsiveness:** Feed updates via the existing 20 Hz `amplitude_changed` signal emitted from the non-blocking `Recorder` stream loop.
-
-## User Scenarios & Testing
-- **Scenario:** The user starts a recording. The waveform visualizer begins centered at zero. As the user speaks, the widget renders dynamic peaks proportional to the voice volume, scrolling smoothly from right to left.
-- **Testing:** Verify with unit tests that the visualizer successfully maintains its buffer limits, repaints on signal delivery, and releases resource allocations upon window closure.
+## Acceptance and integration gate
+This change crosses the recorder signal / Qt UI / capture lifecycle boundary.
+Unit tests cover history limits, normalization, drawing bounds and symmetry,
+rendered palette changes, pause decay, resume and disposal. Integration tests
+use real Qt signals, a temporary SQLite database, and deterministic audio/tray
+edges; verify delivery from a worker thread, pause/resume, terminal cleanup and
+startup failure. The real Recorder callback test proves 20 Hz throttling without
+losing PCM blocks. Run focused tests before the complete suite in offscreen mode.

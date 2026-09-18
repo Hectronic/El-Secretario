@@ -7,7 +7,7 @@
 import logging
 import platform
 
-from PyQt6.QtCore import QSettings, QTimer, pyqtSignal
+from PyQt6.QtCore import QSettings, QTimer, pyqtSignal, pyqtSlot
 from PyQt6.QtWidgets import QWidget
 
 from src.database import DBManager
@@ -99,6 +99,7 @@ class RecordingInProgressWidget(QWidget):
             logging.info("Recording started: is_recording=%s", self.recorder.is_recording)
             return
         self.recording_started = False
+        self.waveform.cleanup()
         self.status_label.setText(f"Error: {error}")
         self.status_label.setStyleSheet("font-size: 18px; color: #f44336; font-weight: bold;")
         self.pause_btn.setEnabled(False)
@@ -109,6 +110,7 @@ class RecordingInProgressWidget(QWidget):
             return
         paused = self.runtime.toggle_pause()
         self.guardian.set_paused(paused)
+        self.waveform.set_paused(paused)
         self.pause_btn.setText("Resume" if paused else "Pause")
         self.status_label.setText("Recording Paused" if paused else "Recording in Progress...")
         if paused:
@@ -171,11 +173,9 @@ class RecordingInProgressWidget(QWidget):
         self.timer_label.setText(format_elapsed_time(self.duration_seconds))
         self.guardian.tick(self.duration_seconds)
 
-    def update_vu_meter(self, amplitude):
-        self.vu_meter.setValue(min(100, int(amplitude * 1000)))
-
+    @pyqtSlot(float)
     def _on_amplitude(self, amplitude):
-        self.update_vu_meter(amplitude)
+        self.waveform.add_amplitude(amplitude)
         self.guardian.record_amplitude(amplitude)
 
     def _set_guardian_status(self, message):
@@ -183,6 +183,7 @@ class RecordingInProgressWidget(QWidget):
             self.status_label.setText(message)
 
     def cleanup(self):
+        self.waveform.cleanup()
         self.timer.stop()
         self.guardian.cleanup()
         self.runtime.cleanup()
