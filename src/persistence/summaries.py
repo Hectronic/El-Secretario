@@ -19,7 +19,9 @@ from typing import Any, Dict, List, Optional
 
 
 
-class SummariesRepository:
+from .base import RepositoryBase
+
+class SummariesRepository(RepositoryBase):
     def save_daily_summary(self, date: str, summary: str, tags_filter: Optional[str] = None) -> int:
         """
         Save or update a daily summary.

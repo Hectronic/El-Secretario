@@ -20,7 +20,9 @@ from typing import Any, Dict, List
 
 
 
-class TranscriptionLogsRepository:
+from .base import RepositoryBase
+
+class TranscriptionLogsRepository(RepositoryBase):
     def log_transcription(self, model_name: str, audio_duration: float, audio_size_bytes: int, transcription_time_seconds: float, record_id: int) -> None:
         """Log a transcription event."""
         with self.get_connection() as conn:

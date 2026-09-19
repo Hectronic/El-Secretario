@@ -19,7 +19,9 @@ from typing import Any, Dict, List, Optional
 
 
 
-class ChatSessionsRepository:
+from .base import RepositoryBase
+
+class ChatSessionsRepository(RepositoryBase):
     def save_chat_session(self, name: str, collection: str, messages_json: str, filter_date: Optional[str] = None, filter_tags: Optional[str] = None, context_data: Optional[str] = None) -> int:
         """Save a new chat session."""
         with self.get_connection() as conn:
