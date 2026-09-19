@@ -324,3 +324,167 @@ def trim_audio_segment(source_path: str, start_seconds: float, end_seconds: floa
         raise RuntimeError("FFmpeg is required to trim this audio format.") from exc
     except subprocess.CalledProcessError as exc:
         raise RuntimeError(exc.stderr.decode("utf-8", errors="ignore") or "Audio trimming failed.") from exc
+
+
+class AudioCompressionJob:
+    """Compress one completed WAV capture without blocking the Qt event loop.
+
+    The encoded file is produced immediately.  The source WAV is retained until
+    ``release_source`` is called, allowing active transcription workers to finish
+    reading it before the database reference is swapped.
+    """
+
+    def __init__(
+        self,
+        source_path,
+        record_id,
+        db,
+        *,
+        encoder=None,
+        on_success=None,
+        on_error=None,
+    ):
+        import threading
+
+        self.source_path = os.path.abspath(str(source_path))
+        self.record_id = int(record_id)
+        self.db = db
+        self.encoder = encoder or compress_wav_to_mp3
+        self.on_success = on_success
+        self.on_error = on_error
+        self._source_released = threading.Event()
+        self._thread = threading.Thread(
+            target=self._run,
+            name=f"audio-compression-{self.record_id}",
+            daemon=True,
+        )
+
+    @property
+    def thread(self):
+        return self._thread
+
+    def start(self):
+        self._thread.start()
+        return self
+
+    def release_source(self):
+        """Permit the job to replace the WAV after its current consumer finishes."""
+        self._source_released.set()
+
+    def _run(self):
+        import logging
+
+        target_path = None
+        database_swapped = False
+        try:
+            target_path = self.encoder(self.source_path)
+            self._source_released.wait()
+            source_name = os.path.basename(self.source_path)
+            target_name = os.path.basename(target_path)
+            if not self.db.replace_filename(self.record_id, source_name, target_name):
+                raise RuntimeError("Recording changed or was deleted before compression completed.")
+            database_swapped = True
+            try:
+                os.remove(self.source_path)
+            except OSError:
+                logging.warning("Compressed recording retained original WAV %s", self.source_path)
+            logging.info(
+                "Compressed recording record_id=%s source=%s target=%s",
+                self.record_id,
+                source_name,
+                target_name,
+            )
+            if self.on_success:
+                self.on_success(self.record_id, target_path)
+        except Exception as exc:
+            logging.exception("Audio compression failed for record_id=%s", self.record_id)
+            if not database_swapped and target_path and os.path.exists(target_path):
+                try:
+                    os.remove(target_path)
+                except OSError:
+                    logging.warning("Unable to remove failed compressed output %s", target_path)
+            if self.on_error:
+                self.on_error(self.record_id, str(exc))
+
+
+def compress_wav_to_mp3(source_path: str, *, bitrate: str = "32k") -> str:
+    """Encode a WAV capture into a mono 16 kHz MP3 voice profile atomically."""
+    source_path = os.path.abspath(source_path)
+    if not os.path.isfile(source_path):
+        raise FileNotFoundError(f"Audio source does not exist: {source_path}")
+    if os.path.splitext(source_path)[1].lower() != ".wav":
+        raise ValueError("Automatic compression only accepts WAV recordings.")
+
+    target_path = os.path.splitext(source_path)[0] + ".mp3"
+    temp_path = os.path.splitext(target_path)[0] + ".compressing.mp3"
+    command = [
+        "ffmpeg",
+        "-y",
+        "-loglevel",
+        "error",
+        "-i",
+        source_path,
+        "-vn",
+        "-ac",
+        "1",
+        "-ar",
+        "16000",
+        "-c:a",
+        "libmp3lame",
+        "-b:a",
+        bitrate,
+        temp_path,
+    ]
+    try:
+        subprocess.run(command, check=True, capture_output=True)
+        if not os.path.isfile(temp_path) or os.path.getsize(temp_path) == 0:
+            raise RuntimeError("FFmpeg did not create compressed audio output.")
+        os.replace(temp_path, target_path)
+        return target_path
+    except FileNotFoundError as exc:
+        raise RuntimeError("FFmpeg is required for automatic audio compression.") from exc
+    except subprocess.CalledProcessError as exc:
+        detail = exc.stderr.decode("utf-8", errors="ignore").strip()
+        raise RuntimeError(detail or "FFmpeg could not compress the recording.") from exc
+    finally:
+        if os.path.exists(temp_path):
+            try:
+                os.remove(temp_path)
+            except OSError:
+                pass
+
+
+class AudioCompressionService(QObject):
+    """Start and coordinate background compression jobs for completed captures."""
+
+    compression_finished = pyqtSignal(int, str)
+    compression_failed = pyqtSignal(int, str)
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self._jobs = {}
+
+    def start_compression(self, source_path, record_id, db, *, encoder=None):
+        job = AudioCompressionJob(
+            source_path,
+            record_id,
+            db,
+            encoder=encoder,
+            on_success=self._on_success,
+            on_error=self._on_error,
+        )
+        self._jobs[int(record_id)] = job
+        return job.start()
+
+    def release_source(self, record_id):
+        job = self._jobs.get(int(record_id))
+        if job is not None:
+            job.release_source()
+
+    def _on_success(self, record_id, target_path):
+        self._jobs.pop(record_id, None)
+        self.compression_finished.emit(record_id, target_path)
+
+    def _on_error(self, record_id, message):
+        self._jobs.pop(record_id, None)
+        self.compression_failed.emit(record_id, message)

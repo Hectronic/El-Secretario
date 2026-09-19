@@ -61,6 +61,7 @@ class RecordingWidget(QWidget):
     open_audio_editor_requested = pyqtSignal(int) # Request opening the audio editor tab
     status_changed = pyqtSignal(str)
     progress_changed = pyqtSignal(int)
+    audio_source_released = pyqtSignal()
 
     def __init__(
         self,
@@ -93,6 +94,8 @@ class RecordingWidget(QWidget):
         self._has_unsaved_changes = False
         self._audio_edit_start = 0.0
         self._audio_edit_end = 0.0
+        self._audio_source_released = False
+        self._audio_compression_pending = False
         settings = QSettings("Hectronic", "Secretario")
         self.auto_summarize_after_transcription = settings.value(
             "rec_config/auto_summarize_after_transcription",
@@ -183,10 +186,10 @@ class RecordingWidget(QWidget):
 
     def start_transcription_with_config(self, audio_path, config):
         self.set_transcription_config(config)
-        self.start_transcription(audio_path)
+        return self.start_transcription(audio_path)
 
     def start_transcription(self, audio_path):
-        self.transcription_actions.start_transcription(
+        return self.transcription_actions.start_transcription(
             audio_path,
             settings_cls=QSettings,
             thread_cls=TranscriberThread,
@@ -196,10 +199,46 @@ class RecordingWidget(QWidget):
         )
 
     def on_transcription_finished(self, result):
-        self.transcription_actions.on_transcription_finished(result, settings_cls=QSettings)
+        try:
+            self.transcription_actions.on_transcription_finished(result, settings_cls=QSettings)
+        finally:
+            self.release_audio_source()
 
     def on_transcription_error(self, err):
-        self.transcription_actions.on_transcription_error(err, message_box=QMessageBox)
+        try:
+            self.transcription_actions.on_transcription_error(err, message_box=QMessageBox)
+        finally:
+            self.release_audio_source()
+
+    def prepare_audio_compression(self):
+        self._audio_compression_pending = True
+
+    def release_audio_source(self):
+        if not self._audio_source_released:
+            self._audio_source_released = True
+            if self._audio_compression_pending:
+                self.stop_audio()
+                self.player.setSource(QUrl())
+                self.media_player_context.set_source_available(False)
+            self.audio_source_released.emit()
+
+    def on_audio_compressed(self, record_id, file_path):
+        if self.current_record_id != record_id:
+            return
+        self._audio_compression_pending = False
+        self.current_recording_path = file_path
+        self.player.setSource(QUrl.fromLocalFile(file_path))
+        self.media_player_context.set_source_available(True)
+        self.status_changed.emit("Audio compressed to MP3.")
+
+    def on_audio_compression_failed(self, record_id, _message):
+        if self.current_record_id != record_id:
+            return
+        self._audio_compression_pending = False
+        if self.current_recording_path:
+            self.player.setSource(QUrl.fromLocalFile(self.current_recording_path))
+            self.media_player_context.set_source_available(True)
+        self.status_changed.emit("Audio compression failed; keeping the WAV file.")
 
     def _on_transcriber_status_update(self, message):
         self.transcription_actions.on_status_update(message)
@@ -291,6 +330,7 @@ class RecordingWidget(QWidget):
 
     def cleanup(self):
         self.widget_support.cleanup(qurl=QUrl)
+        self.release_audio_source()
 
     def closeEvent(self, event):
         self.cleanup()
