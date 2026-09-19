@@ -1,5 +1,6 @@
 """Pure drag-and-drop validation helpers for audio imports."""
 
+import os
 from pathlib import Path
 
 SUPPORTED_AUDIO_EXTENSIONS = frozenset({".mp3", ".wav", ".m4a", ".flac", ".ogg"})
@@ -21,5 +22,5 @@ def extract_supported_audio_path(mime_data) -> str | None:
     url = urls[0]
     if not url.isLocalFile():
         return None
-    path = url.toLocalFile()
+    path = os.path.normpath(url.toLocalFile())
     return path if is_supported_audio_path(path) else None
