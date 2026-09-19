@@ -32,7 +32,7 @@ def test_cache_serializes_vectors_and_invalidates_corrupt_rows(tmp_path):
 
 
 def test_rag_engine_reuses_cached_vector_without_model_call(tmp_path):
-    engine = RAGEngine(str(tmp_path / "chroma"), store_factory=_store)
+    engine = RAGEngine(str(tmp_path / "chroma"), store_factory=_store, platform_name="Linux")
     embedding = engine.embedding_fn
 
     engine.add_document("one", "unchanged paragraph")
