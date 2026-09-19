@@ -1,8 +1,8 @@
 # SPEC-032: RAG Embeddings Cache
 
-Status: Draft
+Status: Implemented
 Owner: Héctor Álvarez López <hector.alvarez@diagroup.com>
-Last updated: 2026-09-17
+Last updated: 2026-09-19
 
 ## Problem
 Every time text snippets or transcription chunks are added or re-indexed in the RAG database, the system must generate semantic vector embeddings. When using local inference providers (like Ollama), generating these embeddings is CPU and GPU intensive. If a user frequently saves minor edits to a note, or re-indexes existing recordings, the RAG engine redundantly recalculates identical vector embeddings for unchanged paragraphs. This slows down indexing speeds, wastes processor cycles, and increases VRAM heat.
@@ -18,3 +18,6 @@ Implement an extremely fast, lightweight RAG Embeddings Cache system. The RAG en
 ## User Scenarios & Testing
 - **Scenario:** The user makes a minor correction to a long note. During RAG save indexing, the note is chunked into 10 paragraphs. 9 paragraphs are unchanged, while 1 is modified. The RAG engine detects 9 cache hits, retrieves their vectors instantly, and only requests 1 embedding from Ollama. The entire save completes under 50ms instead of taking 3 seconds!
 - **Testing:** Write unit tests demonstrating that repeated additions of identical text chunks result in zero model calls, verify correct vector representation floats serialization, and validate cache expiration/validation.
+
+## Implementation
+RAG stores embeddings in `embeddings_cache.sqlite`, keyed by SHA256 text hash and embedding model identity. Cache hits reuse deserialized float vectors and bypass the embedding function; malformed entries are invalidated and recalculated.
