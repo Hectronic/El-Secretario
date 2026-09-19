@@ -15,6 +15,7 @@ suppress_sentencepiece_swig_deprecation_warnings()
 from src.rag.chroma_store import create_chroma_store
 from src.rag.documents import add_document as index_document
 from src.rag.documents import delete_document as remove_document
+from src.rag.embeddings_cache import EmbeddingsCache
 from src.rag.runtime_policy import RAGRuntimePolicy
 from src.rag.search import search_documents
 from src.rag.subprocess_tasks import (
@@ -37,6 +38,7 @@ class RAGEngine:
         store_factory: Callable[..., Any] = create_chroma_store,
         chromadb_module: Any = None,
         db: Any = None,
+        embeddings_cache: Any = None,
     ):
         self.persist_directory = persist_directory
         self.db = db
@@ -54,11 +56,15 @@ class RAGEngine:
         self.is_persistent = store.is_persistent
         self.embedding_fn = store.embedding_fn
         self.collection = store.collection
+        self.embeddings_cache = embeddings_cache or EmbeddingsCache(
+            os.path.join(self.persist_directory, "embeddings_cache.sqlite")
+        )
 
     def add_document(
         self, doc_id: str, text: str, metadata: Optional[Dict[str, Any]] = None
     ) -> None:
         """Add or update a document in the configured vector store."""
+        embeddings = self._cached_embeddings(text)
         index_document(
             self.collection,
             persist_directory=self.persist_directory,
@@ -67,6 +73,7 @@ class RAGEngine:
             metadata=metadata,
             use_subprocess=self._subprocess_upsert_mode,
             upsert_in_subprocess=rag_upsert_in_subprocess,
+            embeddings=embeddings,
         )
         if hasattr(self, 'db') and self.db is not None:
             import hashlib
@@ -76,6 +83,17 @@ class RAGEngine:
             except Exception as e:
                 import logging
                 logging.error(f"Failed to update rag_index_status for {doc_id}: {e}")
+
+    def _cached_embeddings(self, text):
+        if not text or self.embedding_fn is None or self._subprocess_upsert_mode:
+            return None
+        model_name = getattr(self.embedding_fn, "model_name", None) or (
+            f"{type(self.embedding_fn).__module__}.{type(self.embedding_fn).__qualname__}"
+        )
+        vector = self.embeddings_cache.get_or_create(
+            text, str(model_name), lambda value: self.embedding_fn([value])[0]
+        )
+        return [vector]
 
     def search(
         self,

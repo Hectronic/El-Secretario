@@ -1,7 +1,7 @@
 # Implementation Plan: RAG Embeddings Cache
 
-Status: Draft
-Last updated: 2026-09-17
+Status: Implemented
+Last updated: 2026-09-19
 Spec: [spec.md](spec.md)
 
 ## Phases
@@ -21,3 +21,6 @@ Spec: [spec.md](spec.md)
 
 ### Phase 3: Validation and Coverage
 - Write tests asserting cache hits and misses, verifying zero inference calls during hits, and verifying correct vector deserialization.
+
+## Delivered design
+`EmbeddingsCache` persists model-scoped float vectors as SQLite BLOBs. `RAGEngine` resolves vectors through the cache before direct Chroma upserts, preserving subprocess safety paths. Focused RAG validation passes (`71 passed`); full suite completed successfully with exit code `0`.

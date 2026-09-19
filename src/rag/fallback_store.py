@@ -21,12 +21,13 @@ class InMemoryCollection:
     def __init__(self):
         self._docs: Dict[str, Dict[str, Any]] = {}
 
-    def upsert(self, ids, documents, metadatas):
-        for doc_id, text, metadata in zip(ids, documents, metadatas):
+    def upsert(self, ids, documents, metadatas, embeddings=None):
+        for index, (doc_id, text, metadata) in enumerate(zip(ids, documents, metadatas)):
             self._docs[str(doc_id)] = {
                 "id": str(doc_id),
                 "document": text or "",
                 "metadata": dict(metadata or {}),
+                "embedding": embeddings[index] if embeddings is not None else None,
             }
 
     def delete(self, ids):
