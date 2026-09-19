@@ -22,7 +22,9 @@ from typing import Any, Dict, List, Optional
 
 
 
-class RecordsRepository:
+from .base import RepositoryBase
+
+class RecordsRepository(RepositoryBase):
     def save(self, filename: str, text: str, duration: float, title: Optional[str] = None, is_diarized: bool = False, transcription_model: Optional[str] = None, type: str = 'recording', recording_notes: Optional[str] = None) -> int:
         """Save a new record (recording or note)."""
         with self.get_connection() as conn:

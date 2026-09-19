@@ -3,7 +3,9 @@
 import json
 from .base import PersistenceBase
 
-class QueueJobsRepository(PersistenceBase):
+from .base import RepositoryBase
+
+class QueueJobsRepository(RepositoryBase):
     def save_queue_jobs(self, jobs: list) -> None:
         """Persist the entire queue, replacing existing jobs."""
         with self.get_connection() as conn:

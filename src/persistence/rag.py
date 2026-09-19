@@ -2,7 +2,9 @@
 
 from .base import PersistenceBase
 
-class RAGIndexRepository(PersistenceBase):
+from .base import RepositoryBase
+
+class RAGIndexRepository(RepositoryBase):
     def get_rag_index_status(self, source_id: str) -> dict:
         """Get the indexing status for a given source."""
         with self.get_connection() as conn:

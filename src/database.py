@@ -1,19 +1,14 @@
-# Copyright (C) 2026 Héctor Álvarez López <hectoralvarez.me>
+# Copyright (C) 2026 Héctor Álvarez López <hector.alvarez.me>
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
 # the Free Software Foundation, either version 3 of the License, or
 # (at your option) any later version.
-#
-# This program is distributed in the hope that it will be useful,
-# but WITHOUT ANY WARRANTY; without even the implied warranty of
-# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-# GNU General Public License for more details.
-#
-# You should have received a copy of the GNU General Public License
-# along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
+"""Backwards-compatible facade for application SQLite persistence."""
 
-"""Backwards-compatible facade for the application SQLite persistence layer."""
+from __future__ import annotations
+
+from typing import Callable
 
 from .persistence import (
     ChatSessionsRepository,
@@ -28,21 +23,47 @@ from .persistence import (
 )
 
 
-class DBManager(
-    RecordsRepository,
-    ChatSessionsRepository,
-    TranscriptionLogsRepository,
-    SummariesRepository,
-    TasksRepository,
-    RAGIndexRepository,
-    QueueJobsRepository,
-    SchemaManager,
-    PersistenceBase,
-):
-    """Compatibility facade exposing the established persistence API.
+class DBManager(PersistenceBase):
+    """Compatibility facade that delegates persistence calls to aggregate repositories."""
 
-    New persistence behavior belongs in the repository module that owns its
-    aggregate; callers can continue importing ``DBManager`` unchanged.
-    """
+    _repository_types = {
+        "records": RecordsRepository,
+        "chat_sessions": ChatSessionsRepository,
+        "transcription_logs": TranscriptionLogsRepository,
+        "summaries": SummariesRepository,
+        "tasks": TasksRepository,
+        "rag_index": RAGIndexRepository,
+        "queue_jobs": QueueJobsRepository,
+    }
 
-    pass
+    def __init__(self, db_name: str = "transcriptions.db"):
+        super().__init__(db_name)
+        for attribute, repository_type in self._repository_types.items():
+            setattr(self, attribute, repository_type(self))
+
+    def init_db(self):
+        """Re-run schema initialization for callers of the historical facade API."""
+        return SchemaManager(self).init_db()
+
+    def _week_sunday(self, date_str):
+        return self.tasks._week_sunday(date_str)
+
+    @staticmethod
+    def compose_ai_text(transcription, recording_notes):
+        return RecordsRepository.compose_ai_text(transcription, recording_notes)
+
+
+def _delegated_method(repository_attribute: str, method_name: str) -> Callable:
+    def delegate(self, *args, **kwargs):
+        return getattr(getattr(self, repository_attribute), method_name)(*args, **kwargs)
+
+    delegate.__name__ = method_name
+    delegate.__qualname__ = f"DBManager.{method_name}"
+    delegate.__doc__ = getattr(DBManager._repository_types[repository_attribute], method_name).__doc__
+    return delegate
+
+
+for _repository_attribute, _repository_type in DBManager._repository_types.items():
+    for _method_name, _method in _repository_type.__dict__.items():
+        if callable(_method) and not _method_name.startswith("_") and _method_name != "compose_ai_text":
+            setattr(DBManager, _method_name, _delegated_method(_repository_attribute, _method_name))

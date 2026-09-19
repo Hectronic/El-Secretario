@@ -20,7 +20,9 @@ from typing import Any, Dict, List, Optional
 
 
 
-class TasksRepository:
+from .base import RepositoryBase
+
+class TasksRepository(RepositoryBase):
     def _week_sunday(self, date_str: str) -> str:
         dt = datetime.strptime(date_str, "%Y-%m-%d")
         days_until_sunday = 6 - dt.weekday()
@@ -46,13 +48,17 @@ class TasksRepository:
         resolved_origin = task_origin.strip() if isinstance(task_origin, str) and task_origin.strip() else None
 
         if resolved_record_id is not None:
-            rec = self.fetch_record(resolved_record_id)
-            if not isinstance(rec, dict):
+            with self.get_connection() as conn:
+                row = conn.execute(
+                    "SELECT created_at, tags, title FROM records WHERE id = ?",
+                    (resolved_record_id,),
+                ).fetchone()
+            if row is None:
                 raise ValueError(f"Recording {resolved_record_id} does not exist.")
-            rec_day = str(rec.get("created_at", ""))[:10]
+            rec_day = str(row["created_at"] or "")[:10]
             rec_week = self._week_sunday(rec_day)
-            rec_tags = (rec.get("tags") or "").strip()
-            rec_title = (rec.get("title") or "").strip()
+            rec_tags = (row["tags"] or "").strip()
+            rec_title = (row["title"] or "").strip()
             if not resolved_day_date:
                 resolved_day_date = rec_day
             if not resolved_week_start:

@@ -1,20 +1,31 @@
 # SPEC-029: SQL Repositories Decoupling
 
-Status: Draft
+Status: Implemented and validated
 Owner: Héctor Álvarez López <hector.alvarez@diagroup.com>
-Last updated: 2026-09-17
+Last updated: 2026-09-19
 
-## Problem
-Currently, database queries are managed by a single monolithic facade class `DBManager` in `src/database.py`. As El Secretario has grown, this facade has bloated with dozens of direct raw SQL queries covering recording metadata, transcription metrics, task boards, calendars, and notebook organization. This violates the Single Responsibility Principle, makes unit-testing specific database interactions hard, and complicates refactoring or migrating SQL logic.
+## Product contract
+- `DBManager` remains the public compatibility API for the application database.
+  It owns only the SQLite connection, schema initialization, compatibility helpers,
+  and instantiated aggregate repositories; it contains no SQL statements.
+- `RecordsRepository`, `TasksRepository`, `SummariesRepository`,
+  `ChatSessionsRepository`, `TranscriptionLogsRepository`, `RAGIndexRepository`,
+  and `QueueJobsRepository` own their aggregate SQL under `src/persistence/`.
+  They receive a shared connection provider and can also be instantiated with a
+  database path for isolated SQLite tests.
+- `NotebookRepository` owns all notebook/entry schema and SQL. `NotebookDBManager`
+  remains a backwards-compatible facade that delegates to it.
+- Existing method names, argument behavior, return values, schema migrations,
+  transaction boundaries, and SQLite row dictionaries remain compatible. Static
+  `DBManager.compose_ai_text` and `init_db` remain available.
+- A task repository reads only the minimal recording metadata it needs through its
+  connection provider, so it stays usable without a `DBManager` instance.
 
-## Proposal
-Conclude the aggregate separation dictated by `GEMINI.md`. Extract all direct raw SQL statements out of the `DBManager` class and delegate them to domain-specific repository classes (e.g. `RecordingRepository`, `TaskRepository`, `NotebookRepository`) inside the `src/persistence/` package. The `DBManager` class will remain strictly as a backwards-compatible facade that delegates calls to these dedicated repositories.
-
-### Key Highlights
-- **Domain Repositories:** Segment persistence operations cleanly by domain aggregates under `src/persistence/`.
-- **Decoupled Architecture:** Relocate all raw SQL strings and SQLite query executions from `DBManager` to repositories.
-- **Facade Backward Compatibility:** Refactor `DBManager` to instantiate and delegate calls to domain repositories, ensuring zero regressions on the rest of the PyQt codebase.
-
-## User Scenarios & Testing
-- **Scenario:** Developer modifies the schema or SQL constraints for notebooks. They only need to edit `src/persistence/notebook_repository.py` and run its dedicated test file, leaving the rest of the database logic untouched.
-- **Testing:** Relocate and split the existing database test suite (`tests/test_database.py` and `tests/test_notes.py`) into focused repository unit tests (`tests/persistence/test_recording_repo.py`, `test_task_repo.py`, etc.), validating query results and database schemas in isolation.
+## Acceptance and integration gate
+This refactor crosses persistence and UI injection boundaries. Repository tests
+run against temporary SQLite databases; facade tests verify instantiated delegates
+and method routing. Existing `tests/integration/test_persistence_ports.py` proves
+that real Qt note and batch widgets persist/query through the injected facade, and
+`tests/integration/test_notebook_widget_persistence.py` proves the notebook UI
+uses the delegated notebook store. External AI, audio, RAG and network edges are
+not part of this refactor.

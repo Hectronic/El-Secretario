@@ -18,7 +18,9 @@ from __future__ import annotations
 
 
 
-class SchemaManager:
+from .base import RepositoryBase
+
+class SchemaManager(RepositoryBase):
     def init_db(self) -> None:
         """Initialize the database and create the table if it doesn't exist."""
         import logging
