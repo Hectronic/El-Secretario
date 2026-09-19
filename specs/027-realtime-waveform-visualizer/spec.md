@@ -21,8 +21,8 @@ meters remain outside this feature.
   values as silence. Geometry stays within the widget even at clipping levels.
 - Read Window, Mid and Highlight from the current Qt palette on every paint;
   palette changes must take effect without recreating the widget.
-- Use maximum widths of 320/400 and heights of 48/64 for compact/regular layouts;
-  permit shrinking in narrow windows.
+- Use heights of 48/64 for compact/regular layouts and an expanding horizontal size policy
+  so the centered waveform occupies the available recording-view width.
 - During pause ignore incoming levels and decay the existing envelope by 0.75
   every 50 ms, snapping values below 0.001 to zero. Stop the timer when silent;
   resume accepts new levels immediately and stops decay. No animation timer runs

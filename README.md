@@ -10,6 +10,7 @@ Read this in [Español](README_ES.md) | [Asturianu](README_AST.md)
 
 ## Features
 
+- **Drag-and-drop audio import**: Drop a supported local audio file anywhere on the main window to copy it, persist it, and start transcription immediately.
 - **Live amplitude history**: The recording screen shows a scrolling waveform of recent audio levels, follows the current palette, and fades to silence when paused.
 - **Audio Recording & Import**: Record audio directly within the app or import existing files.
 - **Recording Safety Guardian**: See the branded active-recording indicator in the system tray where supported; pause, resume, stop/save, or cancel it safely; configure duration/silence reminders and optionally opt in to stopping after a silence warning.

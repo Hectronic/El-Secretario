@@ -52,7 +52,6 @@ def build_recording_in_progress_layout(widget):
     widget.timer_label.setStyleSheet("font-size: 64px; font-weight: bold; color: #eeeeee;")
     layout.addWidget(widget.timer_label, alignment=Qt.AlignmentFlag.AlignHCenter)
     widget.waveform = RealTimeWaveformVisualizer()
-    widget.waveform.setMaximumWidth(400)
     widget.waveform.setFixedHeight(64)
     layout.addWidget(widget.waveform)
 
@@ -155,7 +154,6 @@ def apply_layout_density(widget, is_windows, viewport_height=None):
         widget.main_content_layout.setSpacing(10)
         widget.status_label.setStyleSheet("font-size: 20px; color: #f44336; font-weight: bold;")
         widget.timer_label.setStyleSheet("font-size: 48px; font-weight: bold; color: #eeeeee;")
-        widget.waveform.setMaximumWidth(320)
         widget.waveform.setFixedHeight(48)
         widget.notes_input.setMinimumHeight(160)
         widget.pause_btn.setFixedSize(112, 44)
@@ -167,7 +165,6 @@ def apply_layout_density(widget, is_windows, viewport_height=None):
     widget.main_content_layout.setSpacing(14)
     widget.status_label.setStyleSheet("font-size: 24px; color: #f44336; font-weight: bold;")
     widget.timer_label.setStyleSheet("font-size: 64px; font-weight: bold; color: #eeeeee;")
-    widget.waveform.setMaximumWidth(400)
     widget.waveform.setFixedHeight(64)
     widget.notes_input.setMinimumHeight(220)
     widget.pause_btn.setFixedSize(124, 50)

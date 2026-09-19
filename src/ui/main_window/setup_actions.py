@@ -47,8 +47,8 @@ class SetupActionsCoordinator:
         index = self.window.central_tabs.addTab(settings_widget, "Settings")
         self.window.central_tabs.setCurrentIndex(index)
 
-    def import_audio_file(self, config):
-        """Import an audio file and start transcription with the provided config."""
+    def import_audio_file(self, config=None):
+        """Choose an audio file, then import it and start transcription."""
         file_path, _ = QFileDialog.getOpenFileName(
             self.window,
             "Import Audio",
@@ -56,8 +56,13 @@ class SetupActionsCoordinator:
             "Audio Files (*.wav *.mp3 *.m4a *.ogg *.flac);;All Files (*)",
         )
         if not file_path:
-            return
+            return None
 
+        return self.import_audio_path(file_path, config=config)
+
+    def import_audio_path(self, file_path, config=None):
+        """Copy a validated local audio file and start its transcription."""
+        config = dict(config or {})
         try:
             recordings_dir = os.path.join(os.getcwd(), "recordings")
             os.makedirs(recordings_dir, exist_ok=True)
@@ -81,6 +86,8 @@ class SetupActionsCoordinator:
 
             if rec_widget is not None and hasattr(rec_widget, "start_transcription_with_config"):
                 rec_widget.start_transcription_with_config(dest_path, config)
+            return record_id
         except Exception as exc:
             logging.exception("Failed to import audio file.")
             QMessageBox.critical(self.window, "Import Error", f"Failed to import audio: {exc}")
+            return None
