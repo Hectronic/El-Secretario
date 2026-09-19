@@ -1,7 +1,7 @@
 # Implementation Plan: Media Player State Pattern
 
-Status: Draft
-Last updated: 2026-09-17
+Status: Implemented
+Last updated: 2026-09-19
 Spec: [spec.md](spec.md)
 
 ## Phases
@@ -23,3 +23,14 @@ Spec: [spec.md](spec.md)
 ### Phase 3: UI Sync and Testing
 - Let states emit signals or trigger a common callback to update UI buttons enablement (e.g., `StoppedState` disables the Stop button and enables Play).
 - Validate with tests under offscreen Qt environments.
+
+## Delivered design
+- `src/ui/recording/media_player_state.py` owns the state hierarchy and `MediaPlayerContext`.
+- `RecordingActionsCoordinator` delegates player commands to the context, keeping `RecordingWidget` public slots stable.
+- The context updates real Qt controls through one UI synchronization callback and treats unavailable sources and invalid transitions as no-ops.
+- `tests/ui/recording/test_media_player_state.py` covers sequential transitions with mocks. `tests/integration/test_recording_player_state.py` covers a temporary SQLite record, real Qt signals and controls, and a deterministic multimedia edge.
+
+## Validation
+- Focused state/widget/integration suite: `35 passed, 8 subtests passed`.
+- Broader RecordingWidget suite: `83 passed`.
+- Full suite: completed successfully with exit code `0`.

@@ -111,6 +111,7 @@ class RecordingWidgetSupport:
             message_box.warning(widget, "Error", error)
             return
         try:
+            widget.media_player_context.trim()
             duration = trim_recording_audio(widget.current_recording_path, start, end, trim_func)
             widget.db.update_duration(widget.current_record_id, duration)
             if getattr(widget, "duration_label", None):
@@ -124,6 +125,8 @@ class RecordingWidgetSupport:
         except Exception as exc:
             logging.exception("Failed to trim audio for record_id=%s", widget.current_record_id)
             message_box.critical(widget, "Trim Error", str(exc))
+        finally:
+            widget.media_player_context.finish_trim()
 
     def update_transcription_actions(self):
         text = self.widget.text_display.toPlainText() if self.widget.text_display else ""

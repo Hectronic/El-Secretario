@@ -3,7 +3,6 @@
 import logging
 import os
 
-from PyQt6.QtMultimedia import QMediaPlayer
 from PyQt6.QtWidgets import QMessageBox
 
 from src.ui.recording.state import fallback_record_title
@@ -59,13 +58,13 @@ class RecordingActionsCoordinator:
         )
 
     def play_audio(self):
-        self.widget.player.play()
+        self.widget.media_player_context.play()
 
     def pause_audio(self):
-        self.widget.player.pause()
+        self.widget.media_player_context.pause()
 
     def stop_audio(self):
-        self.widget.player.stop()
+        self.widget.media_player_context.stop()
 
     def position_changed(self, position):
         self.widget.slider.setValue(position)
@@ -74,23 +73,21 @@ class RecordingActionsCoordinator:
         self.widget.slider.setRange(0, duration)
 
     def set_position(self, position):
-        self.widget.player.setPosition(position)
+        self.widget.media_player_context.seek(position)
 
     def media_state_changed(self, _state):
-        if self.widget.player.mediaStatus() == QMediaPlayer.MediaStatus.EndOfMedia:
-            self.stop_audio()
+        self.widget.media_player_context.media_state_changed(_state)
 
     def enable_playback_controls(self):
-        self._set_playback_controls_enabled(True)
+        self._set_record_actions_enabled(True)
+        self.widget.media_player_context.set_source_available(True)
 
     def disable_playback_controls(self):
-        self._set_playback_controls_enabled(False)
+        self._set_record_actions_enabled(False)
+        self.widget.media_player_context.set_source_available(False)
 
-    def _set_playback_controls_enabled(self, enabled):
+    def _set_record_actions_enabled(self, enabled):
         for attribute in (
-            "play_btn",
-            "pause_btn",
-            "stop_btn",
             "ask_meeting_btn",
             "retranscribe_btn",
             "delete_btn",
