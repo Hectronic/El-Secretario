@@ -1,6 +1,5 @@
 from unittest.mock import MagicMock, patch
 
-from PyQt6.QtMultimedia import QMediaPlayer
 from PyQt6.QtWidgets import QMessageBox
 
 from src.ui.recording.record_actions import RecordingActionsCoordinator
@@ -73,19 +72,19 @@ def test_playback_actions_update_player_and_controls():
     coordinator.duration_changed(900)
     coordinator.enable_playback_controls()
 
-    widget.player.play.assert_called_once_with()
-    widget.player.pause.assert_called_once_with()
-    widget.player.setPosition.assert_called_once_with(250)
+    widget.media_player_context.play.assert_called_once_with()
+    widget.media_player_context.pause.assert_called_once_with()
+    widget.media_player_context.seek.assert_called_once_with(250)
     widget.slider.setValue.assert_called_once_with(125)
     widget.slider.setRange.assert_called_once_with(0, 900)
-    for control in controls:
+    for control in controls[3:]:
         control.setEnabled.assert_called_with(True)
+    widget.media_player_context.set_source_available.assert_called_once_with(True)
 
 
-def test_end_of_media_stops_player():
+def test_media_state_is_delegated_to_the_player_context():
     widget = _widget()
-    widget.player.mediaStatus.return_value = QMediaPlayer.MediaStatus.EndOfMedia
 
     RecordingActionsCoordinator(widget).media_state_changed(None)
 
-    widget.player.stop.assert_called_once_with()
+    widget.media_player_context.media_state_changed.assert_called_once_with(None)

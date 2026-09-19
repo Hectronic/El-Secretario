@@ -41,6 +41,7 @@ from src.ui.recording.content_tabs import build_content_tabs
 from src.ui.recording.controls import create_action_button, create_playback_controls, create_primary_action
 from src.ui.recording.record_details import RecordingDetailsCoordinator
 from src.ui.recording.metadata_panel import build_metadata_panel
+from src.ui.recording.media_player_state import MediaPlayerContext
 from src.ui.recording.record_actions import RecordingActionsCoordinator
 from src.ui.recording.state import recording_audio_path
 from src.ui.recording.speaker_actions import apply_speaker_mapping, find_speaker_labels
@@ -106,6 +107,7 @@ class RecordingWidget(QWidget):
         self.player.positionChanged.connect(self.position_changed)
         self.player.durationChanged.connect(self.duration_changed)
         self.player.playbackStateChanged.connect(self.media_state_changed)
+        self.media_player_context = MediaPlayerContext(self)
         self.record_actions = RecordingActionsCoordinator(self)
         self.record_details = RecordingDetailsCoordinator(self)
         self.transcription_actions = RecordingTranscriptionCoordinator(self)
@@ -113,6 +115,7 @@ class RecordingWidget(QWidget):
         self.widget_support = RecordingWidgetSupport(self)
 
         self.init_ui()
+        self.media_player_context.sync_ui()
         self._connect_dirty_tracking()
         
         if self.current_record_id:
