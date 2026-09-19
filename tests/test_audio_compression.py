@@ -1,8 +1,10 @@
 import os
+import shutil
 import time
 from pathlib import Path
 
 import numpy as np
+import pytest
 import soundfile as sf
 
 from src.audio import AudioCompressionJob, Recorder, compress_wav_to_mp3
@@ -23,6 +25,7 @@ def _wait_for(path: Path, timeout: float = 5.0):
     raise AssertionError(f"Timed out waiting for {path}")
 
 
+@pytest.mark.skipif(shutil.which("ffmpeg") is None, reason="FFmpeg is not available")
 def test_compress_wav_to_mp3_uses_readable_mono_voice_profile(tmp_path):
     source = tmp_path / "meeting.wav"
     _wav(source)
@@ -47,7 +50,12 @@ def test_background_job_keeps_wav_until_transcription_releases_source(tmp_path):
     record_id = db.save(source.name, "", 0.0, "Meeting")
     target = source.with_suffix(".mp3")
 
-    job = AudioCompressionJob(str(source), record_id, db).start()
+    def encoder(path):
+        target_path = Path(path).with_suffix(".mp3")
+        target_path.write_bytes(b"compressed")
+        return str(target_path)
+
+    job = AudioCompressionJob(str(source), record_id, db, encoder=encoder).start()
     _wait_for(target)
 
     assert source.exists()

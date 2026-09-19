@@ -1,3 +1,4 @@
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import numpy as np
@@ -23,10 +24,15 @@ def test_completed_capture_compresses_after_transcription_source_is_released(qtb
     window.summary_task_queue = None
     coordinator = RecordingTabCoordinator(window)
 
+    def encoder(path):
+        target = Path(path).with_suffix(".mp3")
+        target.write_bytes(b"compressed")
+        return str(target)
+
     with patch(
         "src.ui.recording_widget.RecordingWidget.start_transcription_with_config",
         return_value=None,
-    ):
+    ), patch("src.audio.compress_wav_to_mp3", side_effect=encoder):
         coordinator.on_recording_finished(
             str(source), {"title": "Compressed capture"}, QWidget()
         )
