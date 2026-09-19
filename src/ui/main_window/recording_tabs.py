@@ -19,6 +19,7 @@ import os
 
 from PyQt6.QtWidgets import QMessageBox
 
+from src.audio import AudioCompressionService
 from src.ui.audio_editor.widget import AudioEditorWidget
 from src.ui.recording_in_progress_widget import RecordingInProgressWidget
 from src.ui.recording_widget import RecordingWidget
@@ -29,6 +30,7 @@ class RecordingTabCoordinator:
 
     def __init__(self, window):
         self.window = window
+        self.audio_compression_service = AudioCompressionService()
 
     def recording_tab_title(self, record):
         if not record:
@@ -89,6 +91,7 @@ class RecordingTabCoordinator:
             recorder=self.window.recorder,
             record_id=record_id,
             task_queue=self.window.summary_task_queue,
+            persistence=self.window.db,
         )
         self._wire_recording_widget(rec_widget)
 
@@ -234,10 +237,22 @@ class RecordingTabCoordinator:
             window.request_sidebar_reload(include_tags=True, include_history=True)
             rec_widget = self.open_recording_tab(record_id, config)
             if rec_widget and isinstance(rec_widget, RecordingWidget):
+                rec_widget.prepare_audio_compression()
+                self.audio_compression_service.start_compression(file_path, record_id, window.db)
+                rec_widget.audio_source_released.connect(
+                    lambda record_id=record_id: self.audio_compression_service.release_source(record_id)
+                )
+                self.audio_compression_service.compression_finished.connect(
+                    rec_widget.on_audio_compressed
+                )
+                self.audio_compression_service.compression_failed.connect(
+                    rec_widget.on_audio_compression_failed
+                )
                 logging.info(
                     "Starting transcription with config for record_id=%s file=%s", record_id, file_path
                 )
-                rec_widget.start_transcription_with_config(file_path, config)
+                if rec_widget.start_transcription_with_config(file_path, config) is None:
+                    rec_widget.release_audio_source()
         except Exception as error:
             logging.exception("Failed while handling recording completion flow.")
             QMessageBox.critical(window, "Error", f"Failed to save recording: {error}")

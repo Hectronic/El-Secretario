@@ -242,6 +242,17 @@ class RecordsRepository(RepositoryBase):
             cursor.execute('UPDATE records SET duration = ? WHERE id = ?', (duration, record_id))
             conn.commit()
 
+    def replace_filename(self, record_id: int, expected_filename: str, filename: str) -> bool:
+        """Atomically replace a recording filename if it still references the source."""
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                'UPDATE records SET filename = ? WHERE id = ? AND filename = ?',
+                (filename, record_id, expected_filename),
+            )
+            conn.commit()
+            return cursor.rowcount == 1
+
     def update_transcription(self, record_id: int, text: str, is_diarized: Optional[bool] = None, transcription_model: Optional[str] = None) -> None:
         """Update the transcription of a record."""
         with self.get_connection() as conn:

@@ -1,8 +1,8 @@
 # SPEC-031: Automatic Audio Compression
 
-Status: Draft
+Status: Implemented
 Owner: Héctor Álvarez López <hector.alvarez@diagroup.com>
-Last updated: 2026-09-17
+Last updated: 2026-09-19
 
 ## Problem
 Currently, El Secretario records all microphone captures in raw PCM WAV format. At 16000Hz mono, WAV files consume about 115 MB for each hour of recorded audio. For power users with massive meeting history (such as the active 25 GB recordings folder), this causes high physical disk consumption and strains local system resources over time. Since human voice recordings don't require raw uncompressed PCM bandwidth, they can be highly compressed with almost zero perceptible loss in transcription (STT) accuracy.
@@ -18,3 +18,8 @@ Implement an automatic, background audio compression system. Immediately after a
 ## User Scenarios & Testing
 - **Scenario:** The user records a 2-hour meeting. They stop the recording. The app saves the `.wav` file, starts transcription, and immediately launches a background thread to compress the file to `.mp3`. Within a minute, the original 230 MB WAV file is converted to a 25 MB MP3 file, freed up on disk, and referenced transparently in the databases.
 - **Testing:** Create tests validating that the `.mp3`/`.opus` files are correctly compressed, check that the STT engines (faster-whisper/sherpa-onnx) can read the compressed formats successfully, and assert that the file references are updated in the database.
+
+## Implementation
+Completed WAV captures are encoded immediately by `AudioCompressionJob` in a daemon background thread using FFmpeg (`libmp3lame`, mono, 16 kHz, 32 kbps). The WAV remains available while transcription is active. Once the recording widget releases its source, the job conditionally swaps the SQLite filename to the MP3 and removes the original WAV.
+
+The media source is detached before releasing it so Windows backends can close their file handle. A failed encoding leaves the original WAV and database reference untouched; a deletion failure retains both files while keeping the valid MP3 reference.

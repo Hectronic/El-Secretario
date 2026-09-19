@@ -65,6 +65,7 @@ class RecordingTranscriptionCoordinator:
             sound_file_cls=sound_file_cls,
             message_box=message_box,
         )
+        return widget.transcriber_thread
 
     def on_transcription_finished(self, result, *, settings_cls):
         widget = self.widget
