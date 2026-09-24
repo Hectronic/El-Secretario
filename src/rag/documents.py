@@ -13,6 +13,7 @@ def add_document(
     metadata: Optional[Dict[str, Any]],
     use_subprocess: bool,
     upsert_in_subprocess: Callable[..., bool],
+    embeddings=None,
 ) -> None:
     """Index a document, preserving the Windows-safe subprocess path."""
     if not text:
@@ -38,11 +39,14 @@ def add_document(
             )
         return
 
-    collection.upsert(
-        ids=[str(doc_id)],
-        documents=[text],
-        metadatas=[stored_metadata],
-    )
+    kwargs = {
+        "ids": [str(doc_id)],
+        "documents": [text],
+        "metadatas": [stored_metadata],
+    }
+    if embeddings is not None:
+        kwargs["embeddings"] = embeddings
+    collection.upsert(**kwargs)
 
 
 def delete_document(
@@ -53,6 +57,7 @@ def delete_document(
     safe_delete_mode: bool,
     use_subprocess: bool,
     upsert_in_subprocess: Callable[..., bool],
+    embeddings=None,
 ) -> None:
     """Delete a document, using soft deletion where native delete is unsafe."""
     sid = str(doc_id)
