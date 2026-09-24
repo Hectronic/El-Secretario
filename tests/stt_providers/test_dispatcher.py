@@ -26,6 +26,17 @@ def test_subprocess_transcribe_entry_routes_to_backend_handler():
     result_queue.put.assert_called_once_with({"ok": True, "segments": [{"text": "ok"}]})
 
 
+def test_subprocess_transcribe_entry_releases_inference_resources_on_terminal_exit():
+    result_queue = MagicMock()
+
+    with patch("src.stt_providers.dispatcher.BACKEND_HANDLERS", {"openai-whisper": lambda _payload: []}), patch(
+        "src.stt_providers.dispatcher.release_local_inference_resources"
+    ) as release_resources:
+        subprocess_transcribe_entry({"backend": "openai-whisper"}, result_queue)
+
+    release_resources.assert_called_once_with()
+
+
 def test_subprocess_transcribe_entry_reports_unsupported_backend():
     result_queue = MagicMock()
 

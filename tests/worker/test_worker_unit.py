@@ -220,6 +220,28 @@ class TestTranscriberThreadRunBranches(unittest.TestCase):
             "Si el problema continúa, consulta el registro de la aplicación.",
         )
 
+    @patch("src.worker_components.transcriber_thread.release_local_inference_resources")
+    @patch("src.worker_components.transcriber_thread.platform.system", return_value="Linux")
+    @patch("src.worker_components.transcriber_thread.QSettings")
+    @patch("src.worker_components.transcriber_thread.os.path.getsize", return_value=100)
+    @patch("src.worker_components.transcriber_thread._run_transcription_in_subprocess")
+    def test_run_terminal_path_releases_local_inference_resources(
+        self,
+        mock_run,
+        _mock_getsize,
+        MockQSettings,
+        _mock_system,
+        release_resources,
+    ):
+        mock_run.return_value = [{"start": 0.0, "end": 1.0, "text": "done"}]
+        MockQSettings.return_value = MagicMock()
+        thread = self._build_thread(model_size="base", device="cpu", compute_type="int8")
+
+        thread.run()
+
+        thread.finished.emit.assert_called_once()
+        release_resources.assert_called_once_with()
+
     @patch("src.worker_components.transcriber_thread.platform.system", return_value="Windows")
     @patch("src.worker_components.transcriber_thread.torch.cuda.empty_cache")
     @patch("src.worker_components.transcriber_thread.torch.cuda.synchronize", side_effect=RuntimeError("sync-fail"))

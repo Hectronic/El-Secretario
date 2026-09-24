@@ -5,6 +5,18 @@ import tempfile
 import sys
 
 class TestInstallScripts(unittest.TestCase):
+    def test_linux_shortcut_uses_the_installed_icon_asset(self):
+        """The user launcher must reference the PNG bundled under resources."""
+        if sys.platform == "win32":
+            self.skipTest("Linux desktop entry contract")
+
+        script_path = os.path.join(os.getcwd(), "scripts", "install", "install.sh")
+        with open(script_path, encoding="utf-8") as installer:
+            script = installer.read()
+
+        self.assertIn("Icon=$INSTALL_DIR/resources/logo.png", script)
+        self.assertNotIn("Icon=$INSTALL_DIR/logo.png", script)
+
     def test_install_script_fails_gracefully_without_git(self):
         """Simulate missing git to test actionable error output (SPEC-021)."""
         with tempfile.TemporaryDirectory() as tmpdir:

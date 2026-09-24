@@ -23,6 +23,7 @@ from PyQt6.QtCore import QThread, pyqtSignal, QObject
 
 from src.database import DBManager
 from src.rag_engine import RAGEngine
+from src.resource_cleanup import release_local_inference_resources
 
 logger = logging.getLogger("ElSecretario.LocalAPI")
 
@@ -383,7 +384,8 @@ class LocalAPIServerThread(QThread):
         self.wait(2000)  # Wait up to 2 seconds for the thread to stop, preventing hangs
 
     def cleanup(self):
-        """Cleans up the app.port discovery file on exit."""
+        """Release API-owned inference memory and the app.port discovery file."""
+        release_local_inference_resources()
         try:
             port_filepath = os.path.abspath("app.port")
             if os.path.exists(port_filepath):
