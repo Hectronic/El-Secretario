@@ -40,6 +40,7 @@ from src.ui.main_window.shell_actions import MainWindowShellCoordinator
 from src.ui.main_window.layout import build_main_window_layout
 from src.ui.main_window.window_lifecycle import MainWindowLifecycleCoordinator
 from src.ui.main_window.window_navigation import MainWindowNavigationCoordinator
+from src.ui.main_window.productivity import ProductivityCoordinator
 from src.ui.styles import apply_theme
 from src.ui.system_tray_manager import SystemTrayManager
 
@@ -131,6 +132,8 @@ class MainWindow(QMainWindow):
         self.init_ui()
         self._setup_drag_drop()
         bootstrap_main_window(self)
+        if isinstance(getattr(self.db, "db_name", None), str):
+            self.productivity = ProductivityCoordinator(self)
         logging.info("MainWindow initialized.")
 
     def _apply_rag_runtime_env(self, rag_config):
@@ -451,6 +454,12 @@ class MainWindow(QMainWindow):
 
     def open_calendar_tab(self):
         return self.content_tabs.open_calendar_tab()
+
+    def open_pomodoro_tab(self):
+        return self.productivity.open_pomodoro()
+
+    def open_timeline_tab(self):
+        return self.productivity.open_timeline()
 
     def on_tag_filter_changed(self, tag):
         self.window_navigation.on_tag_filter_changed(tag)

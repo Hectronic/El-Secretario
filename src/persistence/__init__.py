@@ -20,6 +20,7 @@ from .chats import ChatSessionsRepository
 from .logs import TranscriptionLogsRepository
 from .notebooks import NotebookRepository
 from .queue import QueueJobsRepository
+from .productivity import ProductivityRepository
 from .rag import RAGIndexRepository
 from .records import RecordsRepository
 from .schema import SchemaManager
@@ -37,4 +38,5 @@ __all__ = [
     "TasksRepository",
     "RAGIndexRepository",
     "QueueJobsRepository",
+    "ProductivityRepository",
 ]

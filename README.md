@@ -21,6 +21,7 @@ Read this in [Español](README_ES.md) | [Asturianu](README_AST.md)
 - **Active Chat Context Sidebar**: When a chat tab is active, the app's right sidebar shows a collapsible, auto-opened mirror of the chat context and hides it again when you switch tabs or close the chat.
 - **Notebooks & Collections**: Organize your recordings into notebooks and collections. Access them directly from the sidebar.
 - **Calendar View**: Browse your recordings by date.
+- **Pomodoro & Timeline**: Use the sidebar buttons to time focused work, pause or finish early, take titled text or audio notes, and review activity by date and tag. Focus defaults to 25 minutes; short and long breaks default to 5 and 15 minutes and can be changed in the Pomodoro tab. Audio-note transcription is opt-in and uses the configured transcription backend.
 - **Unified Tools**: Storage cleanup, batch processing, and data export/import in one convenient tab.
 - **Customizable Theme**: Support for Light, Dark, and System themes.
 
@@ -29,6 +30,8 @@ Read this in [Español](README_ES.md) | [Asturianu](README_AST.md)
 - Architecture notes: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
 - Architecture guide: [docs/ARCHITECTURE_GUIDE.md](docs/ARCHITECTURE_GUIDE.md)
 - Spec Kit feature registry: [specs/README.md](specs/README.md)
+
+Pomodoro completion remains available in-app if system tray notifications are unavailable. If the app closes during a focus interval, it offers an explicit complete, resume, or discard choice on the next launch. The timeline hides breaks until **Show breaks** is enabled.
 
 ## Installation
 

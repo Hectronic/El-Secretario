@@ -1,7 +1,8 @@
 # El Secretario Spec Kit Features
 
 Each feature directory follows the GitHub Spec Kit layout: `spec.md`, `plan.md`,
-and `tasks.md`. All baseline tasks are complete.
+and `tasks.md`. Historical baseline tasks are complete; proposed features retain
+their implementation checklist here until delivery.
 
 - `001-audio-capture-import`
 - `002-transcription-runtime`
@@ -22,6 +23,11 @@ and `tasks.md`. All baseline tasks are complete.
 - `017-stability-hardening` — completed and validated
 - `018-lightweight-runtime` — planned
 - `019-knowledge-workflows` — planned
+- `034-pomodoro-timeline` — implemented; SQLite/Qt integration and full-suite validated
+- `035-recurring-meetings` — proposed
+- `036-chat-ux-workflows` — proposed
+- `037-settings-experience` — proposed
+- `038-tray-quick-actions` — proposed
 
 ## Roadmap relationship
 
@@ -46,3 +52,12 @@ recording-specific contracts are implemented.
 - `019` owns indexing freshness, provenance, and resumable knowledge workflows.
 - Existing compatibility façades (`DBManager`, `RAGEngine`, legacy widgets) are
   preserved unless a future spec explicitly defines a migration.
+- `034` owns focused-work sessions and the user-visible activity timeline.
+- `035` owns recurring-meeting definitions, occurrence scheduling, and reminder
+  dispatch; it may create timeline events defined by `034`.
+- `036` owns chat interaction and presentation workflows; it consumes context and
+  provenance from `007`, `008`, and `019` without redefining their data policies.
+- `037` owns settings navigation, presentation, validation, and discoverability;
+  setting values and runtime semantics remain with their feature owners.
+- `038` owns tray menu actions and state presentation; capture, Pomodoro, and
+  meeting operations are delegated to their existing or proposed feature owners.
