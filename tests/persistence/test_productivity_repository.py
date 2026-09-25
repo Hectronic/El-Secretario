@@ -7,7 +7,8 @@ def test_pomodoro_completion_and_notes_are_idempotent_and_filterable(tmp_path):
     pomodoro_id = db.create_pomodoro("Write proposal", ["Work"], 1500, "2026-09-25T09:00:00+00:00")
     text_id = db.create_productivity_note("text", "Outline", ["Ideas"], body="Draft", pomodoro_id=pomodoro_id,
                                           captured_at="2026-09-25T09:05:00+00:00")
-    audio_id = db.create_productivity_note("audio", "Voice thought", [], audio_ref="/tmp/thought.wav",
+    audio_id = db.create_productivity_note("audio", "Voice thought", [],
+                                           audio_ref=str(tmp_path / "thought.wav"),
                                            duration_seconds=12, pomodoro_id=pomodoro_id,
                                            captured_at="2026-09-25T09:06:00+00:00")
     db.complete_pomodoro(pomodoro_id, "2026-09-25T09:25:00+00:00", 1500, "completed")
@@ -60,7 +61,8 @@ def test_note_validation_rejects_empty_body_and_invalid_audio_duration(tmp_path)
     with pytest.raises(ValueError, match="body"):
         db.create_productivity_note("text", "Empty", [], body="  ")
     with pytest.raises(ValueError, match="audio"):
-        db.create_productivity_note("audio", "Silent", [], audio_ref="/tmp/silent.wav", duration_seconds=0)
+        db.create_productivity_note("audio", "Silent", [],
+                                    audio_ref=str(tmp_path / "silent.wav"), duration_seconds=0)
     assert db.fetch_timeline() == []
 
 
