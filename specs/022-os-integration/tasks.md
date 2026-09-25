@@ -1,7 +1,7 @@
 # Tasks: OS Integration and Applications Menu
 
 Status: Implemented
-Last updated: 2026-09-15
+Last updated: 2026-09-24
 
 Checked items identify existing code/documentation, not unperformed platform validation.
 
@@ -11,6 +11,7 @@ Checked items identify existing code/documentation, not unperformed platform val
 - [x] T004 Add generated-launcher/startup integration coverage with unusual paths.
 - [x] T005 Verify menu, icon and background launch on Windows, Ubuntu and macOS.
 - [x] T006 Synchronize shortcut documentation and run focused/full tests.
+- [x] T007 Correct the Linux repair launcher to reference `resources/logo.png`, preventing GNOME from falling back to a generic dock icon.
 
 ## Definition of Done
 

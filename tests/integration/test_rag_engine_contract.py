@@ -53,3 +53,19 @@ def test_windows_engine_switches_once_to_keyword_fallback(monkeypatch):
     assert engine.search("project") == [{"id": "fallback"}]
     assert engine.search("project") == [{"id": "fallback"}]
     assert calls == ["semantic", "keyword", "keyword"]
+
+
+def test_rag_operations_release_inference_resources_after_each_terminal_operation(monkeypatch):
+    engine = RAGEngine(
+        persist_directory="ignored-by-fallback",
+        runtime_policy=RAGRuntimePolicy.resolve("Linux", {}),
+        store_factory=_fallback_store,
+    )
+    releases = []
+    monkeypatch.setattr("src.rag.engine.release_local_inference_resources", lambda: releases.append(True))
+
+    engine.add_document("recording", "project planning", {"kind": "recording"})
+    assert engine.search("project")
+    engine.delete_document("recording")
+
+    assert releases == [True, True]

@@ -26,6 +26,8 @@ except ImportError:  # pragma: no cover - Windows has no resource module.
 
 
 SCENARIOS = ("startup", "capture", "stt", "queue", "rag", "shutdown")
+IDLE_MEMORY_BUDGET_MB = 150.0
+IDLE_CLEANUP_DEADLINE_SECONDS = 5.0
 
 
 @dataclass
@@ -49,6 +51,55 @@ def peak_rss_mb():
         return None
     rss = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
     return round(rss / (1024 * 1024 if platform.system() == "Darwin" else 1024), 3)
+
+
+def current_rss_mb():
+    """Return current RSS where the host exposes it, rather than peak RSS."""
+    statm = Path("/proc/self/statm")
+    if statm.exists():
+        try:
+            resident_pages = int(statm.read_text(encoding="utf-8").split()[1])
+            return round(resident_pages * os.sysconf("SC_PAGE_SIZE") / (1024 * 1024), 3)
+        except (IndexError, OSError, ValueError):
+            pass
+    return None
+
+
+def measure_idle_resource_cleanup(
+    *,
+    release_resources=None,
+    rss_reader=current_rss_mb,
+    monotonic_clock=time.monotonic,
+    idle_budget_mb=IDLE_MEMORY_BUDGET_MB,
+    deadline_seconds=IDLE_CLEANUP_DEADLINE_SECONDS,
+):
+    """Measure whether an inference cleanup returns to the configured idle budget.
+
+    RSS is intentionally reported, not treated as a portable VRAM proxy.  GPU
+    allocator release is verified by unit tests; this benchmark records the
+    real host outcome so a machine-specific baseline can enforce the budget.
+    """
+    if release_resources is None:
+        from src.resource_cleanup import release_local_inference_resources
+
+        release_resources = release_local_inference_resources
+
+    before = rss_reader()
+    started = monotonic_clock()
+    release_resources()
+    after = rss_reader()
+    elapsed = monotonic_clock() - started
+    return {
+        "scenario": "resource_cleanup",
+        "before_rss_mb": before,
+        "idle_rss_mb": after,
+        "idle_memory_budget_mb": idle_budget_mb,
+        "deadline_seconds": deadline_seconds,
+        "elapsed_seconds": round(elapsed, 4),
+        "completed_within_deadline": elapsed <= deadline_seconds,
+        "within_idle_memory_budget": after is None or after <= idle_budget_mb,
+        "notes": "RSS excludes GPU VRAM; CUDA empty_cache and ipc_collect are verified separately.",
+    }
 
 
 def _p95(samples):
@@ -229,7 +280,7 @@ def main(argv=None):
     result = {
         "schema": "runtime-performance-baseline/v1",
         "results": run_baseline(repetitions=args.repetitions, startup_workload=startup_workload),
-        "comparisons": [capture_ui_comparison()],
+        "comparisons": [capture_ui_comparison(), measure_idle_resource_cleanup()],
     }
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(result, indent=2, sort_keys=True) + "\n", encoding="utf-8")

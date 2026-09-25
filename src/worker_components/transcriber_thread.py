@@ -12,7 +12,6 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-import gc
 import logging
 import os
 import platform
@@ -23,6 +22,7 @@ import torch
 from PyQt6.QtCore import QSettings, QThread, pyqtSignal
 
 from src.audio import trim_audio_segment
+from src.resource_cleanup import release_local_inference_resources
 from src.transcription_options import get_whisper_model_name, is_sherpa_onnx_model
 from src.worker_components import device_selection as worker_device_selection
 from src.worker_components import engine as worker_engine
@@ -454,6 +454,4 @@ class TranscriberThread(QThread):
             if "diarization" in locals():
                 del diarization
 
-            gc.collect()
-            if torch.cuda.is_available():
-                torch.cuda.empty_cache()
+            release_local_inference_resources()

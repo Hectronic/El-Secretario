@@ -18,6 +18,16 @@ import logging
 import urllib.request
 import urllib.error
 
+# This module is also launched directly by MCP clients (``python
+# src/api/mcp_server.py``), where Python otherwise only adds ``src/api`` to
+# sys.path and cannot resolve the application package.
+if __package__ in (None, ""):
+    project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    if project_root not in sys.path:
+        sys.path.insert(0, project_root)
+
+from src.resource_cleanup import release_local_inference_resources
+
 # Ensure PyQt settings are checkable on startup
 try:
     from PyQt6.QtCore import QSettings
@@ -120,6 +130,8 @@ def make_api_request(path: str, method: str = "GET", payload: dict = None) -> di
             raise RuntimeError(f"API Error ({e.code}): {e.reason}")
     except Exception as e:
         raise RuntimeError(f"Failed to connect to local API: {e}")
+    finally:
+        release_local_inference_resources()
 
 
 # =====================================================================

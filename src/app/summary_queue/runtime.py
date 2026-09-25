@@ -12,9 +12,10 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-import gc
 import logging
 from typing import Any, Dict, Iterable, Tuple
+
+from src.resource_cleanup import release_local_inference_resources
 
 
 def stop_worker(worker: Any, *, timeout_ms: int = 15000, force_timeout_ms: int = 5000, log_context: str = "") -> None:
@@ -77,14 +78,4 @@ def build_retry_wait_state(
 
 
 def cleanup_between_jobs() -> None:
-    try:
-        gc.collect()
-        try:
-            import torch
-
-            if torch.cuda.is_available():
-                torch.cuda.empty_cache()
-        except Exception:
-            pass
-    except Exception:
-        pass
+    release_local_inference_resources()

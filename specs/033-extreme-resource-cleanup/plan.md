@@ -1,7 +1,7 @@
 # Implementation Plan: Extreme Resource Cleanup
 
-Status: Draft
-Last updated: 2026-09-17
+Status: Implemented
+Last updated: 2026-09-24
 Spec: [spec.md](spec.md)
 
 ## Phases
@@ -20,3 +20,9 @@ Spec: [spec.md](spec.md)
 
 ### Phase 3: Benchmark and Verification
 - Update the benchmark suite (`benchmarks/runtime_baseline.py`) to measure idle memory usage after execution, asserting it falls below 150 MB within 5 seconds of idle.
+
+## Delivered
+
+- `src/resource_cleanup.py` owns best-effort GC, CUDA allocator eviction, and CUDA IPC collection without altering backend/device policy.
+- STT subprocesses, the transcriber terminal path, summary queue, RAG operations/subprocesses, local API shutdown, and MCP request completion call the routine.
+- Benchmarks report the host RSS result against the 150 MB / 5 second target; it is not a portable VRAM measurement.

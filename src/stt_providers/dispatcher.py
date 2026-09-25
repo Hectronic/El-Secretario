@@ -14,9 +14,8 @@
 
 from __future__ import annotations
 
-import gc
-
 from src.stt_providers import faster_whisper, openai_whisper, sherpa_onnx
+from src.resource_cleanup import release_local_inference_resources
 
 
 BACKEND_HANDLERS = {
@@ -43,4 +42,4 @@ def subprocess_transcribe_entry(payload: dict, result_queue):
     except Exception as e:
         result_queue.put({"ok": False, "error": str(e)})
     finally:
-        gc.collect()
+        release_local_inference_resources()

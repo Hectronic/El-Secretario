@@ -24,6 +24,7 @@ from src.rag.chroma_compat import (
     suppress_sentencepiece_swig_deprecation_warnings,
 )
 from src.rag.results import keyword_rank_raw_results
+from src.resource_cleanup import release_local_inference_resources
 
 
 def rag_upsert_subprocess_entry(payload: Dict[str, Any], result_path: str):
@@ -39,6 +40,7 @@ def rag_upsert_subprocess_entry(payload: Dict[str, Any], result_path: str):
     except Exception as e:
         result = {"ok": False, "error": str(e)}
     finally:
+        release_local_inference_resources()
         try:
             with open(result_path, "w", encoding="utf-8") as f:
                 json.dump(result, f)
@@ -154,6 +156,7 @@ def rag_query_subprocess_entry(payload: Dict[str, Any], result_path: str):
     except Exception as e:
         result = {"ok": False, "error": str(e)}
     finally:
+        release_local_inference_resources()
         try:
             with open(result_path, "w", encoding="utf-8") as f:
                 json.dump(result, f)
@@ -201,6 +204,7 @@ def rag_keyword_search_subprocess_entry(payload: Dict[str, Any], result_path: st
     except Exception as e:
         result = {"ok": False, "error": str(e)}
     finally:
+        release_local_inference_resources()
         try:
             with open(result_path, "w", encoding="utf-8") as f:
                 json.dump(result, f)

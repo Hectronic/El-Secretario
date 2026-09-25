@@ -7,6 +7,7 @@ from benchmarks.runtime_baseline import (
     _safe_startup_workload,
     capture_ui_comparison,
     main,
+    measure_idle_resource_cleanup,
     run_baseline,
 )
 from src.audio import Recorder
@@ -52,7 +53,9 @@ def test_runtime_baseline_cli_writes_machine_readable_results(tmp_path):
     payload = json.loads(output.read_text(encoding="utf-8"))
     assert payload["schema"] == "runtime-performance-baseline/v1"
     assert len(payload["results"]) == 6
-    assert payload["comparisons"] == [capture_ui_comparison()]
+    assert payload["comparisons"][0] == capture_ui_comparison()
+    assert payload["comparisons"][1]["scenario"] == "resource_cleanup"
+    assert payload["comparisons"][1]["completed_within_deadline"] is True
 
 
 def test_capture_comparison_records_the_measured_ui_event_reduction():
@@ -61,3 +64,19 @@ def test_capture_comparison_records_the_measured_ui_event_reduction():
     assert comparison["before"]["values"] == [30000, 180000]
     assert comparison["after"]["values"] == [6000, 36000]
     assert comparison["improvement_percent"] == 80.0
+
+
+def test_idle_resource_cleanup_benchmark_records_budget_and_deadline():
+    clock = iter([10.0, 10.25])
+    releases = []
+
+    result = measure_idle_resource_cleanup(
+        release_resources=lambda: releases.append(True),
+        rss_reader=lambda: 120.0,
+        monotonic_clock=lambda: next(clock),
+    )
+
+    assert releases == [True]
+    assert result["idle_rss_mb"] == 120.0
+    assert result["within_idle_memory_budget"] is True
+    assert result["completed_within_deadline"] is True
