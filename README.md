@@ -22,6 +22,7 @@ Read this in [Español](README_ES.md) | [Asturianu](README_AST.md)
 - **Notebooks & Collections**: Organize your recordings into notebooks and collections. Access them directly from the sidebar.
 - **Calendar View**: Browse your recordings by date.
 - **Pomodoro & Timeline**: Use the sidebar buttons to time focused work, pause or finish early, take titled text or audio notes, and review activity by date and tag. Focus defaults to 25 minutes; short and long breaks default to 5 and 15 minutes and can be changed in the Pomodoro tab. Audio-note transcription is opt-in and uses the configured transcription backend.
+- **Recurring Meetings**: Save local-only daily, weekly, or monthly meeting templates with time-zone-aware reminders, title/tags, duration, and a date view. Reminders can start a prepared recording, snooze, dismiss, or open details; recording starts only after you choose Start. No external calendar sync or background-daemon reminders are provided while the app is closed.
 - **Unified Tools**: Storage cleanup, batch processing, and data export/import in one convenient tab.
 - **Customizable Theme**: Support for Light, Dark, and System themes.
 

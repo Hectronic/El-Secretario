@@ -18,4 +18,5 @@ onnxruntime>=1.17.0
 sentence-transformers
 markdown
 sherpa-onnx
+tzdata
 mcp<2

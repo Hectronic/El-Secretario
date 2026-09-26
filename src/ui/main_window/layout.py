@@ -69,6 +69,9 @@ def build_main_window_layout(window):
         window.open_timeline_btn = QPushButton("Timeline")
         window.open_timeline_btn.clicked.connect(window.open_timeline_tab)
         productivity_row.addWidget(window.open_timeline_btn)
+        window.open_meetings_btn = QPushButton("Meetings")
+        window.open_meetings_btn.clicked.connect(window.open_meetings_tab)
+        productivity_row.addWidget(window.open_meetings_btn)
         left_layout.addLayout(productivity_row)
 
         # Calendar Navigation
@@ -454,4 +457,3 @@ def build_main_window_layout(window):
         window.splitter.setCollapsible(2, False)
 
         window.runtime_startup.initialize_rag_from_settings()
-

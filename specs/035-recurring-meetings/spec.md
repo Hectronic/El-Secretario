@@ -1,6 +1,6 @@
 # SPEC-035: Recurring Meetings, Prepared Metadata, And Reminders
 
-Status: Proposed
+Status: Implemented
 Owner: Calendar and recording workflows
 Last updated: 2026-09-25
 
@@ -51,7 +51,8 @@ find later.
   a short month) skip that month rather than silently moving to a different day.
 - **FR-003**: Recurrence calculation is time-zone aware. For ambiguous or missing
   local times at daylight-saving transitions, the UI shows the resolved next
-  occurrence and uses a documented deterministic policy: first valid local time
+  occurrence and uses a documented deterministic policy: the earlier offset
+  (`fold=0`)
   for an ambiguous instant, and the first valid instant after a missing one.
 - **FR-004**: The scheduler materializes stable occurrences for a rolling future
   window and deduplicates by template ID plus scheduled local occurrence. Editing

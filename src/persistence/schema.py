@@ -207,6 +207,74 @@ class SchemaManager(RepositoryBase):
                     )
                 ''')
                 cursor.execute('''
+                    CREATE TABLE IF NOT EXISTS recurring_meetings (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        title TEXT NOT NULL,
+                        tags TEXT NOT NULL DEFAULT '[]',
+                        timezone TEXT NOT NULL,
+                        local_start_time TEXT NOT NULL,
+                        expected_duration_seconds INTEGER NOT NULL CHECK(expected_duration_seconds > 0),
+                        reminder_lead_seconds INTEGER NOT NULL DEFAULT 600 CHECK(reminder_lead_seconds >= 0),
+                        recurrence_kind TEXT NOT NULL CHECK(recurrence_kind IN ('daily','weekly','monthly')),
+                        recurrence_payload TEXT NOT NULL,
+                        starts_on TEXT NOT NULL,
+                        ends_on TEXT,
+                        occurrence_limit INTEGER,
+                        enabled INTEGER NOT NULL DEFAULT 1,
+                        archived INTEGER NOT NULL DEFAULT 0,
+                        last_materialized_at TEXT,
+                        created_at TEXT NOT NULL,
+                        updated_at TEXT NOT NULL
+                    )
+                ''')
+                cursor.execute('''
+                    CREATE TABLE IF NOT EXISTS meeting_occurrences (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        recurring_meeting_id INTEGER NOT NULL REFERENCES recurring_meetings(id),
+                        title_snapshot TEXT NOT NULL,
+                        tags_snapshot TEXT NOT NULL DEFAULT '[]',
+                        timezone_snapshot TEXT NOT NULL,
+                        expected_duration_snapshot INTEGER NOT NULL,
+                        scheduled_at_utc TEXT NOT NULL,
+                        scheduled_local TEXT NOT NULL,
+                        state TEXT NOT NULL CHECK(state IN ('scheduled','notified','snoozed','dismissed','missed','started','completed','cancelled')),
+                        reminder_at_utc TEXT NOT NULL,
+                        snoozed_until_utc TEXT,
+                        notification_revision INTEGER NOT NULL DEFAULT 0,
+                        recording_id INTEGER,
+                        cancellation_reason TEXT,
+                        catch_up_offered INTEGER NOT NULL DEFAULT 0,
+                        created_at TEXT NOT NULL,
+                        updated_at TEXT NOT NULL,
+                        UNIQUE(recurring_meeting_id, scheduled_at_utc),
+                        UNIQUE(recurring_meeting_id, scheduled_local)
+                    )
+                ''')
+                cursor.execute("PRAGMA table_info(recurring_meetings)")
+                meeting_columns = {column[1] for column in cursor.fetchall()}
+                if "last_materialized_at" not in meeting_columns:
+                    cursor.execute("ALTER TABLE recurring_meetings ADD COLUMN last_materialized_at TEXT")
+                cursor.execute("PRAGMA table_info(meeting_occurrences)")
+                occurrence_columns = {column[1] for column in cursor.fetchall()}
+                if "cancellation_reason" not in occurrence_columns:
+                    cursor.execute("ALTER TABLE meeting_occurrences ADD COLUMN cancellation_reason TEXT")
+                for column_name, declaration in (
+                    ("title_snapshot", "TEXT NOT NULL DEFAULT ''"),
+                    ("tags_snapshot", "TEXT NOT NULL DEFAULT '[]'"),
+                    ("timezone_snapshot", "TEXT NOT NULL DEFAULT 'UTC'"),
+                    ("expected_duration_snapshot", "INTEGER NOT NULL DEFAULT 3600"),
+                ):
+                    if column_name not in occurrence_columns:
+                        cursor.execute(f"ALTER TABLE meeting_occurrences ADD COLUMN {column_name} {declaration}")
+                if "title_snapshot" not in occurrence_columns:
+                    cursor.execute("""UPDATE meeting_occurrences SET
+                        title_snapshot=(SELECT title FROM recurring_meetings WHERE id=recurring_meeting_id),
+                        tags_snapshot=(SELECT tags FROM recurring_meetings WHERE id=recurring_meeting_id),
+                        timezone_snapshot=(SELECT timezone FROM recurring_meetings WHERE id=recurring_meeting_id),
+                        expected_duration_snapshot=(SELECT expected_duration_seconds FROM recurring_meetings WHERE id=recurring_meeting_id)""")
+                cursor.execute('CREATE INDEX IF NOT EXISTS idx_meeting_occurrences_due ON meeting_occurrences(state, reminder_at_utc, scheduled_at_utc)')
+                cursor.execute('CREATE INDEX IF NOT EXISTS idx_meeting_occurrences_template ON meeting_occurrences(recurring_meeting_id, scheduled_at_utc)')
+                cursor.execute('''
                     CREATE UNIQUE INDEX IF NOT EXISTS idx_breaks_one_active
                     ON pomodoro_breaks ((1)) WHERE state IN ('running', 'paused')
                 ''')
@@ -235,6 +303,8 @@ class SchemaManager(RepositoryBase):
                     cursor.execute('ALTER TABLE records ADD COLUMN last_error TEXT')
                 if 'type' not in columns:
                     cursor.execute("ALTER TABLE records ADD COLUMN type TEXT DEFAULT 'recording'")
+                if 'meeting_occurrence_id' not in columns:
+                    cursor.execute('ALTER TABLE records ADD COLUMN meeting_occurrence_id INTEGER')
 
                 # Migration for chat_sessions
                 cursor.execute("PRAGMA table_info(chat_sessions)")

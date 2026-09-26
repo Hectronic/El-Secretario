@@ -18,6 +18,7 @@
 from .base import PersistenceBase
 from .chats import ChatSessionsRepository
 from .logs import TranscriptionLogsRepository
+from .meetings import RecurringMeetingsRepository
 from .notebooks import NotebookRepository
 from .queue import QueueJobsRepository
 from .productivity import ProductivityRepository
@@ -33,6 +34,7 @@ __all__ = [
     "RecordsRepository",
     "ChatSessionsRepository",
     "TranscriptionLogsRepository",
+    "RecurringMeetingsRepository",
     "NotebookRepository",
     "SummariesRepository",
     "TasksRepository",

@@ -11,6 +11,10 @@ from PyQt6.QtWidgets import QDialog, QHBoxLayout, QLabel, QMessageBox, QPushButt
 
 from src.app.pomodoro.service import PomodoroService
 from src.app.pomodoro.breaks import BreakService
+from src.app.scheduling.scheduler import MeetingScheduler
+from src.ui.meetings.reminder_dialog import MeetingReminderDialog
+from src.ui.meetings.scheduler_runtime import MeetingSchedulerRuntime
+from src.ui.meetings.widget import RecurringMeetingsWidget
 from src.ui.pomodoro.widget import PomodoroWidget
 from src.ui.timeline.widget import TimelineWidget
 from src.ui.recording_in_progress_widget import RecordingInProgressWidget
@@ -22,9 +26,20 @@ class ProductivityCoordinator:
         self.settings = QSettings("Hectronic", "Secretario")
         self.service = PomodoroService(window.db, notify=self._notify)
         self.break_service = BreakService(window.db)
+        self.meeting_scheduler = MeetingScheduler(window.db.meetings)
+        self._meeting_reminder_dialogs = {}
         self.timer = QTimer(window)
         self.timer.timeout.connect(self._tick)
         self.timer.start(250)
+        self.meeting_runtime = MeetingSchedulerRuntime(self.meeting_scheduler, window)
+        self.meeting_runtime.reminder_due.connect(self._show_meeting_reminder)
+        self.meeting_runtime.catch_up_available.connect(
+            lambda item: self._show_meeting_reminder(item, missed_count=item.get("missed_count", 1))
+        )
+        self.meeting_runtime.scheduler_error.connect(
+            lambda message: logging.error("Recurring meeting scheduler tick failed: %s", message)
+        )
+        self.meeting_runtime.start()
         if self.service.recovery_required:
             QTimer.singleShot(0, self._offer_recovery)
         if self.break_service.recovery_required:
@@ -72,6 +87,103 @@ class ProductivityCoordinator:
                 widget.refresh()
             elif isinstance(widget, PomodoroWidget):
                 widget.refresh()
+            elif isinstance(widget, RecurringMeetingsWidget):
+                widget.refresh()
+
+    def _tick_meetings(self):
+        self.meeting_runtime.poll()
+
+    def _show_meeting_reminder(self, occurrence, *, missed_count=0):
+        occurrence_id = int(occurrence["id"])
+        existing = self._meeting_reminder_dialogs.get(occurrence_id)
+        if existing is not None:
+            existing.raise_()
+            existing.activateWindow()
+            return
+        dialog = MeetingReminderDialog(occurrence, missed_count=missed_count, parent=self.window)
+        dialog.start_requested.connect(self.start_meeting_occurrence)
+        dialog.snooze_requested.connect(self._snooze_meeting_occurrence)
+        dialog.dismiss_requested.connect(self._dismiss_meeting_occurrence)
+        dialog.details_requested.connect(self.open_meeting_details)
+        dialog.finished.connect(lambda _result, oid=occurrence_id: self._meeting_reminder_dialogs.pop(oid, None))
+        self._meeting_reminder_dialogs[occurrence_id] = dialog
+        dialog.show()
+        dialog.raise_()
+        dialog.activateWindow()
+        if missed_count:
+            self.window.handle_status_message(f"{missed_count} recurring meeting(s) were missed.")
+        else:
+            self.window.handle_status_message(f"Meeting reminder: {occurrence['title']}")
+            manager = getattr(self.window, "system_tray_manager", None)
+            if manager:
+                manager.show_message("Meeting reminder", occurrence["title"])
+
+    def open_meetings(self):
+        for index in range(self.window.central_tabs.count()):
+            widget = self.window.central_tabs.widget(index)
+            if isinstance(widget, RecurringMeetingsWidget):
+                self.window.central_tabs.setCurrentIndex(index)
+                widget.refresh()
+                return widget
+        widget = RecurringMeetingsWidget(self.window.db.meetings, self.meeting_scheduler, parent=self.window)
+        widget.start_requested.connect(self.start_meeting_occurrence)
+        widget.details_requested.connect(self.open_meeting_details)
+        index = self.window.central_tabs.addTab(widget, "Recurring Meetings")
+        self.window.central_tabs.setCurrentIndex(index)
+        return widget
+
+    def open_meeting_details(self, occurrence_id):
+        occurrence = self.window.db.meetings.get_occurrence(int(occurrence_id))
+        if not occurrence:
+            return
+        widget = self.open_meetings()
+        widget.select_occurrence(int(occurrence_id))
+
+    def start_meeting_occurrence(self, occurrence_id):
+        occurrence = self.window.db.meetings.get_occurrence(int(occurrence_id))
+        if not occurrence:
+            return
+        if occurrence["recording_id"]:
+            self.window.open_recording_tab(int(occurrence["recording_id"]))
+            self._close_meeting_reminder(int(occurrence_id))
+            return
+        from src.ui.recording_in_progress_widget import RecordingInProgressWidget
+        for index in range(self.window.central_tabs.count()):
+            active = self.window.central_tabs.widget(index)
+            if isinstance(active, RecordingInProgressWidget):
+                if active.config.get("meeting_occurrence_id") == int(occurrence_id):
+                    self.window.central_tabs.setCurrentIndex(index)
+                    return
+                self.window.handle_status_message("Finish the active recording before starting this meeting.")
+                return
+        started = self.meeting_scheduler.start(int(occurrence_id))
+        config = {
+            "device_index": getattr(self.window.recorder, "device_index", None),
+            "capture_system_audio": bool(getattr(self.window.recorder, "capture_machine_audio", False)),
+            "title": started["title"],
+            "tags": ", ".join(started.get("tags", [])),
+            "meeting_occurrence_id": int(occurrence_id),
+            "model": self.settings.value("rec_config/model", "base"),
+            "diarization": self.settings.value("rec_config/diarization", False, type=bool),
+            "language": self.settings.value("rec_config/language", None),
+        }
+        self.window.recording_tabs.start_new_recording(config)
+        self._close_meeting_reminder(int(occurrence_id))
+
+    def _snooze_meeting_occurrence(self, occurrence_id, minutes):
+        self.meeting_scheduler.snooze(int(occurrence_id), int(minutes))
+        self._close_meeting_reminder(int(occurrence_id))
+        self.refresh_views()
+
+    def _dismiss_meeting_occurrence(self, occurrence_id):
+        self.meeting_scheduler.dismiss(int(occurrence_id))
+        self._close_meeting_reminder(int(occurrence_id))
+        self.refresh_views()
+
+    def _close_meeting_reminder(self, occurrence_id):
+        dialog = self._meeting_reminder_dialogs.pop(int(occurrence_id), None)
+        if dialog is not None:
+            dialog.close()
 
     def open_pomodoro(self):
         for index in range(self.window.central_tabs.count()):
@@ -102,6 +214,9 @@ class ProductivityCoordinator:
         return widget
 
     def open_source(self, event_type, source_id):
+        if event_type == "meeting_occurrence":
+            self.open_meeting_details(int(source_id))
+            return
         if event_type == "break":
             rest = self.window.db.fetch_break(source_id)
             if rest:
@@ -187,6 +302,10 @@ class ProductivityCoordinator:
 
     def cleanup(self):
         self.timer.stop()
+        self.meeting_runtime.stop()
+        for dialog in list(self._meeting_reminder_dialogs.values()):
+            dialog.close()
+        self._meeting_reminder_dialogs.clear()
         self.service.checkpoint()
         self.break_service.checkpoint()
 

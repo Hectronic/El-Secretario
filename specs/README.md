@@ -24,7 +24,7 @@ their implementation checklist here until delivery.
 - `018-lightweight-runtime` — planned
 - `019-knowledge-workflows` — planned
 - `034-pomodoro-timeline` — implemented; SQLite/Qt integration and full-suite validated
-- `035-recurring-meetings` — proposed
+- `035-recurring-meetings` — implemented
 - `036-chat-ux-workflows` — proposed
 - `037-settings-experience` — proposed
 - `038-tray-quick-actions` — proposed

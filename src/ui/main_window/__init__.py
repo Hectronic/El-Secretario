@@ -461,6 +461,9 @@ class MainWindow(QMainWindow):
     def open_timeline_tab(self):
         return self.productivity.open_timeline()
 
+    def open_meetings_tab(self):
+        return self.productivity.open_meetings()
+
     def on_tag_filter_changed(self, tag):
         self.window_navigation.on_tag_filter_changed(tag)
 

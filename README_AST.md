@@ -20,6 +20,7 @@ El Secretario ye una ferramienta intelixente de trescripción y organización d'
 - **Cuadernos y Coleiciones**: Organiza les tos grabaciones en cuadernos y coleiciones. Accede a elles direutamente dende la barra llateral.
 - **Vista de Calendariu**: Esplora les tos grabaciones per fecha.
 - **Pomodoro y llinia temporal**: Usa los botones llaterales pa midir sesiones de concentración, pausales o terminales primero d'hora, tomar notes de testu o audio con títulu y revisar l'actividá por fecha y etiquetes. La sesión dura 25 minutos por defeutu; les pauses curtia y llarga duren 5 y 15 minutos y pueden axustase na pestaña Pomodoro. La trescripción de notes d'audio ye opcional y usa'l backend configuráu.
+- **Reuniones recurrentes**: Guarda plantilles locales diaries, selmanales o mensuales con zona horaria, avisos, títulu/etiquetes, duración y vista per fecha. Cada avisu permite entamar una grabación preparada, aplazar, descartar o abrir detalles; l'audiu namás empieza al escoyer entamar. Nun hai sincronización con calendarios esternos nin avisos en segundu planu cuando l'aplicación ta zarrada.
 - **Ferramientes Unificaes**: Llimpieza d'almacenamientu, procesamientu per llotes y esportación/importación de datos nuna sola pestaña.
 - **Tema Personalizable**: Sofitu pa temes Claru, Escuru y del Sistema.
 

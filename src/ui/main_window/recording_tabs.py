@@ -23,6 +23,7 @@ from src.audio import AudioCompressionService
 from src.ui.audio_editor.widget import AudioEditorWidget
 from src.ui.recording_in_progress_widget import RecordingInProgressWidget
 from src.ui.recording_widget import RecordingWidget
+from src.persistence.meetings import utc_now
 
 
 class RecordingTabCoordinator:
@@ -170,11 +171,23 @@ class RecordingTabCoordinator:
                 path, finished_config, widget
             )
         )
-        rec_widget.cancelled.connect(
-            lambda widget=rec_widget: window.close_tab(window.central_tabs.indexOf(widget))
-        )
+        def _on_cancel(widget=rec_widget):
+            occurrence_id = widget.config.get("meeting_occurrence_id")
+            meetings = getattr(window, "productivity", None)
+            if occurrence_id and meetings:
+                try:
+                    occurrence = window.db.meetings.get_occurrence(int(occurrence_id))
+                    if occurrence and occurrence["state"] == "started":
+                        meetings.meeting_scheduler.cancel_started(int(occurrence_id))
+                except Exception:
+                    logging.exception("Failed cancelling linked meeting occurrence")
+            window.close_tab(window.central_tabs.indexOf(widget))
+
+        rec_widget.cancelled.connect(_on_cancel)
         index = window.central_tabs.addTab(rec_widget, "Recording...")
         window.central_tabs.setCurrentIndex(index)
+        if not rec_widget.recording_started and config.get("meeting_occurrence_id"):
+            window.db.meetings.transition(int(config["meeting_occurrence_id"]), "cancelled", now=utc_now())
 
     def handle_recording_widget_saved(self, rec_widget):
         record_id = getattr(rec_widget, "current_record_id", None)
@@ -219,9 +232,16 @@ class RecordingTabCoordinator:
                 len(recording_notes),
                 len(pending_tasks),
             )
-            record_id = window.db.save(
-                filename, "", 0.0, title=title, recording_notes=recording_notes
-            )
+            meeting_occurrence_id = config.get("meeting_occurrence_id")
+            if meeting_occurrence_id is not None:
+                record_id = window.db.save(
+                    filename, "", 0.0, title=title, recording_notes=recording_notes,
+                    meeting_occurrence_id=int(meeting_occurrence_id), meeting_tags=config.get("tags", ""),
+                )
+            else:
+                record_id = window.db.save(
+                    filename, "", 0.0, title=title, recording_notes=recording_notes
+                )
             tags = config.get("tags", "")
             if tags:
                 window.db.update_tags(record_id, tags)

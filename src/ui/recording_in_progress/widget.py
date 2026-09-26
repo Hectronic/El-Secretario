@@ -56,6 +56,10 @@ class RecordingInProgressWidget(QWidget):
         self.guardian.status_changed.connect(self._set_guardian_status)
         self.guardian.stop_requested.connect(self.finish_recording)
         self.init_ui()
+        if self.config.get("title"):
+            self.title_input.setText(str(self.config["title"]))
+        if self.config.get("tags"):
+            self.tags_input.setText(", ".join(self.config["tags"]) if isinstance(self.config["tags"], (list, tuple)) else str(self.config["tags"]))
         self.start_recording()
 
     @staticmethod
