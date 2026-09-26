@@ -184,3 +184,41 @@ def diarization_batch_sizes(*, use_gpu: bool, free_vram_gb: float | None = None)
     if free_vram_gb >= 2.5:
         return (2, 2)
     return (1, 1)
+
+
+def configure_long_audio_diarization_stride(
+    pipeline,
+    *,
+    duration_seconds: float,
+    threshold_seconds: float = 1800.0,
+    step_ratio: float = 0.25,
+) -> float | None:
+    """Reduce pyannote's redundant sliding-window overlap on long recordings.
+
+    pyannote.audio 3.1.1 defaults to a 0.1 window-step ratio (90% overlap).
+    Long recordings use 0.25 (75% overlap), which cuts the number of windows
+    by about 2.5x while retaining substantial context around speaker changes.
+    Short clips keep the model default.
+    """
+    if float(duration_seconds or 0.0) < float(threshold_seconds):
+        return None
+    if not 0.0 < float(step_ratio) <= 1.0:
+        raise ValueError("step_ratio must be in the interval (0, 1]")
+
+    inference = getattr(pipeline, "_segmentation", None)
+    window_seconds = getattr(inference, "duration", None)
+    if inference is None or not hasattr(inference, "step"):
+        return None
+    try:
+        window_seconds = float(window_seconds)
+    except (TypeError, ValueError):
+        return None
+    if window_seconds <= 0:
+        return None
+
+    inference.step = window_seconds * float(step_ratio)
+    try:
+        pipeline.segmentation_step = float(step_ratio)
+    except Exception:
+        pass
+    return inference.step

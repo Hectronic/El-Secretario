@@ -229,7 +229,14 @@ class TestTranscriberThreadRunBranches(unittest.TestCase):
             pipeline.to.return_value = pipeline
 
             def run_pipeline(_audio_path, *, hook):
-                hook("segmentation", None, completed=5, total=10)
+                hook("segmentation", None, completed=10, total=10)
+                hook("segmentation", object())
+                hook("speaker_counting", object())
+                hook("embeddings", None, completed=0, total=4)
+                hook("embeddings", None, completed=2, total=4)
+                hook("embeddings", None, completed=4, total=4)
+                hook("embeddings", object())
+                hook("discrete_diarization", object())
                 return annotation
 
             pipeline.side_effect = run_pipeline
@@ -251,7 +258,12 @@ class TestTranscriberThreadRunBranches(unittest.TestCase):
         self.assertEqual(pipeline.segmentation_batch_size, 4)
         self.assertEqual(pipeline.embedding_batch_size, 4)
         thread.progress.emit.assert_any_call(84)
-        thread.status_update.emit.assert_any_call("Diarizing: segmentation (5/10)")
+        thread.progress.emit.assert_any_call(87)
+        thread.progress.emit.assert_any_call(89)
+        thread.status_update.emit.assert_any_call("Diarizing: embeddings (2/4)")
+        thread.status_update.emit.assert_any_call("Diarizing: speaker counting...")
+        thread.status_update.emit.assert_any_call("Diarizing: speaker clustering...")
+        thread.status_update.emit.assert_any_call("Diarizing: reconstructing diarization...")
         thread.finished.emit.assert_called_once()
 
     def test_cuda_oom_reloads_pyannote_on_cpu_and_retries(self):

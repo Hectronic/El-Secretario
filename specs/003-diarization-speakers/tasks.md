@@ -8,3 +8,5 @@
   runtime failure; expose diarization progress.
 - [x] T006 Verify worker signals and long-audio behavior with deterministic Qt
   integration coverage.
+- [x] T007 Report pyannote's post-segmentation phases independently in UI progress.
+- [x] T008 Reduce redundant segmentation overlap on long recordings.

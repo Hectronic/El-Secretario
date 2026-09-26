@@ -391,19 +391,50 @@ class TranscriberThread(QThread):
                         self._emit_terminal(TerminalStatus.CANCELLED, user_message="Transcription cancelled.", retryable=True)
                         return
                     last_diarization_progress = [80]
+                    last_diarization_stage = [None]
+                    last_stage_percent = {}
+                    diarization_stage_ranges = {
+                        "segmentation": (80, 84, "segmentation"),
+                        "speaker_counting": (84, 85, "speaker counting"),
+                        "embeddings": (85, 89, "embeddings"),
+                        "discrete_diarization": (89, 90, "reconstructing diarization"),
+                    }
 
                     def report_diarization_progress(step_name, _artifact, **progress_info):
+                        stage = str(step_name).lower()
+                        lower, upper, label = diarization_stage_ranges.get(
+                            stage, (last_diarization_progress[0], 90, stage.replace("_", " "))
+                        )
                         total = progress_info.get("total")
                         completed = progress_info.get("completed")
-                        if not total or completed is None:
-                            return
-                        current = min(89, 80 + int(9 * float(completed) / float(total)))
-                        if current > last_diarization_progress[0]:
-                            last_diarization_progress[0] = current
-                            self.progress.emit(current)
-                            self.status_update.emit(
-                                f"Diarizing: {step_name} ({int(completed)}/{int(total)})"
-                            )
+                        if stage == "embeddings" and total is None and completed is None:
+                            label = "speaker clustering"
+                        stage_identity = (stage, label)
+                        stage_changed = stage_identity != last_diarization_stage[0]
+
+                        if total and completed is not None:
+                            ratio = min(1.0, max(0.0, float(completed) / float(total)))
+                            current = min(upper, lower + int((upper - lower) * ratio))
+                            percent = int(ratio * 100)
+                            if current > last_diarization_progress[0]:
+                                last_diarization_progress[0] = current
+                                self.progress.emit(current)
+                            if stage_changed or last_stage_percent.get(stage) != percent:
+                                self.status_update.emit(
+                                    f"Diarizing: {label} ({int(completed)}/{int(total)})"
+                                )
+                            last_stage_percent[stage] = percent
+                        else:
+                            # pyannote reports stage boundaries without counters
+                            # (speaker counting and clustering can still take time).
+                            if stage_changed:
+                                current = min(upper, max(lower, last_diarization_progress[0]))
+                                if current > last_diarization_progress[0]:
+                                    last_diarization_progress[0] = current
+                                    self.progress.emit(current)
+                                self.status_update.emit(f"Diarizing: {label}...")
+
+                        last_diarization_stage[0] = stage_identity
 
                     should_move_to_gpu, gpu_reason = _should_use_gpu_for_diarization(
                         force_cpu=self.force_cpu,
@@ -416,6 +447,15 @@ class TranscriberThread(QThread):
                         )
                         if loaded:
                             loaded = loaded.to(torch.device("cuda" if use_gpu else "cpu"))
+                            segmentation_step = worker_runtime.configure_long_audio_diarization_stride(
+                                loaded,
+                                duration_seconds=self.total_duration,
+                            )
+                            if segmentation_step is not None:
+                                logging.info(
+                                    "Long-audio pyannote segmentation stride set to %.2fs per window (ratio=0.25).",
+                                    segmentation_step,
+                                )
                         return loaded
 
                     try:

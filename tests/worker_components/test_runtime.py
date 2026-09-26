@@ -13,8 +13,13 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 from unittest.mock import patch
+from types import SimpleNamespace
 
-from src.worker_components.runtime import diarization_batch_sizes, should_use_gpu_for_diarization
+from src.worker_components.runtime import (
+    configure_long_audio_diarization_stride,
+    diarization_batch_sizes,
+    should_use_gpu_for_diarization,
+)
 
 
 def test_diarization_batch_sizes_scale_with_free_gpu_memory_and_leave_cpu_conservative():
@@ -24,6 +29,26 @@ def test_diarization_batch_sizes_scale_with_free_gpu_memory_and_leave_cpu_conser
     assert diarization_batch_sizes(use_gpu=True, free_vram_gb=3.0) == (2, 2)
     assert diarization_batch_sizes(use_gpu=True, free_vram_gb=6.0) == (4, 4)
     assert diarization_batch_sizes(use_gpu=True, free_vram_gb=10.0) == (8, 8)
+
+
+def test_long_audio_uses_less_overlap_and_short_audio_keeps_pyannote_default():
+    pipeline = SimpleNamespace(
+        segmentation_step=0.1,
+        _segmentation=SimpleNamespace(duration=5.0, step=0.5),
+    )
+
+    changed_step = configure_long_audio_diarization_stride(pipeline, duration_seconds=3 * 3600)
+
+    assert changed_step == 1.25
+    assert pipeline.segmentation_step == 0.25
+    assert pipeline._segmentation.step == 1.25
+
+    short_pipeline = SimpleNamespace(
+        segmentation_step=0.1,
+        _segmentation=SimpleNamespace(duration=5.0, step=0.5),
+    )
+    assert configure_long_audio_diarization_stride(short_pipeline, duration_seconds=600) is None
+    assert short_pipeline._segmentation.step == 0.5
 
 
 @patch("src.worker_components.runtime.torch.cuda.is_available", return_value=True)

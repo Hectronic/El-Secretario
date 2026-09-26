@@ -169,6 +169,13 @@ def test_long_audio_diarization_worker_reports_batched_cuda_progress(qtbot, monk
 
         def __call__(self, _path, *, hook):
             hook("segmentation", None, completed=5, total=10)
+            hook("segmentation", object())
+            hook("speaker_counting", object())
+            hook("embeddings", None, completed=0, total=4)
+            hook("embeddings", None, completed=2, total=4)
+            hook("embeddings", None, completed=4, total=4)
+            hook("embeddings", object())
+            hook("discrete_diarization", object())
             return FakeAnnotation()
 
     pipeline = FakePipeline()
@@ -224,5 +231,11 @@ def test_long_audio_diarization_worker_reports_batched_cuda_progress(qtbot, monk
     assert blocker.args[0]["is_diarized"] is True
     assert pipeline.segmentation_batch_size == 4
     assert pipeline.embedding_batch_size == 4
-    assert 84 in progress
+    assert 82 in progress
+    assert 87 in progress
+    assert 89 in progress
     assert "Diarizing: segmentation (5/10)" in statuses
+    assert "Diarizing: embeddings (2/4)" in statuses
+    assert "Diarizing: speaker counting..." in statuses
+    assert "Diarizing: speaker clustering..." in statuses
+    assert "Diarizing: reconstructing diarization..." in statuses
