@@ -122,6 +122,12 @@ class SidebarHistoryCoordinator:
             sorted_tags = sorted(tags)
         else:
             sorted_tags = window.db.get_all_tags()
+        productivity_tags = getattr(window.db, "get_productivity_tags", None)
+        if callable(productivity_tags):
+            day = window.current_date_filter
+            additional = productivity_tags(day, day) if day else productivity_tags()
+            if isinstance(additional, (list, tuple, set)):
+                sorted_tags = sorted(set(sorted_tags).union(additional), key=str.casefold)
         window.tag_filter_combo.addItems(sorted_tags)
         index = window.tag_filter_combo.findText(current_tag)
         window.tag_filter_combo.setCurrentIndex(index if index >= 0 else 0)

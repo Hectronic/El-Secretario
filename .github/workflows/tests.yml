@@ -67,4 +67,4 @@ jobs:
         run: python -m pytest -q tests/integration
 
       - name: Run the full test suite
-        run: python -m pytest -q
+        run: python -m pytest -q --ignore=tests/integration

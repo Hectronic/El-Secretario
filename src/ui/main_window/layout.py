@@ -62,6 +62,15 @@ def build_main_window_layout(window):
         window.open_calendar_btn.setMinimumHeight(36)
         left_layout.addWidget(window.open_calendar_btn)
 
+        productivity_row = QHBoxLayout()
+        window.open_pomodoro_btn = QPushButton("Pomodoro")
+        window.open_pomodoro_btn.clicked.connect(window.open_pomodoro_tab)
+        productivity_row.addWidget(window.open_pomodoro_btn)
+        window.open_timeline_btn = QPushButton("Timeline")
+        window.open_timeline_btn.clicked.connect(window.open_timeline_tab)
+        productivity_row.addWidget(window.open_timeline_btn)
+        left_layout.addLayout(productivity_row)
+
         # Calendar Navigation
         nav_layout = QHBoxLayout()
         window.prev_week_btn = QPushButton("<< Prev Week")
@@ -445,5 +454,4 @@ def build_main_window_layout(window):
         window.splitter.setCollapsible(2, False)
 
         window.runtime_startup.initialize_rag_from_settings()
-
 

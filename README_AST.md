@@ -19,6 +19,7 @@ El Secretario ye una ferramienta intelixente de trescripción y organización d'
 - **Contéutu Activo del Chat na Barra Llateral**: Cuando una pestaña de chat ta activa, la barra llateral derecha de la app amuesa una copia desplegable y abierta por defeutu del contéutu del chat, y anúlase al cambiar de pestaña o zarrar el chat.
 - **Cuadernos y Coleiciones**: Organiza les tos grabaciones en cuadernos y coleiciones. Accede a elles direutamente dende la barra llateral.
 - **Vista de Calendariu**: Esplora les tos grabaciones per fecha.
+- **Pomodoro y llinia temporal**: Usa los botones llaterales pa midir sesiones de concentración, pausales o terminales primero d'hora, tomar notes de testu o audio con títulu y revisar l'actividá por fecha y etiquetes. La sesión dura 25 minutos por defeutu; les pauses curtia y llarga duren 5 y 15 minutos y pueden axustase na pestaña Pomodoro. La trescripción de notes d'audio ye opcional y usa'l backend configuráu.
 - **Ferramientes Unificaes**: Llimpieza d'almacenamientu, procesamientu per llotes y esportación/importación de datos nuna sola pestaña.
 - **Tema Personalizable**: Sofitu pa temes Claru, Escuru y del Sistema.
 
@@ -27,6 +28,8 @@ El Secretario ye una ferramienta intelixente de trescripción y organización d'
 - Notes d'arquitectura: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
 - Guía d'arquitectura: [docs/ARCHITECTURE_GUIDE.md](docs/ARCHITECTURE_GUIDE.md)
 - Rexistru de funcionalidaes en Spec Kit: [specs/README.md](specs/README.md)
+
+Al terminar un Pomodoro, l'estáu amuésase na aplicación anque nun haya avisos na bandexa. Si l'aplicación se zarra durante una sesión, nel siguiente entamu dexa completala, anovala o descartala. La llinia temporal escuende les pauses hasta activar **Show breaks**.
 
 ## Instalación
 

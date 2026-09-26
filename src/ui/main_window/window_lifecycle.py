@@ -39,6 +39,9 @@ class MainWindowLifecycleCoordinator:
             window._api_timer.stop()
         window._pending_history_reload = False
         window._pending_tag_reload = False
+        productivity = getattr(window, "productivity", None)
+        if productivity is not None:
+            productivity.cleanup()
 
         self._stop_search_thread()
         self._cancel_summary_queue()

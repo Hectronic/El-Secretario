@@ -21,6 +21,7 @@ from PyQt6.QtCore import Qt
 from src.ui.calendar_widget import CalendarWidget
 from src.ui.chat_widget import ChatWidget
 from src.ui.tasks_list_widget import TasksListWidget
+from src.ui.timeline.widget import TimelineWidget
 
 
 class SidebarSyncCoordinator:
@@ -78,6 +79,8 @@ class SidebarSyncCoordinator:
                     tags_filter or "",
                 )
             elif isinstance(widget, TasksListWidget):
+                widget.set_global_filters(self.window.current_week_monday, self.window.current_date_filter, tags_filter)
+            elif isinstance(widget, TimelineWidget):
                 widget.set_global_filters(self.window.current_week_monday, self.window.current_date_filter, tags_filter)
 
         for host in self.window.floating_chat_hosts:

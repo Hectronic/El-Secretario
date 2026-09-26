@@ -14,6 +14,7 @@ from .persistence import (
     ChatSessionsRepository,
     PersistenceBase,
     QueueJobsRepository,
+    ProductivityRepository,
     RAGIndexRepository,
     RecordsRepository,
     SchemaManager,
@@ -34,6 +35,7 @@ class DBManager(PersistenceBase):
         "tasks": TasksRepository,
         "rag_index": RAGIndexRepository,
         "queue_jobs": QueueJobsRepository,
+        "productivity": ProductivityRepository,
     }
 
     def __init__(self, db_name: str = "transcriptions.db"):

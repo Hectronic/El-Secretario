@@ -142,6 +142,75 @@ class SchemaManager(RepositoryBase):
                     )
                 ''')
 
+                cursor.execute('''
+                    CREATE TABLE IF NOT EXISTS pomodoros (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        title TEXT NOT NULL,
+                        tags TEXT NOT NULL DEFAULT '[]',
+                        state TEXT NOT NULL CHECK(state IN ('running', 'paused', 'completed', 'cancelled')),
+                        started_at TEXT NOT NULL,
+                        ended_at TEXT,
+                        planned_seconds INTEGER NOT NULL CHECK(planned_seconds > 0),
+                        elapsed_seconds REAL NOT NULL DEFAULT 0,
+                        run_started_at TEXT,
+                        outcome TEXT,
+                        created_at TEXT NOT NULL,
+                        updated_at TEXT NOT NULL
+                    )
+                ''')
+                cursor.execute('''
+                    CREATE UNIQUE INDEX IF NOT EXISTS idx_pomodoros_one_active
+                    ON pomodoros ((1)) WHERE state IN ('running', 'paused')
+                ''')
+                cursor.execute('''
+                    CREATE TABLE IF NOT EXISTS productivity_notes (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        kind TEXT NOT NULL CHECK(kind IN ('text', 'audio')),
+                        title TEXT NOT NULL,
+                        body TEXT,
+                        audio_ref TEXT,
+                        duration_seconds REAL,
+                        transcription TEXT,
+                        tags TEXT NOT NULL DEFAULT '[]',
+                        pomodoro_id INTEGER REFERENCES pomodoros(id) ON DELETE SET NULL,
+                        captured_at TEXT NOT NULL,
+                        created_at TEXT NOT NULL,
+                        updated_at TEXT NOT NULL
+                    )
+                ''')
+                cursor.execute('''
+                    CREATE TABLE IF NOT EXISTS timeline_events (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        event_type TEXT NOT NULL,
+                        source_id INTEGER NOT NULL,
+                        parent_source_id INTEGER,
+                        occurred_at TEXT NOT NULL,
+                        title_snapshot TEXT NOT NULL,
+                        tags_snapshot TEXT NOT NULL DEFAULT '[]',
+                        metadata TEXT NOT NULL DEFAULT '{}',
+                        UNIQUE(event_type, source_id)
+                    )
+                ''')
+                cursor.execute('CREATE INDEX IF NOT EXISTS idx_timeline_occurred ON timeline_events(occurred_at DESC, id DESC)')
+                cursor.execute('''
+                    CREATE TABLE IF NOT EXISTS pomodoro_breaks (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        kind TEXT NOT NULL CHECK(kind IN ('short', 'long')),
+                        state TEXT NOT NULL CHECK(state IN ('running', 'paused', 'completed', 'cancelled')),
+                        started_at TEXT NOT NULL,
+                        ended_at TEXT,
+                        planned_seconds INTEGER NOT NULL CHECK(planned_seconds > 0),
+                        elapsed_seconds REAL NOT NULL DEFAULT 0,
+                        run_started_at TEXT,
+                        created_at TEXT NOT NULL,
+                        updated_at TEXT NOT NULL
+                    )
+                ''')
+                cursor.execute('''
+                    CREATE UNIQUE INDEX IF NOT EXISTS idx_breaks_one_active
+                    ON pomodoro_breaks ((1)) WHERE state IN ('running', 'paused')
+                ''')
+
                 # Migration: Add columns if they don't exist
                 cursor.execute("PRAGMA table_info(records)")
                 columns = [column[1] for column in cursor.fetchall()]
