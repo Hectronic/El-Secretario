@@ -40,6 +40,9 @@ configuration.
   batches, and retries on CPU only after a real CUDA runtime failure.
 - Given a transcript has many segments and speaker turns, speaker attribution
   indexes diarization intervals once rather than rescanning all turns per segment.
+- Given pyannote advances from segmentation to counting, embeddings, clustering,
+  and reconstruction, the UI reports each stage independently so the last
+  segmentation counter cannot appear as a frozen overall state.
 
 ## Architecture Notes
 
@@ -49,7 +52,9 @@ configuration.
 - Workers: `src/worker_components/transcription_flow.py` merges diarization tracks
   with segments through a prefix-maximum interval index; runtime/device decisions
   remain in `src/worker_components/`. CUDA batch sizes scale with free VRAM after
-  model loading, while CPU uses pyannote's conservative batch size of one.
+  model loading, while CPU uses pyannote's conservative batch size of one. Worker
+  progress maps pyannote's segmentation, speaker counting, embedding, clustering,
+  and reconstruction callbacks to distinct status updates.
 - Persistence: `src/persistence/records.py` stores the `is_diarized` record state.
 - Platform constraints: GPU use follows the shared runtime policy; CPU fallback is
   permitted only when configuration or runtime availability requires it.
