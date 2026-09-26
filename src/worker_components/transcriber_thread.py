@@ -447,6 +447,15 @@ class TranscriberThread(QThread):
                         )
                         if loaded:
                             loaded = loaded.to(torch.device("cuda" if use_gpu else "cpu"))
+                            segmentation_step = worker_runtime.configure_long_audio_diarization_stride(
+                                loaded,
+                                duration_seconds=self.total_duration,
+                            )
+                            if segmentation_step is not None:
+                                logging.info(
+                                    "Long-audio pyannote segmentation stride set to %.2fs per window (ratio=0.25).",
+                                    segmentation_step,
+                                )
                         return loaded
 
                     try:
