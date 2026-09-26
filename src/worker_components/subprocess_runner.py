@@ -15,6 +15,7 @@
 from __future__ import annotations
 
 import multiprocessing as mp
+from queue import Empty
 import time
 
 from PyQt6.QtCore import QThread
@@ -49,6 +50,7 @@ def run_backend_subprocess(*, backend: str, payload: dict, timeout_seconds: int 
     try:
         proc.start()
         start_time = time.monotonic()
+        result = None
 
         while proc.is_alive():
             current_thread = QThread.currentThread()
@@ -61,18 +63,33 @@ def run_backend_subprocess(*, backend: str, payload: dict, timeout_seconds: int 
                 _stop_process(proc, force=True)
                 raise TranscriptionTimeoutError("Transcription subprocess timed out.")
 
-            proc.join(timeout=1)
+            # Drain while the child is alive. Large transcripts can exceed the
+            # OS pipe buffer; joining first would leave the child's queue
+            # feeder blocked while the parent waits for that same child.
+            try:
+                result = result_queue.get(timeout=0.1)
+                break
+            except Empty:
+                proc.join(timeout=0.1)
+
+        if result is None:
+            # The process may exit between is_alive() and queue polling. Allow
+            # its feeder a short bounded window to publish the final payload.
+            try:
+                result = result_queue.get(timeout=5)
+            except Empty as exc:
+                raise RuntimeError("Transcription subprocess finished without returning a result.") from exc
+
+        proc.join(timeout=5)
+        if proc.is_alive():
+            _stop_process(proc, force=True)
+            raise TranscriptionTimeoutError("Transcription subprocess timed out while closing its result queue.")
 
         if proc.exitcode != 0:
             raise RuntimeError(
                 f"Transcription subprocess crashed with exit code {proc.exitcode} "
                 f"(possible native crash in transcription backend)."
             )
-
-        if result_queue.empty():
-            raise RuntimeError("Transcription subprocess finished without returning a result.")
-
-        result = result_queue.get()
         if not result.get("ok"):
             raise RuntimeError(result.get("error") or "Unknown subprocess transcription error.")
 
@@ -101,7 +118,8 @@ def run_transcription_in_subprocess(
             "device": device,
             "compute_type": compute_type,
             "language": language,
-            "beam_size": 5,
+            "beam_size": 3,
+            "vad_filter": True,
         },
         timeout_seconds=timeout_seconds,
     )

@@ -39,9 +39,12 @@ class Recorder:
         return 12
 
 
-def test_focus_notes_and_timeline_cross_real_sqlite_qt_boundaries(qtbot, tmp_path):
+def test_focus_notes_and_timeline_cross_real_sqlite_qt_boundaries(qtbot, tmp_path, monkeypatch):
     db = DBManager(str(tmp_path / "app.sqlite"))
     clock = Clock()
+    # Keep note timestamps in the same controlled time domain as the focus
+    # session, so date filtering does not depend on the machine's current day.
+    monkeypatch.setattr("src.persistence.productivity.now_iso", clock.now)
     service = PomodoroService(db, clock=clock, notify=lambda *_args: (_ for _ in ()).throw(RuntimeError("no tray")))
     widget = PomodoroWidget(service, db, recorder=Recorder(tmp_path / "capture.wav"),
                             audio_dir=tmp_path / "audio")

@@ -29,6 +29,8 @@ Users need transcription to choose a reliable speech-to-text backend and runtime
 - Given `force_cpu` is true, when device selection runs, then CUDA is ignored and CPU compute settings are used.
 - Given the platform is Windows, when CPU or CUDA profiles are selected for faster-whisper, then compute types are adjusted to the Windows-safe profiles used by the worker.
 - Given faster-whisper runs, when transcription starts, then the heavy backend executes in a spawned subprocess and returns serialized segment dictionaries.
+- Given faster-whisper runs with its default profile, when it decodes audio, then voice activity detection filters silence and beam size 3 balances speed and transcript quality.
+- Given the subprocess finishes, when its result is being read, then the parent waits briefly for the multiprocessing queue feeder instead of relying on `Queue.empty()`.
 - Given a faster-whisper subprocess crashes or times out on a retryable profile, when fallback profiles remain, then the worker retries with safer device/compute combinations and emits status updates for each attempt.
 - Given Windows faster-whisper attempts keep crashing on large models, when smaller model fallbacks are available, then the worker retries in the configured Windows model fallback order.
 - Given Windows faster-whisper attempts all fail with a native crash, when openai-whisper fallback succeeds, then the final result records `openai-whisper` as the effective backend.
@@ -70,6 +72,7 @@ Users need transcription to choose a reliable speech-to-text backend and runtime
 - 2026-06-27: created the dedicated transcription runtime spec for the existing `src/worker_components/` and `src/stt_providers/` split.
 - 2026-06-27: recorded `TranscriberThread` as the public Qt orchestration boundary and `src/worker_components/` plus `src/stt_providers/` as the smaller runtime/provider owners.
 - 2026-08-30: transcription failures now expose actionable UI messages instead of raw backend exceptions while retaining detailed diagnostics in `log/app.log`.
+- 2026-09-26: faster-whisper enables VAD and uses beam size 3; subprocess result collection now tolerates multiprocessing queue feeder delays.
 
 ## Open Questions
 

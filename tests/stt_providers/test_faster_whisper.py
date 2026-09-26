@@ -27,8 +27,8 @@ def test_transcribe_serializes_faster_whisper_segments(monkeypatch):
         def __init__(self, model_size, device, compute_type, cpu_threads):
             captured["init"] = (model_size, device, compute_type, cpu_threads)
 
-        def transcribe(self, audio_path, beam_size=5, language=None):
-            captured["transcribe"] = (audio_path, beam_size, language)
+        def transcribe(self, audio_path, beam_size=5, language=None, vad_filter=False):
+            captured["transcribe"] = (audio_path, beam_size, language, vad_filter)
             return [SimpleNamespace(start=0, end=1.5, text="hola")], None
 
     fake_module.WhisperModel = FakeModel
@@ -46,5 +46,5 @@ def test_transcribe_serializes_faster_whisper_segments(monkeypatch):
         )
 
     assert captured["init"] == ("base", "cpu", "int8", 4)
-    assert captured["transcribe"] == ("sample.wav", 5, "es")
+    assert captured["transcribe"] == ("sample.wav", 5, "es", True)
     assert result == [{"start": 0.0, "end": 1.5, "text": "hola"}]
