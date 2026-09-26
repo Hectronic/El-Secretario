@@ -133,44 +133,54 @@ def log_transcription_runtime_context(
 def should_use_gpu_for_diarization(
     *,
     force_cpu: bool,
-    min_free_vram_gb: float = 3.0,
-    min_free_ratio: float = 0.35,
 ) -> tuple[bool, str]:
-    """Decide if diarization should run on GPU or CPU.
+    """Prefer CUDA for diarization unless CPU was explicitly requested.
 
-    This protects desktop responsiveness on low-VRAM cards by avoiding a second
-    heavy GPU pipeline (pyannote) when Whisper is already running on CUDA.
+    Free VRAM is used later to choose conservative pyannote batch sizes. A low
+    reading alone does not silently force CPU; a real CUDA runtime failure is
+    handled by the worker's CPU retry path.
     """
     if force_cpu:
         return (False, "force_cpu is enabled")
 
     try:
-        if not torch.cuda.is_available():
-            return (False, "CUDA is not available")
+        cuda_available = bool(torch.cuda.is_available())
+    except Exception as e:
+        return (False, f"Could not check CUDA availability: {e}")
+    if not cuda_available:
+        return (False, "CUDA is not available")
+    try:
         if torch.cuda.device_count() <= 0:
             return (False, "No CUDA device detected")
-
+    except Exception as e:
+        return (True, f"CUDA is available but device inspection failed; attempting GPU: {e}")
+    try:
         free_bytes, total_bytes = torch.cuda.mem_get_info()
         free_gb = free_bytes / (1024 ** 3)
         total_gb = total_bytes / (1024 ** 3)
         free_ratio = free_bytes / total_bytes if total_bytes else 0.0
-
-        if free_gb < float(min_free_vram_gb):
-            return (
-                False,
-                f"GPU free VRAM too low for diarization on GPU ({free_gb:.2f} GB < {float(min_free_vram_gb):.2f} GB)",
-            )
-        if free_ratio < float(min_free_ratio):
-            return (
-                False,
-                f"GPU free VRAM ratio too low for diarization on GPU ({free_ratio:.2%} < {float(min_free_ratio):.0%})",
-            )
-        return (
-            True,
-            (
-                "GPU free VRAM is sufficient "
-                f"({free_gb:.2f}/{total_gb:.2f} GB, {free_ratio:.2%} free)"
-            ),
-        )
+        return (True, f"CUDA available; attempting diarization on GPU ({free_gb:.2f}/{total_gb:.2f} GB free, {free_ratio:.2%})")
     except Exception as e:
-        return (False, f"Could not evaluate CUDA memory for diarization: {e}")
+        # If CUDA is present but memory inspection failed, let the actual model
+        # allocation decide. Batch-size selection remains conservative.
+        logging.warning("Could not inspect CUDA memory before diarization: %s", e)
+        return (True, "CUDA is available; VRAM could not be inspected, using conservative batches")
+
+
+def diarization_batch_sizes(*, use_gpu: bool, free_vram_gb: float | None = None) -> tuple[int, int]:
+    """Choose pyannote 3.1 inference batches without overcommitting GPU memory.
+
+    pyannote 3.1 defaults both stages to batch size one. Larger batches improve
+    GPU throughput; CPU stays conservative and GPU batch sizes scale with the
+    memory left after loading the pipeline.
+    """
+    if not use_gpu or free_vram_gb is None:
+        return (1, 1)
+    free_vram_gb = max(0.0, float(free_vram_gb))
+    if free_vram_gb >= 8.0:
+        return (8, 8)
+    if free_vram_gb >= 5.0:
+        return (4, 4)
+    if free_vram_gb >= 2.5:
+        return (2, 2)
+    return (1, 1)
