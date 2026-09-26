@@ -51,5 +51,6 @@ def transcribe(payload: dict) -> list[dict]:
         payload["audio_path"],
         beam_size=payload.get("beam_size", 5),
         language=payload.get("language"),
+        vad_filter=payload.get("vad_filter", True),
     )
     return serialize_segments(segments)

@@ -154,6 +154,7 @@ GitHub Actions runs this full test suite automatically on Ubuntu, Windows, and m
 - The shared transcription model selector is available across the application and now also supports `sherpa-onnx` for fully local inference.
 - Sherpa-ONNX settings also support automatic first-run model download and a configurable archive URL.
 - When a fallback path succeeds, El Secretario stores the working transcription configuration in Settings automatically.
+- faster-whisper uses voice activity detection to skip long silent regions and a beam size of 3 for faster inference; long jobs continue to run in isolated, cancellable subprocesses.
 - RAG auto-indexing is configurable in Settings (`auto_index_rag`) and enabled by default (`true`).
 - On Windows, RAG indexing/search operations are isolated in subprocesses by default to reduce native Chroma crashes.
 - The Welcome tab now adapts better to low-height Windows screens with an automatic compact layout and vertical scrolling when needed.

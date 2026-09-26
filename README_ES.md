@@ -126,6 +126,7 @@ GitHub Actions ejecuta automáticamente esta suite completa en Ubuntu, Windows y
 - El selector compartido de transcripción está unificado en toda la aplicación y ahora también soporta `sherpa-onnx` para inferencia totalmente local.
 - Los ajustes de Sherpa-ONNX también soportan autodescarga del modelo en el primer uso y una URL de archivo configurable.
 - Cuando un fallback funciona, El Secretario guarda automáticamente en Ajustes la configuración de transcripción que funcionó.
+- faster-whisper usa detección de voz para saltarse silencios largos y un beam size de 3 para acelerar la inferencia; los trabajos siguen aislados en subprocesos cancelables.
 - El autoindexado RAG se puede configurar en Ajustes (`auto_index_rag`) y está activado por defecto (`true`).
 - En Windows, las operaciones de indexado/búsqueda RAG se aíslan en subprocesos por defecto para reducir crashes nativos de Chroma.
 - La pestaña Welcome ahora se adapta mejor a pantallas de Windows con poca altura, con modo compacto automático y scroll vertical cuando hace falta.

@@ -126,6 +126,7 @@ GitHub Actions executa automáticamente esta suite completa en Ubuntu, Windows y
 - El selector compartíu de trescripción ta unificáu en tola aplicación y agora tamién soporta `sherpa-onnx` pa inferencia totalmente llocal.
 - Los axustes de Sherpa-ONNX tamién soporten autodescarga del modelu nel primer usu y una URL d'archivu configurable.
 - Cuando un fallback funciona, El Secretario guarda automáticamente nos Ajustes la configuración de trescripción que funcionó.
+- faster-whisper usa detección de voz pa saltar silencios llargos y un beam size de 3 pa acelerar la inferencia; los trabayos siguen aisllaos en subprocesos cancelables.
 - L'autoindexáu RAG pue configurase n'Ajustes (`auto_index_rag`) y ta activáu por defeutu (`true`).
 - En Windows, les operaciones d'indexáu/gueta RAG aíllense en subprocesos por defeutu pa amenorgar crashes nativos de Chroma.
 - La pestaña Welcome agora adáptase meyor a pantalles de Windows con poca altura, con mou compactu automáticu y scroll vertical cuando fai falta.

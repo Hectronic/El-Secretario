@@ -50,16 +50,19 @@ class _FakeProc:
 
 
 class _FakeQueue:
-    def __init__(self, result=None, is_empty=False):
+    def __init__(self, result=None, is_empty=False, on_get=None):
         self._result = result or {"ok": True, "segments": [{"start": 0.0, "end": 1.0, "text": "ok"}]}
         self._is_empty = is_empty
         self.closed = False
         self.joined = False
+        self.on_get = on_get
 
-    def empty(self):
-        return self._is_empty
-
-    def get(self):
+    def get(self, timeout=None):
+        if self.on_get is not None:
+            self.on_get()
+        if self._is_empty:
+            from queue import Empty
+            raise Empty
         return self._result
 
     def close(self):
@@ -84,8 +87,8 @@ class _FakeCtx:
 
 
 def test_run_backend_subprocess_success():
-    proc = _FakeProc(alive_sequence=[True, False], exitcode=0)
-    queue = _FakeQueue()
+    proc = _FakeProc(alive_sequence=[True, True, False], exitcode=0)
+    queue = _FakeQueue(on_get=lambda: assert_process_is_alive(proc))
     fake_ctx = _FakeCtx(proc, queue)
 
     with patch("src.worker_components.subprocess_runner.mp.get_context", return_value=fake_ctx), \
@@ -100,6 +103,32 @@ def test_run_backend_subprocess_success():
     assert proc.started
     assert queue.closed
     assert queue.joined
+    assert proc.closed
+
+
+def assert_process_is_alive(proc):
+    assert proc.is_alive(), "the result must be drained before the child exits"
+
+
+def test_run_backend_subprocess_waits_for_queue_result_instead_of_using_empty():
+    proc = _FakeProc(alive_sequence=[False], exitcode=0)
+    queue = _FakeQueue(is_empty=True)
+    fake_ctx = _FakeCtx(proc, queue)
+
+    with patch("src.worker_components.subprocess_runner.mp.get_context", return_value=fake_ctx), \
+         patch("src.worker_components.subprocess_runner.QThread.currentThread", return_value=None):
+        try:
+            subprocess_runner.run_backend_subprocess(
+                backend="faster-whisper",
+                payload={"audio_path": "x.wav"},
+                timeout_seconds=10,
+            )
+        except RuntimeError as exc:
+            assert "without returning a result" in str(exc)
+        else:
+            raise AssertionError("expected missing result error")
+
+    assert queue.closed
     assert proc.closed
 
 
@@ -137,6 +166,21 @@ def test_run_openai_whisper_fallback_uses_backend_dispatch():
 
     assert segments == [{"text": "ok"}]
     mock_run.assert_called_once()
+
+
+def test_faster_whisper_subprocess_uses_speed_profile():
+    with patch("src.worker_components.subprocess_runner.run_backend_subprocess", return_value=[]) as mock_run:
+        subprocess_runner.run_transcription_in_subprocess(
+            audio_path="long.wav",
+            model_size="base",
+            device="cuda",
+            compute_type="float16",
+            language="es",
+        )
+
+    payload = mock_run.call_args.kwargs["payload"]
+    assert payload["beam_size"] == 3
+    assert payload["vad_filter"] is True
 
 
 def test_run_sherpa_onnx_transcription_uses_backend_dispatch():
