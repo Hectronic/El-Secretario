@@ -2,7 +2,7 @@
 
 Status: Implemented
 Owner: TBD
-Last updated: 2026-09-07
+Last updated: 2026-09-26
 
 ## Problem
 
@@ -13,7 +13,8 @@ configuration.
 ## Scope
 
 - In scope: enabling diarization in transcription configuration, preserving speaker
-  labels in stored transcriptions, and optionally renaming displayed labels.
+  labels in stored transcriptions, optionally renaming displayed labels, and
+  keeping long-audio diarization responsive and efficient.
 - Out of scope: choosing the transcription backend (SPEC-002), recording metadata
   persistence (SPEC-004), and AI summaries.
 
@@ -34,6 +35,11 @@ configuration.
   left untouched.
 - Given diarization cannot use GPU safely, when the runtime chooses a supported
   fallback, then the configured backend/device policy from SPEC-002 is preserved.
+- Given CUDA is available and CPU was not explicitly requested, diarization
+  attempts CUDA even when free VRAM is limited, starts with conservative adaptive
+  batches, and retries on CPU only after a real CUDA runtime failure.
+- Given a transcript has many segments and speaker turns, speaker attribution
+  indexes diarization intervals once rather than rescanning all turns per segment.
 
 ## Architecture Notes
 
@@ -41,7 +47,9 @@ configuration.
   `src/ui/recording/speaker_actions.py` applies them. `RecordingWidget` exposes the
   compatible recording-detail actions.
 - Workers: `src/worker_components/transcription_flow.py` merges diarization tracks
-  with segments; runtime/device decisions remain in `src/worker_components/`.
+  with segments through a prefix-maximum interval index; runtime/device decisions
+  remain in `src/worker_components/`. CUDA batch sizes scale with free VRAM after
+  model loading, while CPU uses pyannote's conservative batch size of one.
 - Persistence: `src/persistence/records.py` stores the `is_diarized` record state.
 - Platform constraints: GPU use follows the shared runtime policy; CPU fallback is
   permitted only when configuration or runtime availability requires it.
@@ -51,10 +59,12 @@ configuration.
 - Unit/UI: `tests/ui/recording/test_speaker_actions.py`,
   `tests/ui/test_speaker_dialog.py`, and
   `tests/worker_components/test_transcription_flow.py` cover labels, dialog output,
-  and merged speaker segments.
+  and indexed speaker alignment. `tests/worker_components/test_runtime.py` covers
+  CUDA preference and adaptive batch sizing.
 - Integration: `tests/test_summary_task_queue_integration.py` verifies queued
   transcription forwards diarization and persists its result through SQLite with a
-  controlled worker boundary.
+  controlled worker boundary. `tests/worker/test_worker_integration.py` verifies
+  the real Qt worker reports long-audio diarization progress with GPU batches.
 - Manual: validate a real multi-speaker sample on supported GPU and CPU-only hosts.
 
 ## Documentation

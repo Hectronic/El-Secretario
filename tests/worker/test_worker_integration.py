@@ -147,3 +147,82 @@ def test_transcriber_thread_repeated_runs_do_not_hang(qtbot, monkeypatch, tmp_pa
         with qtbot.waitSignal(thread.finished, timeout=3000):
             thread.start()
         qtbot.waitUntil(lambda: not thread.isRunning(), timeout=1000)
+
+
+def test_long_audio_diarization_worker_reports_batched_cuda_progress(qtbot, monkeypatch, tmp_path):
+    audio_path = tmp_path / "long-diarization.wav"
+    _write_dummy_audio(audio_path)
+
+    class FakeAnnotation:
+        @staticmethod
+        def itertracks(*, yield_label):
+            assert yield_label is True
+            return iter([])
+
+    class FakePipeline:
+        def __init__(self):
+            self.segmentation_batch_size = 1
+            self.embedding_batch_size = 1
+
+        def to(self, _device):
+            return self
+
+        def __call__(self, _path, *, hook):
+            hook("segmentation", None, completed=5, total=10)
+            return FakeAnnotation()
+
+    pipeline = FakePipeline()
+
+    class FakePipelineClass:
+        @staticmethod
+        def from_pretrained(_model, *, use_auth_token):
+            assert use_auth_token == "hf_test"
+            return pipeline
+
+    monkeypatch.setattr(
+        "src.worker_components.transcriber_thread._run_transcription_in_subprocess",
+        lambda **_kwargs: [{"start": 0.0, "end": 3600.0, "text": "long transcript"}],
+    )
+    monkeypatch.setattr(
+        "src.worker_components.transcriber_thread.worker_settings.get_transcription_chunking_config",
+        lambda _settings: {"enabled": False, "threshold_seconds": 1800},
+    )
+    monkeypatch.setattr(
+        "src.worker_components.transcriber_thread._get_pyannote_pipeline_class",
+        lambda: FakePipelineClass,
+    )
+    monkeypatch.setattr(
+        "src.worker_components.transcriber_thread._should_use_gpu_for_diarization",
+        lambda **_kwargs: (True, "test CUDA device"),
+    )
+    monkeypatch.setattr(
+        "src.worker_components.transcriber_thread.torch.cuda.mem_get_info",
+        lambda: (int(6 * 1024**3), int(8 * 1024**3)),
+    )
+    monkeypatch.setattr("src.worker_components.transcriber_thread.release_local_inference_resources", lambda: None)
+
+    thread = TranscriberThread(
+        str(audio_path),
+        model_size="base",
+        device="cuda",
+        compute_type="float16",
+        language="es",
+        hf_token="hf_test",
+        enable_diarization=True,
+        total_duration=3600.0,
+    )
+    progress: list[int] = []
+    statuses: list[str] = []
+    thread.progress.connect(progress.append)
+    thread.status_update.connect(statuses.append)
+
+    with qtbot.waitSignal(thread.finished, timeout=3000) as blocker:
+        thread.start()
+    qtbot.waitUntil(lambda: not thread.isRunning(), timeout=1000)
+
+    assert blocker.args[0]["text"] == "long transcript"
+    assert blocker.args[0]["is_diarized"] is True
+    assert pipeline.segmentation_batch_size == 4
+    assert pipeline.embedding_batch_size == 4
+    assert 84 in progress
+    assert "Diarizing: segmentation (5/10)" in statuses

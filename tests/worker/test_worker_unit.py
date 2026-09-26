@@ -203,6 +203,114 @@ class TestTranscriberThreadRunBranches(unittest.TestCase):
         thread.error = MagicMock()
         return thread
 
+    def test_gpu_diarization_uses_memory_scaled_batches_and_reports_pipeline_progress(self):
+        with (
+            patch("src.worker_components.transcriber_thread.platform.system", return_value="Linux"),
+            patch("src.worker_components.transcriber_thread.QSettings", return_value=MagicMock()),
+            patch("src.worker_components.transcriber_thread.os.path.getsize", return_value=100),
+            patch(
+                "src.worker_components.transcriber_thread._run_transcription_in_subprocess",
+                return_value=[{"start": 0.0, "end": 10.0, "text": "hello"}],
+            ),
+            patch(
+                "src.worker_components.transcriber_thread._should_use_gpu_for_diarization",
+                return_value=(True, "enough free VRAM"),
+            ),
+            patch(
+                "src.worker_components.transcriber_thread.torch.cuda.mem_get_info",
+                return_value=(int(6 * 1024**3), int(8 * 1024**3)),
+            ),
+            patch("src.worker_components.transcriber_thread._get_pyannote_pipeline_class") as get_pipeline,
+            patch("src.worker_components.transcriber_thread.release_local_inference_resources"),
+        ):
+            annotation = MagicMock()
+            annotation.itertracks.return_value = []
+            pipeline = MagicMock()
+            pipeline.to.return_value = pipeline
+
+            def run_pipeline(_audio_path, *, hook):
+                hook("segmentation", None, completed=5, total=10)
+                return annotation
+
+            pipeline.side_effect = run_pipeline
+            pipeline_class = MagicMock()
+            pipeline_class.from_pretrained.return_value = pipeline
+            get_pipeline.return_value = pipeline_class
+
+            thread = self._build_thread(
+                model_size="base",
+                device="cuda",
+                compute_type="float16",
+                total_duration=10,
+                enable_diarization=True,
+                hf_token="hf_x",
+            )
+            thread.isInterruptionRequested = MagicMock(return_value=False)
+            thread.run()
+
+        self.assertEqual(pipeline.segmentation_batch_size, 4)
+        self.assertEqual(pipeline.embedding_batch_size, 4)
+        thread.progress.emit.assert_any_call(84)
+        thread.status_update.emit.assert_any_call("Diarizing: segmentation (5/10)")
+        thread.finished.emit.assert_called_once()
+
+    def test_cuda_oom_reloads_pyannote_on_cpu_and_retries(self):
+        with (
+            patch("src.worker_components.transcriber_thread.platform.system", return_value="Linux"),
+            patch("src.worker_components.transcriber_thread.QSettings", return_value=MagicMock()),
+            patch("src.worker_components.transcriber_thread.os.path.getsize", return_value=100),
+            patch(
+                "src.worker_components.transcriber_thread._run_transcription_in_subprocess",
+                return_value=[{"start": 0.0, "end": 10.0, "text": "hello"}],
+            ),
+            patch(
+                "src.worker_components.transcriber_thread._should_use_gpu_for_diarization",
+                return_value=(True, "CUDA available"),
+            ),
+            patch(
+                "src.worker_components.transcriber_thread.torch.cuda.mem_get_info",
+                return_value=(int(6 * 1024**3), int(8 * 1024**3)),
+            ),
+            patch("src.worker_components.transcriber_thread.torch.cuda.empty_cache"),
+            patch("src.worker_components.transcriber_thread._get_pyannote_pipeline_class") as get_pipeline,
+            patch("src.worker_components.transcriber_thread.release_local_inference_resources"),
+        ):
+            annotation = MagicMock()
+            annotation.itertracks.return_value = [
+                (SimpleNamespace(start=0.0, end=10.0), None, "SPEAKER_00")
+            ]
+            gpu_pipeline = MagicMock()
+            gpu_pipeline.to.return_value = gpu_pipeline
+            gpu_pipeline.side_effect = RuntimeError("CUDA out of memory")
+            cpu_pipeline = MagicMock()
+            cpu_pipeline.to.return_value = cpu_pipeline
+            cpu_pipeline.side_effect = lambda _path, *, hook: annotation
+            pipeline_class = MagicMock()
+            pipeline_class.from_pretrained.side_effect = [gpu_pipeline, cpu_pipeline]
+            get_pipeline.return_value = pipeline_class
+
+            thread = self._build_thread(
+                model_size="base",
+                device="cuda",
+                compute_type="float16",
+                total_duration=10,
+                enable_diarization=True,
+                hf_token="hf_x",
+            )
+            thread.isInterruptionRequested = MagicMock(return_value=False)
+            thread.run()
+
+        pipeline_class.from_pretrained.assert_called_with(
+            "pyannote/speaker-diarization-3.1",
+            use_auth_token="hf_x",
+        )
+        self.assertEqual(cpu_pipeline.segmentation_batch_size, 1)
+        self.assertEqual(cpu_pipeline.embedding_batch_size, 1)
+        self.assertIn("GPU diarization failed; retrying on CPU...", [
+            call.args[0] for call in thread.status_update.emit.call_args_list
+        ])
+        self.assertIn("[SPEAKER_00]", thread.finished.emit.call_args.args[0]["text"])
+
     @patch("src.worker_components.transcriber_thread.platform.system", return_value="Linux")
     @patch("src.worker_components.transcriber_thread.QSettings")
     @patch("src.worker_components.transcriber_thread.os.path.getsize", return_value=100)
@@ -322,6 +430,7 @@ class TestTranscriberThreadRunBranches(unittest.TestCase):
             (SimpleNamespace(start=5.0, end=10.0), None, "SPEAKER_02"),
         ]
         pipeline = MagicMock()
+        pipeline.to.return_value = pipeline
         pipeline.return_value = diarization
         pipeline_cls = MagicMock()
         pipeline_cls.from_pretrained.return_value = pipeline
@@ -346,7 +455,11 @@ class TestTranscriberThreadRunBranches(unittest.TestCase):
         result = thread.finished.emit.call_args.args[0]
         self.assertIn("[SPEAKER_01]", result["text"])
         self.assertIn("[SPEAKER_02]", result["text"])
-        pipeline.to.assert_not_called()
+        pipeline.to.assert_called_once_with(worker_runtime.torch.device("cpu"))
+        self.assertEqual(pipeline.segmentation_batch_size, 1)
+        self.assertEqual(pipeline.embedding_batch_size, 1)
+        pipeline.assert_called_once()
+        self.assertIn("hook", pipeline.call_args.kwargs)
 
     @patch("src.worker_components.transcriber_thread.platform.system", return_value="Linux")
     @patch("src.worker_components.transcriber_thread.QSettings")

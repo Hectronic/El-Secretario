@@ -16,6 +16,7 @@ Read this in [Español](README_ES.md) | [Asturianu](README_AST.md)
 - **Recording Safety Guardian**: See the branded active-recording indicator in the system tray where supported; pause, resume, stop/save, or cancel it safely; configure duration/silence reminders and optionally opt in to stopping after a silence warning.
 - **Recording Editing**: Open a recording in a second editor tab, trim audio segments, and automatically retranscribe the edited clip. The first trim keeps a `.orig` backup of the original file.
 - **Transcription & Diarization**: Automatically transcribe audio, copy the full transcription with one click, and identify different speakers (diarization) using local Whisper backends, `sherpa-onnx`, and pyannote.audio.
+- Long-audio speaker alignment indexes diarization turns once; pyannote uses adaptive CUDA batches when CUDA is available and `force_cpu` is off, then retries on CPU only after a CUDA runtime failure.
 - **Intelligent Search (RAG)**: Use Retrieval-Augmented Generation (RAG) to chat with your recordings and find specific information. Supports Google Gemini and **Ollama** for local execution.
 - **Flexible Chat Windows**: Chats can stay as regular tabs, move to the floating bar, and be minimized into compact chips for quick restore.
 - **Active Chat Context Sidebar**: When a chat tab is active, the app's right sidebar shows a collapsible, auto-opened mirror of the chat context and hides it again when you switch tabs or close the chat.

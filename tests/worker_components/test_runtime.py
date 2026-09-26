@@ -14,19 +14,28 @@
 
 from unittest.mock import patch
 
-from src.worker_components.runtime import should_use_gpu_for_diarization
+from src.worker_components.runtime import diarization_batch_sizes, should_use_gpu_for_diarization
+
+
+def test_diarization_batch_sizes_scale_with_free_gpu_memory_and_leave_cpu_conservative():
+    assert diarization_batch_sizes(use_gpu=False, free_vram_gb=12) == (1, 1)
+    assert diarization_batch_sizes(use_gpu=True, free_vram_gb=None) == (1, 1)
+    assert diarization_batch_sizes(use_gpu=True, free_vram_gb=2.4) == (1, 1)
+    assert diarization_batch_sizes(use_gpu=True, free_vram_gb=3.0) == (2, 2)
+    assert diarization_batch_sizes(use_gpu=True, free_vram_gb=6.0) == (4, 4)
+    assert diarization_batch_sizes(use_gpu=True, free_vram_gb=10.0) == (8, 8)
 
 
 @patch("src.worker_components.runtime.torch.cuda.is_available", return_value=True)
 @patch("src.worker_components.runtime.torch.cuda.device_count", return_value=1)
 @patch("src.worker_components.runtime.torch.cuda.mem_get_info")
-def test_should_use_gpu_for_diarization_rejects_low_free_vram(
+def test_should_use_gpu_for_diarization_attempts_cuda_with_low_free_vram(
     mock_mem_info, _mock_count, _mock_available
 ):
     mock_mem_info.return_value = (int(2 * 1024**3), int(8 * 1024**3))
-    use_gpu, reason = should_use_gpu_for_diarization(force_cpu=False, min_free_vram_gb=3.0)
-    assert use_gpu is False
-    assert "free vram too low" in reason.lower()
+    use_gpu, reason = should_use_gpu_for_diarization(force_cpu=False)
+    assert use_gpu is True
+    assert "attempting diarization on gpu" in reason.lower()
 
 
 @patch("src.worker_components.runtime.torch.cuda.is_available", return_value=True)
@@ -36,17 +45,13 @@ def test_should_use_gpu_for_diarization_accepts_sufficient_free_vram(
     mock_mem_info, _mock_count, _mock_available
 ):
     mock_mem_info.return_value = (int(4 * 1024**3), int(8 * 1024**3))
-    use_gpu, reason = should_use_gpu_for_diarization(
-        force_cpu=False,
-        min_free_vram_gb=3.0,
-        min_free_ratio=0.35,
-    )
+    use_gpu, reason = should_use_gpu_for_diarization(force_cpu=False)
     assert use_gpu is True
-    assert "sufficient" in reason.lower()
+    assert "attempting diarization on gpu" in reason.lower()
 
 
 def test_should_use_gpu_for_diarization_honors_force_cpu():
-    use_gpu, reason = should_use_gpu_for_diarization(force_cpu=True, min_free_vram_gb=3.0)
+    use_gpu, reason = should_use_gpu_for_diarization(force_cpu=True)
     assert use_gpu is False
     assert "force_cpu" in reason.lower()
 
@@ -54,15 +59,13 @@ def test_should_use_gpu_for_diarization_honors_force_cpu():
 @patch("src.worker_components.runtime.torch.cuda.is_available", return_value=True)
 @patch("src.worker_components.runtime.torch.cuda.device_count", return_value=1)
 @patch("src.worker_components.runtime.torch.cuda.mem_get_info")
-def test_should_use_gpu_for_diarization_rejects_low_free_ratio(
+def test_should_use_gpu_for_diarization_does_not_force_cpu_for_low_free_ratio(
     mock_mem_info, _mock_count, _mock_available
 ):
     # Enough absolute free memory, but too little proportion free.
     mock_mem_info.return_value = (int(3.2 * 1024**3), int(16 * 1024**3))
     use_gpu, reason = should_use_gpu_for_diarization(
         force_cpu=False,
-        min_free_vram_gb=3.0,
-        min_free_ratio=0.35,
     )
-    assert use_gpu is False
-    assert "ratio too low" in reason.lower()
+    assert use_gpu is True
+    assert "attempting diarization on gpu" in reason.lower()

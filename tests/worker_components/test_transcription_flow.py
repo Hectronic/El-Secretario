@@ -41,3 +41,45 @@ def test_merge_segments_text_with_diarization_labels():
     assert "[S2]" in merged
     assert "hola" in merged
     assert "mundo" in merged
+
+
+def test_merge_builds_diarization_index_once_and_selects_largest_overlap():
+    segments = [
+        SimpleNamespace(start=3.0, end=4.0, text="tercero"),
+        SimpleNamespace(start=1.0, end=3.0, text="primero"),
+        SimpleNamespace(start=4.0, end=5.0, text="sin voz"),
+        SimpleNamespace(start=0.0, end=1.0, text="inicio"),
+    ]
+    diarization = MagicMock()
+    diarization.itertracks.return_value = [
+        (SimpleNamespace(start=0.0, end=3.0), None, "S1"),
+        (SimpleNamespace(start=1.0, end=2.0), None, "S2"),
+        (SimpleNamespace(start=3.0, end=4.0), None, "S3"),
+    ]
+
+    merged = transcription_flow.merge_segments_text(segments, diarization)
+
+    assert diarization.itertracks.call_count == 1
+    assert merged.index("[S3]") < merged.index("[S1]")
+    assert "[S1] primero" in merged
+    assert "[S3] tercero" in merged
+    assert "[S1] inicio" in merged
+    assert "[S3] sin voz" not in merged
+
+
+def test_merge_handles_many_sequential_segments_without_reiterating_tracks():
+    count = 3000
+    segments = [
+        SimpleNamespace(start=float(index), end=float(index + 1), text="word")
+        for index in range(count)
+    ]
+    diarization = MagicMock()
+    diarization.itertracks.return_value = [
+        (SimpleNamespace(start=float(index), end=float(index + 1)), None, f"S{index}")
+        for index in range(count)
+    ]
+
+    merged = transcription_flow.merge_segments_text(segments, diarization)
+
+    assert diarization.itertracks.call_count == 1
+    assert merged.count("[S") == count

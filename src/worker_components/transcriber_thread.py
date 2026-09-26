@@ -108,13 +108,19 @@ def _log_transcription_runtime_context(
 def _should_use_gpu_for_diarization(
     *,
     force_cpu: bool,
-    min_free_vram_gb: float = 3.0,
-    min_free_ratio: float = 0.35,
 ):
     return worker_runtime.should_use_gpu_for_diarization(
         force_cpu=force_cpu,
-        min_free_vram_gb=min_free_vram_gb,
-        min_free_ratio=min_free_ratio,
+    )
+
+
+def _is_cuda_runtime_failure(error: Exception) -> bool:
+    out_of_memory = getattr(torch.cuda, "OutOfMemoryError", None)
+    if out_of_memory and isinstance(error, out_of_memory):
+        return True
+    message = str(error).lower()
+    return isinstance(error, RuntimeError) and any(
+        marker in message for marker in ("cuda", "cudnn", "cublas", "out of memory", "device-side")
     )
 
 
@@ -384,18 +390,103 @@ class TranscriberThread(QThread):
                         self.status_update.emit("Cancelled.")
                         self._emit_terminal(TerminalStatus.CANCELLED, user_message="Transcription cancelled.", retryable=True)
                         return
-                    pipeline = pipeline_cls.from_pretrained("pyannote/speaker-diarization-3.1", use_auth_token=self.hf_token)
-                    if pipeline:
-                        should_move_to_gpu, gpu_reason = _should_use_gpu_for_diarization(
-                            force_cpu=self.force_cpu,
+                    last_diarization_progress = [80]
+
+                    def report_diarization_progress(step_name, _artifact, **progress_info):
+                        total = progress_info.get("total")
+                        completed = progress_info.get("completed")
+                        if not total or completed is None:
+                            return
+                        current = min(89, 80 + int(9 * float(completed) / float(total)))
+                        if current > last_diarization_progress[0]:
+                            last_diarization_progress[0] = current
+                            self.progress.emit(current)
+                            self.status_update.emit(
+                                f"Diarizing: {step_name} ({int(completed)}/{int(total)})"
+                            )
+
+                    should_move_to_gpu, gpu_reason = _should_use_gpu_for_diarization(
+                        force_cpu=self.force_cpu,
+                    )
+
+                    def load_diarization_pipeline(use_gpu: bool):
+                        loaded = pipeline_cls.from_pretrained(
+                            "pyannote/speaker-diarization-3.1",
+                            use_auth_token=self.hf_token,
                         )
+                        if loaded:
+                            loaded = loaded.to(torch.device("cuda" if use_gpu else "cpu"))
+                        return loaded
+
+                    try:
+                        pipeline = load_diarization_pipeline(should_move_to_gpu)
+                    except Exception as gpu_load_error:
+                        if not should_move_to_gpu or not _is_cuda_runtime_failure(gpu_load_error):
+                            raise
+                        logging.warning("Could not load pyannote on CUDA; retrying on CPU: %s", gpu_load_error)
+                        self.status_update.emit("GPU diarization could not start; retrying on CPU...")
+                        try:
+                            torch.cuda.empty_cache()
+                        except Exception:
+                            pass
+                        pipeline = load_diarization_pipeline(False)
+                        should_move_to_gpu = False
+                        gpu_reason = f"CUDA initialization failed; CPU fallback: {gpu_load_error}"
+                    if pipeline:
+                        logging.info(
+                            "Pyannote pipeline device=%s. Reason: %s",
+                            "cuda" if should_move_to_gpu else "cpu",
+                            gpu_reason,
+                        )
+                        free_vram_gb = None
                         if should_move_to_gpu:
-                            pipeline = pipeline.to(torch.device("cuda"))
-                            logging.info("Pyannote pipeline moved to GPU.")
-                        else:
-                            logging.info("Pyannote pipeline kept on CPU. Reason: %s", gpu_reason)
-                        diarization = pipeline(self.audio_path)
-                        logging.info("Diarization completed successfully.")
+                            try:
+                                free_bytes, _total_bytes = torch.cuda.mem_get_info()
+                                free_vram_gb = free_bytes / (1024 ** 3)
+                            except Exception as memory_error:
+                                logging.warning("Could not read free VRAM for pyannote batch sizing: %s", memory_error)
+                        segmentation_batch, embedding_batch = worker_runtime.diarization_batch_sizes(
+                            use_gpu=should_move_to_gpu,
+                            free_vram_gb=free_vram_gb,
+                        )
+                        try:
+                            pipeline.segmentation_batch_size = segmentation_batch
+                            pipeline.embedding_batch_size = embedding_batch
+                        except Exception as batch_error:
+                            logging.warning("Could not configure pyannote inference batches: %s", batch_error)
+                        logging.info(
+                            "Pyannote inference batches: segmentation=%s embedding=%s free_vram_gb=%s",
+                            segmentation_batch,
+                            embedding_batch,
+                            f"{free_vram_gb:.2f}" if free_vram_gb is not None else "unknown",
+                        )
+
+                    diarization_started_at = time.time()
+                    try:
+                        diarization = pipeline(self.audio_path, hook=report_diarization_progress)
+                    except Exception as gpu_error:
+                        if not should_move_to_gpu or not _is_cuda_runtime_failure(gpu_error):
+                            raise
+                        logging.warning(
+                            "CUDA diarization failed; retrying pyannote on CPU: %s",
+                            gpu_error,
+                            exc_info=True,
+                        )
+                        self.status_update.emit("GPU diarization failed; retrying on CPU...")
+                        del pipeline
+                        try:
+                            torch.cuda.empty_cache()
+                        except Exception:
+                            pass
+                        pipeline = load_diarization_pipeline(False)
+                        if pipeline:
+                            pipeline.segmentation_batch_size = 1
+                            pipeline.embedding_batch_size = 1
+                            diarization = pipeline(self.audio_path, hook=report_diarization_progress)
+                    logging.info(
+                        "Diarization completed successfully in %.2fs.",
+                        time.time() - diarization_started_at,
+                    )
                 except Exception as e:
                     logging.error(f"Diarization failed: {e}", exc_info=True)
             elif self.enable_diarization and self.hf_token and not pipeline_cls:

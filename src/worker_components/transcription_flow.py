@@ -12,6 +12,7 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
+from bisect import bisect_left
 from typing import Any
 
 
@@ -24,29 +25,55 @@ def compute_segment_progress(segment_end: float, total_duration: float, enable_d
     return min(progress, 100)
 
 
-def _speaker_label_for_segment(segment_start: float, segment_end: float, diarization: Any) -> str:
-    speakers = []
-    for turn, _, speaker in diarization.itertracks(yield_label=True):
-        overlap_start = max(segment_start, turn.start)
-        overlap_end = min(segment_end, turn.end)
-        overlap_duration = max(0, overlap_end - overlap_start)
-        if overlap_duration > 0:
-            speakers.append((speaker, overlap_duration))
+class _DiarizationIntervalIndex:
+    """Index diarization turns so transcript segments only inspect overlaps."""
 
-    if not speakers:
-        return ""
+    def __init__(self, diarization: Any):
+        turns = []
+        for order, (turn, _, speaker) in enumerate(diarization.itertracks(yield_label=True)):
+            start, end = float(turn.start), float(turn.end)
+            if end > start:
+                turns.append((start, end, speaker, order))
 
-    speakers.sort(key=lambda x: x[1], reverse=True)
-    best_speaker = speakers[0][0]
-    return f"\n\n[{best_speaker}] "
+        turns.sort(key=lambda item: (item[0], item[3]))
+        self.turns = turns
+        self.starts = [turn[0] for turn in turns]
+        self.prefix_max_ends = []
+        max_end = float("-inf")
+        for _start, end, _speaker, _order in turns:
+            max_end = max(max_end, end)
+            self.prefix_max_ends.append(max_end)
+
+    def label_for(self, segment_start: float, segment_end: float) -> str:
+        if segment_end <= segment_start or not self.turns:
+            return ""
+
+        # Only turns starting before the segment end can overlap it. Walking
+        # backwards lets prefix_max_ends skip whole regions that have already
+        # ended, instead of rescanning every diarization turn per segment.
+        index = bisect_left(self.starts, segment_end) - 1
+        best_speaker = None
+        best_duration = 0.0
+        best_order = float("inf")
+        while index >= 0 and self.prefix_max_ends[index] > segment_start:
+            turn_start, turn_end, speaker, order = self.turns[index]
+            overlap = min(segment_end, turn_end) - max(segment_start, turn_start)
+            if overlap > best_duration or (overlap == best_duration and overlap > 0 and order < best_order):
+                best_speaker = speaker
+                best_duration = overlap
+                best_order = order
+            index -= 1
+
+        return f"\n\n[{best_speaker}] " if best_speaker is not None else ""
 
 
 def merge_segments_text(whisper_segments: list[Any], diarization: Any) -> str:
     # Keep merge deterministic for easier assertions in unit tests.
     parts = []
+    interval_index = _DiarizationIntervalIndex(diarization) if diarization else None
     for segment in whisper_segments:
         speaker_label = ""
-        if diarization:
-            speaker_label = _speaker_label_for_segment(segment.start, segment.end, diarization)
+        if interval_index:
+            speaker_label = interval_index.label_for(segment.start, segment.end)
         parts.append(f"{speaker_label}{segment.text} ")
     return "".join(parts).strip()
