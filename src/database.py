@@ -15,6 +15,7 @@ from .persistence import (
     PersistenceBase,
     QueueJobsRepository,
     ProductivityRepository,
+    RecurringMeetingsRepository,
     RAGIndexRepository,
     RecordsRepository,
     SchemaManager,
@@ -36,6 +37,7 @@ class DBManager(PersistenceBase):
         "rag_index": RAGIndexRepository,
         "queue_jobs": QueueJobsRepository,
         "productivity": ProductivityRepository,
+        "meetings": RecurringMeetingsRepository,
     }
 
     def __init__(self, db_name: str = "transcriptions.db"):

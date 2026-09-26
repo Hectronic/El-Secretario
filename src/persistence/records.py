@@ -16,6 +16,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import re
 from datetime import datetime
 from typing import Any, Dict, List, Optional
@@ -25,15 +26,41 @@ from typing import Any, Dict, List, Optional
 from .base import RepositoryBase
 
 class RecordsRepository(RepositoryBase):
-    def save(self, filename: str, text: str, duration: float, title: Optional[str] = None, is_diarized: bool = False, transcription_model: Optional[str] = None, type: str = 'recording', recording_notes: Optional[str] = None) -> int:
+    def save(self, filename: str, text: str, duration: float, title: Optional[str] = None, is_diarized: bool = False, transcription_model: Optional[str] = None, type: str = 'recording', recording_notes: Optional[str] = None, meeting_occurrence_id: Optional[int] = None, meeting_tags: Optional[str] = None) -> int:
         """Save a new record (recording or note)."""
         with self.get_connection() as conn:
             cursor = conn.cursor()
             created_at = datetime.now().isoformat(sep=' ', timespec='seconds')
             cursor.execute('''
-                INSERT INTO records (created_at, filename, duration, transcription, recording_notes, title, is_diarized, transcription_model, type)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-            ''', (created_at, filename, duration, text, recording_notes, title, 1 if is_diarized else 0, transcription_model, type))
+                INSERT INTO records (created_at, filename, duration, transcription, recording_notes, title, is_diarized, transcription_model, type, meeting_occurrence_id)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ''', (created_at, filename, duration, text, recording_notes, title, 1 if is_diarized else 0, transcription_model, type, meeting_occurrence_id))
+            if meeting_occurrence_id is not None:
+                occurrence = conn.execute(
+                    "SELECT state,recording_id,recurring_meeting_id FROM meeting_occurrences WHERE id=?",
+                    (int(meeting_occurrence_id),),
+                ).fetchone()
+                if occurrence is None or occurrence["state"] != "started" or occurrence["recording_id"] is not None:
+                    raise ValueError("Meeting occurrence is not available to link to this recording")
+                tags_snapshot = list(dict.fromkeys(
+                    tag.strip() for tag in str(meeting_tags or "").split(",") if tag.strip()
+                ))
+                conn.execute(
+                    "UPDATE meeting_occurrences SET state='completed',recording_id=?,title_snapshot=?,tags_snapshot=?,updated_at=? WHERE id=?",
+                    (int(cursor.lastrowid), title or "", json.dumps(tags_snapshot, ensure_ascii=False),
+                     created_at, int(meeting_occurrence_id)),
+                )
+                event = conn.execute(
+                    "SELECT metadata FROM timeline_events WHERE event_type='meeting_occurrence' AND source_id=?",
+                    (int(meeting_occurrence_id),),
+                ).fetchone()
+                metadata = json.loads(event["metadata"] or "{}") if event else {}
+                metadata.update({"state": "completed", "recording_id": int(cursor.lastrowid)})
+                conn.execute(
+                    "UPDATE timeline_events SET title_snapshot=?,tags_snapshot=?,metadata=? WHERE event_type='meeting_occurrence' AND source_id=?",
+                    (title or "", json.dumps(tags_snapshot, ensure_ascii=False), json.dumps(metadata),
+                     int(meeting_occurrence_id)),
+                )
             conn.commit()
             return cursor.lastrowid
 

@@ -20,6 +20,7 @@ El Secretario es una herramienta inteligente de transcripción y organización d
 - **Libretas y Colecciones**: Organiza tus grabaciones en libretas y colecciones. Accede a ellas directamente desde la barra lateral.
 - **Vista de Calendario**: Explora tus grabaciones por fecha.
 - **Pomodoro y timeline**: Usa los botones laterales para medir sesiones de concentración, pausarlas o terminarlas antes, tomar notas de texto o audio con título y revisar la actividad por fecha y etiquetas. La sesión dura 25 minutos por defecto; los descansos corto y largo duran 5 y 15 minutos y se pueden ajustar en la pestaña Pomodoro. La transcripción de notas de audio es opcional y utiliza el backend configurado.
+- **Reuniones recurrentes**: Guarda plantillas locales diarias, semanales o mensuales con zona horaria, recordatorios, título/etiquetas, duración y vista por fecha. Cada aviso permite iniciar una grabación preparada, posponer, descartar o abrir detalles; el audio solo comienza al elegir iniciar. No hay sincronización con calendarios externos ni recordatorios en segundo plano cuando la aplicación está cerrada.
 - **Herramientas Unificadas**: Limpieza de almacenamiento, procesamiento por lotes y exportación/importación de datos en una sola pestaña.
 - **Tema Personalizable**: Soporte para temas Claro, Oscuro y del Sistema.
 
