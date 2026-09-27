@@ -41,6 +41,7 @@ class ChatConversationRuntime:
         self._provider_validator = provider_validator or validate_ai_provider_config
         self._settings_factory = settings_factory or QSettings
         self.thread = None
+        self._cancelled = False
 
     def start(self, query, context_text, history, on_finished, on_error, on_started=None):
         settings = self._settings_factory("Hectronic", "Secretario")
@@ -51,15 +52,32 @@ class ChatConversationRuntime:
         if self.thread and self.thread.isRunning():
             return ChatStartResult(started=False)
 
+        self._cancelled = False
         self.thread = self._thread_factory("", query, context_text, history)
-        self.thread.finished.connect(on_finished)
-        self.thread.error.connect(on_error)
+        self.thread.finished.connect(lambda response: None if self._cancelled else on_finished(response))
+        self.thread.error.connect(lambda error: None if self._cancelled else on_error(error))
         self.thread.finished.connect(self._clear_thread)
         self.thread.error.connect(self._clear_thread)
         if on_started:
             on_started()
         self.thread.start()
         return ChatStartResult(started=True)
+
+    def cancel(self):
+        """Request cooperative worker interruption and suppress its late result."""
+        thread = self.thread
+        if not thread or not thread.isRunning():
+            return False
+        self._cancelled = True
+        try:
+            cancel_worker = getattr(thread, "cancel", None)
+            if callable(cancel_worker):
+                cancel_worker()
+            thread.requestInterruption()
+            thread.quit()
+        except Exception:
+            return False
+        return True
 
     def _clear_thread(self, *_args):
         thread = self.thread

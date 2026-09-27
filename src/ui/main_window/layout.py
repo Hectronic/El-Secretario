@@ -293,6 +293,18 @@ def build_main_window_layout(window):
         window.sessions_list.itemClicked.connect(window.on_chat_session_clicked)
         window.sessions_list.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         window.sessions_list.customContextMenuRequested.connect(window.show_chat_sidebar_context_menu)
+        window.chat_session_search = QLineEdit()
+        window.chat_session_search.setPlaceholderText("Buscar chats…")
+        window.chat_session_search.setAccessibleName("Search saved chat sessions")
+        window.chat_session_search.textChanged.connect(window.load_chat_sessions)
+        window.chat_session_search_feedback = QLabel()
+        window.chat_session_search_feedback.setAccessibleName("Chat session search status")
+        window.chat_session_search_feedback.setWordWrap(True)
+        window.chat_session_search_top = QWidget()
+        session_search_layout = QVBoxLayout(window.chat_session_search_top)
+        session_search_layout.setContentsMargins(0, 0, 0, 0)
+        session_search_layout.addWidget(window.chat_session_search)
+        session_search_layout.addWidget(window.chat_session_search_feedback)
 
         window.new_chat_btn = QToolButton()
         window.new_chat_btn.setText("+")
@@ -319,7 +331,7 @@ def build_main_window_layout(window):
         chats_header_layout.addWidget(window.new_chat_btn)
         chats_header_layout.addWidget(window.open_chat_history_btn)
 
-        chat_section = create_section("chats", "💬 Chat History", window.sessions_list, header_actions=window.chats_header_actions)
+        chat_section = create_section("chats", "💬 Chat History", window.sessions_list, top_widget=window.chat_session_search_top, header_actions=window.chats_header_actions)
         right_layout.addWidget(chat_section)
         window._right_sidebar_sections["chats"]["index"] = right_layout.indexOf(chat_section)
 

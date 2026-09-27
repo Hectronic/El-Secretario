@@ -113,3 +113,17 @@ def test_runtime_prevents_parallel_workers_and_cleans_up_active_worker():
     assert first_thread.waited_for == 3000
     assert first_thread.deleted is True
     assert runtime.thread is None
+
+
+def test_cancel_requests_interruption_and_suppresses_late_provider_result():
+    thread = _FakeThread()
+    runtime = _runtime(thread_factory=lambda *args: thread)
+    received = []
+    runtime.start("Question", "Context", [], received.append, received.append)
+
+    assert runtime.cancel() is True
+    thread.finished.emit("late answer")
+
+    assert thread.interruption_requested is True
+    assert thread.quit_called is True
+    assert received == []

@@ -31,6 +31,22 @@ class OllamaProvider(AIProvider):
             raise RuntimeError(str(error)) from error
 
     def chat(self, history: List[Dict[str, str]], prompt: str, context: str = "") -> str:
+        messages = self._chat_messages(history, prompt, context)
+        return self.client.chat(model=self.model_name, messages=messages)["message"]["content"]
+
+    async def chat_async(self, history: List[Dict[str, str]], prompt: str, context: str = "") -> str:
+        """Use Ollama's async HTTP client so task cancellation closes the request."""
+        import ollama
+
+        client = ollama.AsyncClient(host=self.host)
+        try:
+            response = await client.chat(model=self.model_name, messages=self._chat_messages(history, prompt, context))
+            return response["message"]["content"]
+        finally:
+            await client._client.aclose()
+
+    @staticmethod
+    def _chat_messages(history, prompt, context):
         system_message = """You are a helpful assistant that answers questions based on the user's notes and transcriptions.
 Use the provided context to answer the question. If the answer is not in the context, say you don't know based on the notes, but try to be as helpful as possible."""
         if context:
@@ -41,7 +57,7 @@ Use the provided context to answer the question. If the answer is not in the con
             for message in history
         )
         messages.append({"role": "user", "content": prompt})
-        return self.client.chat(model=self.model_name, messages=messages)["message"]["content"]
+        return messages
 
 
 def get_available_ollama_models(host: str = DEFAULT_OLLAMA_HOST) -> List[str]:

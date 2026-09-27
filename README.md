@@ -121,6 +121,11 @@ To fully utilize the features of El Secretario, you will need to configure the A
 2.  **Start Recording**: Click the microphone icon to start recording.
 3.  **Import Audio**: Use the import button to add existing audio files.
 4.  **Chat**: Open a recording or a collection to start chatting with your data.
+    The chat shows selected context before sending. Use **Enter** to send and
+    **Shift+Enter** to add a line; starter suggestions only fill the composer.
+    Pending requests can be cancelled, failed requests can be retried or edited,
+    and completed answers include copy/follow-up actions and available sources.
+    Search saved chats locally by title or message from the chat-history sidebar.
 5.  **Edit Recordings**: Right-click a recording in the history list or on an open recording tab and choose the duplicate editor option. Use the **Audio Edit** controls to mark a start and end time, trim the clip, and let the app retranscribe the result.
 6.  **Active Chat Context Sidebar**: When a chat tab is active, the right app sidebar shows the same context panel you see inside the chat. It is expanded by default and disappears when you switch to another tab or close the chat.
 

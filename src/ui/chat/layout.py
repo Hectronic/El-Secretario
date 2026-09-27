@@ -2,10 +2,11 @@
 
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QColor, QCursor
-from PyQt6.QtWidgets import QFrame, QHBoxLayout, QLineEdit, QLabel, QPushButton, QSplitter, QTextEdit, QToolButton, QVBoxLayout, QWidget
+from PyQt6.QtWidgets import QFrame, QHBoxLayout, QLabel, QPushButton, QSplitter, QTextEdit, QToolButton, QVBoxLayout, QWidget
 
 from src.ui.context_manager_panel import ContextManagerPanel
 from src.ui.chat.theme_styles import build_chat_widget_theme
+from src.ui.chat.composer import ChatComposer
 
 
 def build_chat_layout(widget):
@@ -69,21 +70,67 @@ def build_chat_layout(widget):
     widget.display.setPlaceholderText("Pregunta cualquier cosa sobre tus notas...")
     chat_layout.addWidget(widget.display)
 
+    widget.starters_container = QWidget()
+    widget.starters_layout = QHBoxLayout(widget.starters_container)
+    widget.starters_layout.setContentsMargins(2, 2, 2, 2)
+    widget.starters_layout.setSpacing(4)
+    chat_layout.addWidget(widget.starters_container)
+
+    context_row = QWidget()
+    context_row_layout = QHBoxLayout(context_row)
+    context_row_layout.setContentsMargins(0, 0, 0, 0)
+    widget.context_summary = QLabel()
+    widget.context_summary.setWordWrap(True)
+    widget.context_summary.setObjectName("chatContextSummary")
+    widget.context_summary.setAccessibleName("Selected chat context")
+    context_row_layout.addWidget(widget.context_summary, 1)
+    widget.context_edit_btn = QPushButton("Editar contexto")
+    widget.context_edit_btn.setAccessibleName("Inspect or remove selected chat context")
+    widget.context_edit_btn.clicked.connect(widget.inspect_context)
+    context_row_layout.addWidget(widget.context_edit_btn)
+    chat_layout.addWidget(context_row)
+
     # Input Area
     input_layout = QHBoxLayout()
-    widget.input_field = QLineEdit()
-    widget.input_field.setPlaceholderText("Escribe tu pregunta aquí...")
+    widget.input_field = ChatComposer()
+    widget.input_field.setObjectName("chatComposer")
+    widget.input_field.setAccessibleName("Chat message")
+    widget.input_field.setPlaceholderText("Escribe tu pregunta aquí… (Enter envía, Shift+Enter añade una línea)")
+    widget.input_field.setTabChangesFocus(True)
+    widget.input_field.setFixedHeight(76)
     widget.input_field.returnPressed.connect(widget.send_message)
     input_layout.addWidget(widget.input_field)
 
     widget.send_btn = QPushButton("Enviar")
+    widget.send_btn.setAccessibleName("Send message")
     widget.send_btn.clicked.connect(widget.send_message)
     widget.send_btn.setProperty("class", "calendar-primary-btn")
     widget.send_btn.setCursor(Qt.CursorShape.PointingHandCursor)
     widget.send_btn.setFixedHeight(36)
     input_layout.addWidget(widget.send_btn)
 
+    widget.cancel_btn = QPushButton("Cancelar")
+    widget.cancel_btn.setAccessibleName("Cancel request")
+    widget.cancel_btn.clicked.connect(widget.cancel_request)
+    widget.cancel_btn.setVisible(False)
+    input_layout.addWidget(widget.cancel_btn)
+
     chat_layout.addLayout(input_layout)
+
+    widget.response_actions = QWidget()
+    widget.response_actions_layout = QVBoxLayout(widget.response_actions)
+    widget.response_actions_layout.setContentsMargins(2, 2, 2, 2)
+    chat_layout.addWidget(widget.response_actions)
+
+    widget.source_list = QWidget()
+    widget.source_layout = QVBoxLayout(widget.source_list)
+    widget.source_layout.setContentsMargins(2, 2, 2, 2)
+    chat_layout.addWidget(widget.source_list)
+
+    widget.status_label = QLabel()
+    widget.status_label.setAccessibleName("Chat status")
+    widget.status_label.setVisible(False)
+    chat_layout.addWidget(widget.status_label)
     
     widget.splitter.addWidget(chat_container)
     
@@ -171,7 +218,7 @@ def apply_chat_theme(widget):
         f"body {{ color: {display_text}; }} a {{ color: #64b5f6; }}"
     )
     widget.input_field.setStyleSheet(f"""
-        QLineEdit {{
+        QTextEdit {{
             background-color: {input_bg};
             color: {display_text};
             border: 1px solid {input_border};
@@ -180,4 +227,5 @@ def apply_chat_theme(widget):
             font-size: 13px;
         }}
     """)
-
+    widget.context_summary.setStyleSheet(f"color: {display_text}; padding: 3px 6px;")
+    widget.status_label.setStyleSheet(f"color: {display_text}; padding: 2px 6px;")

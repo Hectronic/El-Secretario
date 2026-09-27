@@ -93,6 +93,11 @@ Para utilizar plenamente las funciones de El Secretario, deberás configurar los
 2.  **Iniciar Grabación**: Haz clic en el icono del micrófono para comenzar a grabar.
 3.  **Importar Audio**: Usa el botón de importar para añadir archivos de audio existentes.
 4.  **Chat**: Abre una grabación o una colección para comenzar a chatear con tus datos.
+    El chat muestra el contexto seleccionado antes de enviar. Usa **Enter** para
+    enviar y **Mayús+Enter** para añadir una línea; las sugerencias solo rellenan
+    el editor. Puedes cancelar peticiones, reintentar o editar las fallidas, y
+    copiar respuestas, hacer preguntas de seguimiento y abrir las fuentes disponibles.
+    Busca sesiones guardadas por título o contenido desde la barra lateral.
 5.  **Editar Grabaciones**: Haz clic derecho sobre una grabación en el historial o en una pestaña abierta y elige la opción para duplicar el editor. Usa los controles de **Audio Edit** para marcar inicio y fin, recortar el clip y dejar que la app lo vuelva a transcribir.
 6.  **Barra Lateral de Contexto Activo**: Cuando una pestaña de chat está activa, la barra lateral derecha de la app muestra el mismo panel de contexto que ves dentro del chat. Se abre por defecto y desaparece al cambiar a otra pestaña o cerrar el chat.
 

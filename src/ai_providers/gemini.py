@@ -27,6 +27,23 @@ class GeminiProvider(AIProvider):
             raise RuntimeError(str(error)) from error
 
     def chat(self, history: List[Dict[str, str]], prompt: str, context: str = "") -> str:
+        response = self.client.models.generate_content(
+            model=self.model_name, contents=self._chat_prompt(history, prompt, context)
+        )
+        return response.text if response and hasattr(response, "text") else ""
+
+    async def chat_async(self, history: List[Dict[str, str]], prompt: str, context: str = "") -> str:
+        """Asynchronous equivalent used by the cancellable desktop chat worker."""
+        try:
+            response = await self.client.aio.models.generate_content(
+                model=self.model_name, contents=self._chat_prompt(history, prompt, context)
+            )
+            return response.text if response and hasattr(response, "text") else ""
+        finally:
+            await self.client.aio.aclose()
+
+    @staticmethod
+    def _chat_prompt(history, prompt, context):
         history_text = "".join(
             f"{'User' if message['role'] == 'user' else 'Assistant'}: {message['content']}\n"
             for message in history
@@ -45,5 +62,4 @@ class GeminiProvider(AIProvider):
 
         Assistant:
         """
-        response = self.client.models.generate_content(model=self.model_name, contents=full_prompt)
-        return response.text if response and hasattr(response, "text") else ""
+        return full_prompt

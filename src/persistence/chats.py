@@ -35,7 +35,7 @@ class ChatSessionsRepository(RepositoryBase):
         """Fetch all chat sessions ordered by date descending."""
         with self.get_connection() as conn:
             cursor = conn.cursor()
-            cursor.execute('SELECT * FROM chat_sessions ORDER BY created_at DESC')
+            cursor.execute('SELECT * FROM chat_sessions ORDER BY created_at DESC, id DESC')
             rows = cursor.fetchall()
             return [dict(row) for row in rows]
 
