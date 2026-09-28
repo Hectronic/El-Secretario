@@ -28,6 +28,7 @@ their implementation checklist here until delivery.
 - `036-chat-ux-workflows` — implemented and validated; built-in async provider cancellation and compatibility details are in feature notes
 - `037-settings-experience` — proposed
 - `038-tray-quick-actions` — proposed
+- `039-pomodoro-quick-start` — proposed; simpler timer UI plus unified timeline, search, and chat discovery layered on SPEC-034
 
 ## Roadmap relationship
 
@@ -61,3 +62,7 @@ recording-specific contracts are implemented.
   setting values and runtime semantics remain with their feature owners.
 - `038` owns tray menu actions and state presentation; capture, Pomodoro, and
   meeting operations are delegated to their existing or proposed feature owners.
+- `039` owns the simplified Pomodoro interaction and first-class discovery in
+  the single general activity timeline, search, and chat context. Timer
+  lifecycle and source persistence remain owned by `034`; no Pomodoro-only
+  timeline is introduced.
