@@ -1,8 +1,8 @@
 # SPEC-036: Useful And Intuitive Chat Workflows
 
-Status: Proposed
+Status: Implemented; validated
 Owner: Chat user experience
-Last updated: 2026-09-25
+Last updated: 2026-09-27
 
 ## Problem
 
@@ -138,3 +138,14 @@ and predictable rather than opaque.
 - Update README and README_ES chat descriptions and user-facing keyboard/help
   documentation when implementation begins.
 - Register implementation status in `specs/README.md`.
+
+## Implementation Notes
+
+- Gemini and Ollama chat use their asynchronous SDK clients inside the existing
+  Qt worker. Cancel cancels the in-flight async operation, closes its HTTP client,
+  suppresses completion, and restores the draft. Third-party providers that only
+  expose the legacy synchronous `chat` method remain supported but cannot be
+  interrupted while that synchronous call is running.
+- Source metadata is stored as optional fields on assistant messages. Older
+  session messages retain their original `{role, content}` shape and render an
+  honest no-provenance state.

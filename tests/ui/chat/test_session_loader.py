@@ -36,3 +36,18 @@ def test_load_chat_session_state_handles_invalid_json():
     assert loaded["session_id"] == 99
     assert loaded["messages"] == []
     assert loaded["contexts"] is None
+
+
+def test_load_chat_session_state_preserves_new_source_metadata_and_ignores_malformed_values():
+    session = {
+        "id": 7,
+        "messages": '[{"role":"assistant","content":"Answer","sources":[{"source_id":"2"}],"retrieval_degraded":true},{"role":"assistant","content":"Old","sources":null}]',
+    }
+
+    loaded = load_chat_session_state(session)
+
+    assert loaded["messages"][0]["sources"] == [{
+        "source_id": "2", "title": "Fuente 2", "excerpt": "", "role": "Fuente", "degraded": False,
+    }]
+    assert loaded["messages"][0]["retrieval_degraded"] is True
+    assert loaded["messages"][1] == {"role": "assistant", "content": "Old", "sources": [], "retrieval_degraded": False}

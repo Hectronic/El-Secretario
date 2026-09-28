@@ -34,3 +34,14 @@ def test_merge_inline_style_appends_existing_style():
     html = merge_inline_style("p", ' class="x" style="color:red;"', "font-weight:bold;")
     assert "color:red;" in html
     assert "font-weight:bold;" in html
+
+
+def test_markdown_failure_falls_back_to_escaped_plain_text(monkeypatch):
+    from src.ui.chat import message_renderer
+
+    monkeypatch.setattr(message_renderer.markdown, "markdown", lambda _text: (_ for _ in ()).throw(ValueError("bad")))
+
+    _header, body, _color = render_chat_message_html("Assistant", "<script>alert(1)</script>", False)
+
+    assert "&lt;script&gt;" in body
+    assert "<script>" not in body

@@ -17,8 +17,10 @@
 import logging
 
 
-def build_chat_context_text(db, notebook_db, rag, query, context_panel, forced_record_ids):
+def build_chat_context_text(db, notebook_db, rag, query, context_panel, forced_record_ids, *, return_sources=False):
     context_text_parts = []
+    source_results = []
+    retrieval_degraded = False
 
     notebook_ids = context_panel.get_active_notebooks()
     for nid in notebook_ids:
@@ -92,20 +94,25 @@ def build_chat_context_text(db, notebook_db, rag, query, context_panel, forced_r
         try:
             results = rag.search(query, n_results=5, ids=rag_ids)
             for r in results:
+                if not isinstance(r, dict):
+                    continue
+                source_results.append(r)
+                retrieval_degraded = retrieval_degraded or r.get("retrieval_mode") == "keyword_fallback"
                 mode_str = ""
                 if r.get("retrieval_mode") == "keyword_fallback":
                     mode_str = " (Búsqueda semántica fallida: degradado a palabras clave)"
                 context_text_parts.append(
-                    f"[Fragmento relevante{mode_str}: {r['metadata'].get('title', 'Desconocido')}]\n{r['text']}"
+                    f"[Fragmento relevante{mode_str}: {(r.get('metadata') or {}).get('title', 'Desconocido')}]\n{r.get('text') or ''}"
                 )
         except Exception:
             logging.exception("RAG search failed while building chat context")
+            retrieval_degraded = True
 
     context_text = "\n\n".join(context_text_parts)
     if not context_text:
         context_text = "No relevant context found."
 
-    return context_text
+    return (context_text, source_results, retrieval_degraded) if return_sources else context_text
 
 
 def build_chat_session_contexts(context_panel, forced_record_ids):

@@ -24,6 +24,12 @@ def load_chat_session_state(session):
         messages = json.loads(messages_raw)
     except Exception:
         messages = []
+    if not isinstance(messages, list):
+        messages = []
+    messages = [
+        _normalize_message(message)
+        for message in messages if isinstance(message, dict)
+    ]
 
     contexts = None
     context_data = session.get("context_data")
@@ -39,3 +45,24 @@ def load_chat_session_state(session):
         "title": session.get("name"),
         "session_id": session.get("id"),
     }
+
+
+def _normalize_message(message):
+    normalized = {
+        "role": message.get("role") if message.get("role") in ("user", "assistant") else "assistant",
+        "content": str(message.get("content") or ""),
+    }
+    if message.get("role") == "assistant" and ("sources" in message or "retrieval_degraded" in message):
+        normalized["sources"] = [
+            {
+                "source_id": str(source.get("source_id")),
+                "title": str(source.get("title") or f"Fuente {source.get('source_id')}"),
+                "excerpt": str(source.get("excerpt") or "")[:600],
+                "role": str(source.get("role") or "Fuente"),
+                "degraded": bool(source.get("degraded")),
+            }
+            for source in (message.get("sources") or [])
+            if isinstance(source, dict) and source.get("source_id") is not None
+        ]
+        normalized["retrieval_degraded"] = bool(message.get("retrieval_degraded"))
+    return normalized

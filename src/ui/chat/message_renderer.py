@@ -28,7 +28,12 @@ def render_chat_message_html(role, text, is_dark):
 
     text_color = "#ffffff" if is_dark else "#000000"
     font_size = "13px"
-    html_content = markdown.markdown(text)
+    try:
+        html_content = markdown.markdown(str(text or ""))
+    except Exception:
+        # Rendering is presentation-only; malformed legacy content remains readable.
+        import html
+        html_content = "<p>" + html.escape(str(text or "")) + "</p>"
     html_content = apply_message_html_theme(html_content, text_color, is_dark)
 
     header_html = (

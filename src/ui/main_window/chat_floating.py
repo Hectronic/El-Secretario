@@ -43,6 +43,10 @@ class FloatingChatCoordinator:
         chat_widget.restore_requested.connect(self.restore_floating_chat)
         chat_widget.close_requested.connect(self.close_chat_widget)
         chat_widget.title_changed.connect(self.sync_chat_widget_title)
+        source_requested = getattr(chat_widget, "source_requested", None)
+        open_recording_tab = getattr(self.window, "open_recording_tab", None)
+        if source_requested is not None and callable(open_recording_tab):
+            source_requested.connect(open_recording_tab)
         chat_widget.context_panel.context_changed.connect(
             lambda w=chat_widget: self.window._sync_chat_context_section(w)
         )

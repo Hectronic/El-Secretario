@@ -24,4 +24,7 @@ def apply_loaded_chat_session(widget, loaded_session):
     for msg in widget.chat_history:
         role_name = "User" if msg["role"] == "user" else "Assistant"
         widget.append_to_chat(role_name, msg["content"])
+        if role_name == "Assistant" and hasattr(widget, "_show_response_actions"):
+            widget._show_response_actions(msg["content"])
+            widget._show_sources(msg.get("sources", []), msg.get("retrieval_degraded", False))
     widget._refresh_title(loaded_session["title"])

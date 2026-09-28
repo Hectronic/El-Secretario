@@ -5,6 +5,7 @@ from PyQt6.QtWidgets import QListWidgetItem
 
 from src.ui.chat_history_widget import ChatHistoryWidget
 from src.ui.component_widgets.sidebar import SidebarChatSessionWidget
+from src.ui.chat.workflows import filter_chat_sessions
 
 
 class SidebarSessionsCoordinator:
@@ -15,7 +16,9 @@ class SidebarSessionsCoordinator:
 
     def load_chat_sessions(self):
         self.window.sessions_list.clear()
-        sessions = self.window.db.fetch_chat_sessions()
+        search = getattr(self.window, "chat_session_search", None)
+        query = search.text() if search is not None else ""
+        sessions = filter_chat_sessions(self.window.db.fetch_chat_sessions(), query)
         for session in sessions:
             item = QListWidgetItem()
             item.setData(Qt.ItemDataRole.UserRole, session)
@@ -28,3 +31,9 @@ class SidebarSessionsCoordinator:
             widget = self.window.central_tabs.widget(index)
             if isinstance(widget, ChatHistoryWidget):
                 widget.set_sessions(sessions)
+        feedback = getattr(self.window, "chat_session_search_feedback", None)
+        if feedback is not None:
+            feedback.setText(
+                "No hay conversaciones guardadas." if not sessions and not query.strip()
+                else ("No hay conversaciones que coincidan." if not sessions else f"{len(sessions)} conversaciones")
+            )
