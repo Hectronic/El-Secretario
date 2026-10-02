@@ -6,21 +6,25 @@ from src.ui.chat.header_state import build_chat_header_state
 
 
 def apply_context_panel_visibility(widget):
-    visible = widget.display_mode != "floating" and not widget.floating_minimized
+    visible = (
+        widget.display_mode == "floating"
+        and not widget.floating_minimized
+        and widget.floating_context_editor_open
+    )
     widget.context_panel.setVisible(visible)
     if not visible:
-        widget.context_panel.setMinimumWidth(0); widget.context_panel.setMaximumWidth(16777215); return
-    widget.context_panel.set_collapsed(widget.context_panel_collapsed)
-    if widget.context_panel_collapsed:
-        width = widget.context_panel.COLLAPSED_WIDTH
-        widget.context_panel.setMinimumWidth(width); widget.context_panel.setMaximumWidth(width)
-        widget.splitter.setSizes([max(1, widget.width() - width), width]); return
+        widget.context_panel.setMinimumWidth(0)
+        widget.context_panel.setMaximumWidth(16777215)
+        widget.splitter.setSizes([max(1, widget.width()), 0])
+        return
     widget.context_panel.setMinimumWidth(280); widget.context_panel.setMaximumWidth(16777215)
-    widget.splitter.setSizes(widget._context_panel_saved_sizes if len(widget._context_panel_saved_sizes) == 2 else [900, 350])
+    widget.splitter.setSizes([max(1, widget.width() - 300), 300])
 
 
 def apply_display_mode(widget, mode):
     widget.display_mode = "floating" if mode == "floating" else "tab"
+    if widget.display_mode != "floating" or widget.floating_minimized:
+        widget.floating_context_editor_open = False
     state = build_chat_header_state(widget.display_mode, widget.floating_minimized)
     widget.layout().setContentsMargins(*([state["layout_margin"]] * 4))
     widget.header.setVisible(state["header_visible"])
@@ -32,6 +36,5 @@ def apply_display_mode(widget, mode):
     apply_context_panel_visibility(widget)
     if widget.display_mode == "floating":
         widget.splitter.setSizes([740, 0])
-    elif widget.context_panel_collapsed:
-        width = widget.context_panel.COLLAPSED_WIDTH
-        widget.splitter.setSizes([max(1, widget.width() - width), width])
+    else:
+        widget.splitter.setSizes([max(1, widget.width()), 0])

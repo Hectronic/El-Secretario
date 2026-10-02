@@ -17,7 +17,7 @@ El Secretario ye una ferramienta intelixente de trescripción y organización d'
 - La diarización d'audios llargos amenorga les ventanes repetíes ya indexa los turnos una sola vez; pyannote usa lotes CUDA adaptativos si CUDA ta disponible y `force_cpu` ta desactiváu, y reintenta en CPU namás tres un fallu d'execución de CUDA.
 - **Gueta Intelixente (RAG)**: Usa Xeneración Aumentada por Recuperación (RAG) pa charrar coles tos grabaciones y alcontrar información específica. Soporta Google Gemini y **Ollama** pa execución llocal.
 - **Ventanes de Chat Flexibles**: Los chats pueden quedar como pestañes normales, movese a la barra flotante y minimizase en fiches compactes pa restauralos rápido.
-- **Contéutu Activo del Chat na Barra Llateral**: Cuando una pestaña de chat ta activa, la barra llateral derecha de la app amuesa una copia desplegable y abierta por defeutu del contéutu del chat, y anúlase al cambiar de pestaña o zarrar el chat.
+- **Contéutu del Chat na Barra Llateral**: Cuando una pestaña de chat ta activa, edita los sos rexistros, feches, etiquetes y cuadernos dende la barra llateral derecha. **Editar contéutu** abre esa seición; al cambiar de chat cárgase'l so propiu contéutu. Los chats flotantes abren un editor temporal.
 - **Cuadernos y Coleiciones**: Organiza les tos grabaciones en cuadernos y coleiciones. Accede a elles direutamente dende la barra llateral.
 - **Vista de Calendariu**: Esplora les tos grabaciones per fecha.
 - **Pomodoro y llinia temporal**: Usa los botones llaterales pa midir sesiones de concentración, pausales o terminales primero d'hora, tomar notes de testu o audio con títulu y revisar l'actividá por fecha y etiquetes. La sesión dura 25 minutos por defeutu; les pauses curtia y llarga duren 5 y 15 minutos y pueden axustase na pestaña Pomodoro. La trescripción de notes d'audio ye opcional y usa'l backend configuráu.
@@ -93,12 +93,11 @@ Pa utilizar dafechu les funciones d'El Secretario, deberás configurar los token
 2.  **Entamar Grabación**: Fai clic nel iconu del micrófonu pa entamar a grabar.
 3.  **Importar Audio**: Usa'l botón d'importar p'añader archivos d'audio esistentes.
 4.  **Chat**: Abre una grabación o una coleición pa entamar a charrar colos tos datos.
+    Les fontes apaecen xunto a la so respuesta y queden zarraes hasta que les abras.
 5.  **Editar Grabaciones**: Fai clic derechu sobre una grabación nel historial o nuna pestaña abierta y escueye la opción pa duplicar l'editor. Usa los controles d'**Audio Edit** pa marcar entamu y fin, recortar el clip y dexar que l'aplicación lo vuelva a trescribir.
-6.  **Barra Llateral de Contéutu Activu**: Cuando una pestaña de chat ta activa, la barra llateral derecha de la app amuesa'l mesmu panel de contéutu que ves dientro del chat. Ábrese por defeutu y desapaez al camudar a otra pestaña o zarrar el chat.
+6.  **Contéutu del Chat na Barra Llateral**: Cuando una pestaña de chat ta activa, edita'l so contéutu na barra llateral derecha. **Editar contéutu** abre esa seición; al cambiar de pestaña amuésase'l contéutu del chat escoyíu. Los chats flotantes abren un editor temporal.
 
 **Nota:** l'editor actual usa marcadores de tiempu (`entamu`/`fin`) y botones pa fixar el puntu de reproducción. Entá nun ufierta una selección por waveform nin una llinia de tiempu arrastrable.
-
-**Nota:** esta barra llateral ye una copia de solo llectura del contéutu del chat activu. Nun queda visible pa chats inactivos nin pa ventanes flotantes/minimizaes.
 
 ## Executar Pruebes
 

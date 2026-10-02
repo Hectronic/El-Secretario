@@ -182,53 +182,34 @@ class TestChatWidgetContext(unittest.TestCase):
             panel.deleteLater()
             self.app.processEvents()
 
-    def test_context_panel_toggle_button_collapses_and_restores(self):
+    def test_tabbed_chat_hides_its_duplicate_context_sidebar(self):
         widget = ChatWidget(self.rag)
         try:
-            self.assertFalse(widget.context_panel.is_collapsed())
-            self.assertFalse(widget.context_panel.header_label.isHidden())
-            self.assertFalse(widget.context_panel.content_widget.isHidden())
-            self.assertEqual(widget.context_panel.toggle_btn.text(), "⟩")
-
-            widget.context_panel.toggle_btn.click()
-
-            self.assertTrue(widget.context_panel.is_collapsed())
-            self.assertTrue(widget.context_panel.header_label.isHidden())
-            self.assertTrue(widget.context_panel.content_widget.isHidden())
-            self.assertEqual(widget.context_panel.toggle_btn.text(), "⟨")
-            self.assertEqual(widget.context_panel.minimumWidth(), widget.context_panel.COLLAPSED_WIDTH)
-            self.assertEqual(widget.context_panel.maximumWidth(), widget.context_panel.COLLAPSED_WIDTH)
-
-            widget.context_panel.toggle_btn.click()
-
-            self.assertFalse(widget.context_panel.is_collapsed())
-            self.assertFalse(widget.context_panel.header_label.isHidden())
-            self.assertFalse(widget.context_panel.content_widget.isHidden())
-            self.assertEqual(widget.context_panel.toggle_btn.text(), "⟩")
-            self.assertEqual(widget.context_panel.minimumWidth(), 280)
-            self.assertGreater(widget.context_panel.maximumWidth(), 280)
+            self.assertTrue(widget.context_panel.isHidden())
+            requests = []
+            widget.context_edit_requested.connect(requests.append)
+            widget.inspect_context()
+            self.assertEqual(requests, [widget])
+            self.assertTrue(widget.context_panel.isHidden())
         finally:
             widget.deleteLater()
 
-    def test_context_panel_restores_saved_splitter_sizes_after_manual_resize(self):
+    def test_floating_chat_opens_context_editor_temporarily(self):
         widget = ChatWidget(self.rag)
         try:
-            widget.splitter.setSizes([640, 360])
-            self.app.processEvents()
-            saved_sizes = widget.splitter.sizes()
+            widget.set_display_mode("floating")
+            self.assertTrue(widget.context_panel.isHidden())
 
-            widget.collapse_context_panel()
-            self.assertTrue(widget.context_panel.is_collapsed())
-            self.assertEqual(widget._context_panel_saved_sizes, saved_sizes)
-            self.assertEqual(widget.context_panel.minimumWidth(), widget.context_panel.COLLAPSED_WIDTH)
-            self.assertEqual(widget.context_panel.maximumWidth(), widget.context_panel.COLLAPSED_WIDTH)
+            widget.toggle_context_panel()
+            self.assertFalse(widget.context_panel.isHidden())
 
-            widget.expand_context_panel()
-            self.assertFalse(widget.context_panel.is_collapsed())
-            self.assertEqual(widget._context_panel_saved_sizes, saved_sizes)
-            self.assertEqual(widget.context_panel.minimumWidth(), 280)
-            self.assertGreater(widget.context_panel.maximumWidth(), 280)
-            self.assertEqual(widget.splitter.sizes(), saved_sizes)
+            widget.toggle_context_panel()
+            self.assertTrue(widget.context_panel.isHidden())
+
+            widget.toggle_context_panel()
+            widget.set_floating_minimized(True)
+            self.assertTrue(widget.context_panel.isHidden())
+            self.assertFalse(widget.floating_context_editor_open)
         finally:
             widget.deleteLater()
 
@@ -249,20 +230,21 @@ class TestChatWidgetContext(unittest.TestCase):
             self.assertFalse(widget.context_panel.is_collapsed())
 
             widget.toggle_context_panel()
-            self.assertFalse(widget.context_panel.is_collapsed())
+            self.assertTrue(widget.context_panel.isHidden())
 
             widget.expand_context_panel()
             self.assertFalse(widget.context_panel.is_collapsed())
         finally:
             widget.deleteLater()
 
-    def test_display_mode_updates_header_visibility_without_touching_context_panel_state(self):
+    def test_display_mode_updates_header_and_keeps_tabbed_context_in_main_sidebar(self):
         widget = ChatWidget(self.rag)
         try:
             widget.set_display_mode("floating")
             self.assertFalse(widget.header.isHidden())
             self.assertEqual(widget.mode_btn.text(), "⇱")
             self.assertFalse(widget.minimize_btn.isHidden())
+            self.assertTrue(widget.context_panel.isHidden())
 
             widget.set_display_mode("tab")
             self.assertTrue(widget.header.isHidden())

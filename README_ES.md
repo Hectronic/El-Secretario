@@ -17,7 +17,7 @@ El Secretario es una herramienta inteligente de transcripción y organización d
 - La diarización de audios largos reduce las ventanas repetidas e indexa los turnos una sola vez; pyannote usa lotes CUDA adaptativos si CUDA está disponible y `force_cpu` está desactivado, y reintenta en CPU solo tras un fallo de ejecución de CUDA.
 - **Búsqueda Inteligente (RAG)**: Utiliza Generación Aumentada por Recuperación (RAG) para chatear con tus grabaciones y encontrar información específica. Soporta Google Gemini y **Ollama** para ejecución local.
 - **Ventanas de Chat Flexibles**: Los chats pueden quedarse como pestañas normales, moverse a la barra flotante y minimizarse en fichas compactas para restaurarlos rápido.
-- **Contexto Activo del Chat en la Barra Lateral**: Cuando una pestaña de chat está activa, la barra lateral derecha de la app muestra una copia desplegable y abierta por defecto del contexto del chat, y la oculta al cambiar de pestaña o cerrar el chat.
+- **Contexto del chat en la barra lateral**: Cuando una pestaña de chat está activa, edita sus registros, fechas, etiquetas y libretas desde la barra lateral derecha. **Editar contexto** abre esa sección; al cambiar de chat se carga su propio contexto. Los chats flotantes abren un editor temporal.
 - **Libretas y Colecciones**: Organiza tus grabaciones en libretas y colecciones. Accede a ellas directamente desde la barra lateral.
 - **Vista de Calendario**: Explora tus grabaciones por fecha.
 - **Pomodoro y timeline**: Usa los botones laterales para medir sesiones de concentración, pausarlas o terminarlas antes, tomar notas de texto o audio con título y revisar la actividad por fecha y etiquetas. La sesión dura 25 minutos por defecto; los descansos corto y largo duran 5 y 15 minutos y se pueden ajustar en la pestaña Pomodoro. La transcripción de notas de audio es opcional y utiliza el backend configurado.
@@ -96,14 +96,13 @@ Para utilizar plenamente las funciones de El Secretario, deberás configurar los
     El chat muestra el contexto seleccionado antes de enviar. Usa **Enter** para
     enviar y **Mayús+Enter** para añadir una línea; las sugerencias solo rellenan
     el editor. Puedes cancelar peticiones, reintentar o editar las fallidas, y
-    copiar respuestas, hacer preguntas de seguimiento y abrir las fuentes disponibles.
+    copiar respuestas y hacer preguntas de seguimiento. Las fuentes aparecen
+    junto a su respuesta y permanecen plegadas hasta que las abras.
     Busca sesiones guardadas por título o contenido desde la barra lateral.
 5.  **Editar Grabaciones**: Haz clic derecho sobre una grabación en el historial o en una pestaña abierta y elige la opción para duplicar el editor. Usa los controles de **Audio Edit** para marcar inicio y fin, recortar el clip y dejar que la app lo vuelva a transcribir.
-6.  **Barra Lateral de Contexto Activo**: Cuando una pestaña de chat está activa, la barra lateral derecha de la app muestra el mismo panel de contexto que ves dentro del chat. Se abre por defecto y desaparece al cambiar a otra pestaña o cerrar el chat.
+6.  **Contexto del Chat en la Barra Lateral**: Cuando una pestaña de chat está activa, edita su contexto en la barra lateral derecha. **Editar contexto** abre esa sección; al cambiar de pestaña se muestra el contexto del chat seleccionado. Los chats flotantes abren un editor temporal.
 
 **Nota:** el editor actual usa marcadores de tiempo (`inicio`/`fin`) y botones para fijar el punto de reproducción. Todavía no incluye una forma de selección por waveform ni una línea de tiempo arrastrable.
-
-**Nota:** esta barra lateral es una copia de solo lectura del contexto del chat activo. No permanece visible para chats inactivos ni para ventanas flotantes/minimizadas.
 
 ## Ejecutar Pruebas
 

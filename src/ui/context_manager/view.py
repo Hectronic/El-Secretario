@@ -12,7 +12,17 @@ def build_context_panel_view(panel):
     panel.content_widget = QWidget(); content = QVBoxLayout(panel.content_widget); content.setContentsMargins(0, 0, 0, 0); content.setSpacing(12)
     entries = QGroupBox("Detected Context Entries"); entries_layout = QVBoxLayout(entries); panel.entries_list = QListWidget(); entries_layout.addWidget(panel.entries_list); panel.entries_count_lbl = QLabel("0 entries found"); entries_layout.addWidget(panel.entries_count_lbl); content.addWidget(entries)
     status = QGroupBox("Selection Context"); status_layout = QVBoxLayout(status); panel.sync_cb = QCheckBox("Sync with App"); panel.sync_cb.setChecked(True); status_layout.addWidget(panel.sync_cb); panel.date_lbl = QLabel("Dates: all history"); panel.date_lbl.setWordWrap(True); status_layout.addWidget(panel.date_lbl); panel.tags_lbl = QLabel("Tags: all"); panel.tags_lbl.setWordWrap(True); status_layout.addWidget(panel.tags_lbl); content.addWidget(status)
+    panel.sync_cb.toggled.connect(panel.on_metadata_changed)
     notebooks = QGroupBox("Include Notebooks"); notebooks_layout = QVBoxLayout(notebooks); panel.nb_list = QListWidget(); panel.nb_list.setFixedHeight(120); panel.nb_list.itemChanged.connect(panel.on_metadata_changed); notebooks_layout.addWidget(panel.nb_list); content.addWidget(notebooks)
-    for attr, text, signal in (("add_context_btn", "Add Context", panel.add_context_requested), ("reset_context_btn", "Reset Extra Context", panel.reset_extra_context_requested), ("clear_chat_btn", "Clear Chat History", panel.clear_chat_requested)):
-        button = QPushButton(text); button.clicked.connect(signal.emit); setattr(panel, attr, button); content.addWidget(button)
+    for attr, text, signal in (
+        ("add_context_btn", "Add Context", panel.add_context_requested),
+        ("remove_context_btn", "Remove Context…", panel.remove_context_requested),
+        ("reset_context_btn", "Reset Extra Context", panel.reset_extra_context_requested),
+        ("clear_chat_btn", "Clear Chat History", panel.clear_chat_requested),
+    ):
+        button = QPushButton(text)
+        button.setAccessibleName(text.replace("…", ""))
+        button.clicked.connect(signal.emit)
+        setattr(panel, attr, button)
+        content.addWidget(button)
     layout.addWidget(panel.content_widget); layout.addStretch(); panel.set_interactive(panel._interactive); panel.header.setVisible(panel._show_header); panel.toggle_btn.setVisible(panel._show_header)

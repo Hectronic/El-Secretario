@@ -19,7 +19,7 @@ Read this in [Español](README_ES.md) | [Asturianu](README_AST.md)
 - Long-audio diarization reduces redundant analysis windows and indexes speaker turns once; pyannote uses adaptive CUDA batches when CUDA is available and `force_cpu` is off, then retries on CPU only after a CUDA runtime failure.
 - **Intelligent Search (RAG)**: Use Retrieval-Augmented Generation (RAG) to chat with your recordings and find specific information. Supports Google Gemini and **Ollama** for local execution.
 - **Flexible Chat Windows**: Chats can stay as regular tabs, move to the floating bar, and be minimized into compact chips for quick restore.
-- **Active Chat Context Sidebar**: When a chat tab is active, the app's right sidebar shows a collapsible, auto-opened mirror of the chat context and hides it again when you switch tabs or close the chat.
+- **Active Chat Context Sidebar**: When a chat tab is active, manage its selected records, dates, tags, and notebooks in the app's right sidebar. The context summary's Edit action opens that section; switching chats loads that chat's own context. Floating chats open a temporary context editor.
 - **Notebooks & Collections**: Organize your recordings into notebooks and collections. Access them directly from the sidebar.
 - **Calendar View**: Browse your recordings by date.
 - **Pomodoro & Timeline**: Use the sidebar buttons to time focused work, pause or finish early, take titled text or audio notes, and review activity by date and tag. Focus defaults to 25 minutes; short and long breaks default to 5 and 15 minutes and can be changed in the Pomodoro tab. Audio-note transcription is opt-in and uses the configured transcription backend.
@@ -124,14 +124,13 @@ To fully utilize the features of El Secretario, you will need to configure the A
     The chat shows selected context before sending. Use **Enter** to send and
     **Shift+Enter** to add a line; starter suggestions only fill the composer.
     Pending requests can be cancelled, failed requests can be retried or edited,
-    and completed answers include copy/follow-up actions and available sources.
+    and completed answers include copy/follow-up actions. Sources are grouped
+    with their answer and stay collapsed until you open them.
     Search saved chats locally by title or message from the chat-history sidebar.
 5.  **Edit Recordings**: Right-click a recording in the history list or on an open recording tab and choose the duplicate editor option. Use the **Audio Edit** controls to mark a start and end time, trim the clip, and let the app retranscribe the result.
-6.  **Active Chat Context Sidebar**: When a chat tab is active, the right app sidebar shows the same context panel you see inside the chat. It is expanded by default and disappears when you switch to another tab or close the chat.
+6.  **Active Chat Context Sidebar**: When a chat tab is active, edit its context in the app's right sidebar. The chat's Edit context action opens the section; switching tabs shows the selected chat's context. Floating chats open a temporary editor.
 
 **Note:** the current editor is time-marker based (`start`/`end` plus playhead buttons). It does not yet provide a waveform or drag-selection timeline.
-
-**Note:** this sidebar is read-only mirroring of the active chat context. It does not stay visible for inactive chats or floating/minimized chat windows.
 
 ## Running Tests
 
