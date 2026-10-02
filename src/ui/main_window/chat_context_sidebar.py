@@ -16,17 +16,17 @@ from src.ui.context_manager_panel import ContextManagerPanel
 
 
 def install_chat_context_sidebar_section(window, *, right_panel, right_layout, create_section):
-    """Create and register the non-interactive active-chat context section."""
+    """Create and register the interactive active-chat context section."""
     window.chat_context_panel = ContextManagerPanel(
         window.db,
         window.notebook_db,
         parent=right_panel,
         show_header=False,
-        interactive=False,
+        interactive=True,
     )
     window.chat_context_section = create_section(
         "chat_context",
-        "💬 Active Chat Context",
+        "💬 Chat Context",
         top_widget=window.chat_context_panel,
     )
     window._right_sidebar_sections["chat_context"]["context_panel"] = window.chat_context_panel
@@ -35,4 +35,5 @@ def install_chat_context_sidebar_section(window, *, right_panel, right_layout, c
         window.chat_context_section
     )
     window._right_sidebar_sections["chat_context"]["container"].setVisible(False)
+    window.sidebar_sync.bind_chat_context_panel(window.chat_context_panel)
     return window.chat_context_section

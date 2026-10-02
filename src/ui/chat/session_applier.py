@@ -20,6 +20,9 @@ def apply_loaded_chat_session(widget, loaded_session):
     if contexts:
         widget._apply_contexts(contexts)
 
+    remove_failure = getattr(widget, "_remove_failure_row", None)
+    if callable(remove_failure):
+        remove_failure()
     widget.display.clear()
     for msg in widget.chat_history:
         role_name = "User" if msg["role"] == "user" else "Assistant"

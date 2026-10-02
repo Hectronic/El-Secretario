@@ -19,7 +19,7 @@ from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QTextEdit,
                              QGroupBox, QCheckBox, QCalendarWidget, QToolButton,
                              QMessageBox, QMenu)
 from PyQt6.QtCore import Qt, pyqtSignal, QSize, QEvent
-from PyQt6.QtGui import QCursor, QIcon, QTextCharFormat, QColor, QPalette
+from PyQt6.QtGui import QCursor, QIcon, QPalette
 from src.database import DBManager
 from src.ui.styles import TEXT_EDIT_STYLE, BUTTON_PRIMARY_STYLE
 from src.notebook_database import NotebookDBManager
@@ -51,6 +51,7 @@ class ChatWidget(QWidget):
     close_requested = pyqtSignal(object)
     title_changed = pyqtSignal(object, str)
     source_requested = pyqtSignal(int)
+    context_edit_requested = pyqtSignal(object)
 
     def __init__(
         self,
@@ -76,10 +77,12 @@ class ChatWidget(QWidget):
         self.display_mode = "tab"
         self.floating_minimized = False
         self.context_panel_collapsed = False
+        self.floating_context_editor_open = False
         self._context_panel_saved_sizes = [900, 350]
         self._pending_message = None
         self._pending_sources = []
         self._pending_retrieval_degraded = False
+        self._latest_assistant_card = None
         
         self.init_ui()
         
@@ -137,6 +140,8 @@ class ChatWidget(QWidget):
         if reply == QMessageBox.StandardButton.Yes:
             self.chat_history = []
             self.display.clear()
+            self._latest_assistant_card = None
+            self._clear_actions(self.response_actions_layout)
             if self.current_session_id:
                 self.db.update_chat_session(self.current_session_id, json.dumps([]))
 
@@ -302,8 +307,13 @@ class ChatWidget(QWidget):
 
     def _render_history(self):
         self.display.clear()
+        self._latest_assistant_card = None
         for message in self.chat_history:
-            self.append_to_chat("User" if message.get("role") == "user" else "Assistant", message.get("content", ""))
+            role = "User" if message.get("role") == "user" else "Assistant"
+            self.append_to_chat(role, message.get("content", ""))
+            if role == "Assistant":
+                self._show_response_actions(message.get("content", ""))
+                self._show_sources(message.get("sources", []), message.get("retrieval_degraded", False))
 
     def _refresh_context_summary(self, *_args):
         self.context_summary.setText(context_summary(self.context_panel, self.forced_record_labels))
@@ -325,13 +335,17 @@ class ChatWidget(QWidget):
 
     def inspect_context(self):
         if self.display_mode == "floating":
-            visible = not self.context_panel.isVisible()
-            self.context_panel.setVisible(visible)
-            self.splitter.setSizes([max(1, self.width() - 300), 300] if visible else [self.width(), 0])
+            if self.floating_minimized:
+                return
+            self.floating_context_editor_open = not self.floating_context_editor_open
+            self._apply_context_panel_visibility()
         else:
-            self.toggle_context_panel()
+            self.context_edit_requested.emit(self)
         if self.context_panel.isVisible():
             self.context_panel.setFocus()
+
+    def show_remove_context_menu(self):
+        """Offer explicit per-item removal from the selected chat context."""
         menu = QMenu(self)
         for record_id in sorted(self.forced_record_ids):
             record = self.db.fetch_record(record_id) or {}
@@ -397,68 +411,51 @@ class ChatWidget(QWidget):
         self.input_field.setFocus()
 
     def _show_response_actions(self, response):
-        _row, row_layout = self._new_action_row(self.response_actions_layout)
+        card = self._latest_assistant_card
+        if card is None:
+            return
         copy = QPushButton("Copiar")
         copy.setAccessibleName("Copy assistant response")
         copy.clicked.connect(lambda: QApplication.clipboard().setText(response))
         followup = QPushButton("Preguntar sobre esta respuesta")
         followup.setAccessibleName("Ask a follow-up about this response")
         followup.clicked.connect(lambda: self._use_starter("Amplía esta respuesta con ejemplos: " + response[:160]))
-        row_layout.addWidget(copy)
-        row_layout.addWidget(followup)
+        card.add_action(copy)
+        card.add_action(followup)
         self.status_label.setVisible(False)
 
     def _show_sources(self, sources=None, degraded=None):
-        _row, row_layout = self._new_action_row(self.source_layout)
+        card = self._latest_assistant_card
+        if card is None:
+            return
         sources = self._pending_sources if sources is None else sources
         degraded = self._pending_retrieval_degraded if degraded is None else degraded
-        if not sources:
-            message = (
-                "La recuperación se degradó o no aportó fuentes navegables."
-                if degraded
-                else "Fuentes: no hay procedencia disponible para esta respuesta."
-            )
-            row_layout.addWidget(QLabel(message))
-            return
-        row_layout.addWidget(QLabel("Fuentes utilizadas"))
-        for source in sources:
-            source_card = QWidget()
-            source_card_layout = QVBoxLayout(source_card)
-            source_card_layout.setContentsMargins(4, 2, 4, 2)
-            button = QPushButton(f"{source['title']} · {source['role']}")
-            button.setAccessibleName(f"Open source: {source['title']}")
-            try:
-                record_id = int(source["source_id"])
-            except (TypeError, ValueError):
-                button.setEnabled(False)
-            else:
-                button.clicked.connect(lambda _checked=False, rid=record_id: self.source_requested.emit(rid))
-            source_card_layout.addWidget(button)
-            excerpt = QLabel(source["excerpt"])
-            excerpt.setWordWrap(True)
-            source_card_layout.addWidget(excerpt)
-            if source["degraded"]:
-                source_card_layout.addWidget(QLabel("Recuperación degradada a palabras clave."))
-            self.source_layout.addWidget(source_card)
+        card.set_sources(sources, degraded)
 
     def append_to_chat(self, role, text):
         is_dark = self._is_dark_theme()
-        header_html, body_html, text_color = render_chat_message_html(role, text, is_dark)
-        cursor = self.display.textCursor()
-        cursor.movePosition(cursor.MoveOperation.End)
-        cursor.insertHtml(header_html)
-        body_start = cursor.position()
-        cursor.insertHtml(body_html)
-        body_end = cursor.position()
-        cursor.setPosition(body_start)
-        cursor.setPosition(body_end, cursor.MoveMode.KeepAnchor)
-        body_format = cursor.charFormat()
-        body_format.setForeground(QColor(text_color))
-        cursor.mergeCharFormat(body_format)
-        cursor.clearSelection()
-        cursor.insertBlock()
-        self.display.setTextCursor(cursor)
-        self.display.verticalScrollBar().setValue(self.display.verticalScrollBar().maximum())
+        header_html, body_html, _text_color = render_chat_message_html(role, text, is_dark)
+        card = self.display.add_message(role, header_html + body_html)
+        if role == "Assistant":
+            self._latest_assistant_card = card
+            card.source_requested.connect(self.source_requested.emit)
+        return card
+
+    def apply_context_state(self, state):
+        """Apply context edits made in the main window's active-chat section."""
+        self.context_panel.apply_state(state)
+        self.forced_record_ids = {
+            int(record["id"])
+            for record in self.context_panel.forced_records
+            if record.get("id") is not None
+        }
+        self.forced_record_labels = [
+            record.get("title") or f"Recording {record.get('id')}"
+            for record in self.context_panel.forced_records
+        ]
+        self._refresh_context_summary()
+        self._refresh_starters()
+        self._refresh_title()
 
     def set_busy(self, busy):
         state = build_chat_busy_state(busy)
@@ -521,6 +518,12 @@ class ChatWidget(QWidget):
         self._apply_context_panel_visibility()
 
     def toggle_context_panel(self):
+        if self.display_mode == "floating":
+            if self.floating_minimized:
+                return
+            self.floating_context_editor_open = not self.floating_context_editor_open
+            self._apply_context_panel_visibility()
+            return
         if self.context_panel_collapsed:
             self.expand_context_panel()
         else:

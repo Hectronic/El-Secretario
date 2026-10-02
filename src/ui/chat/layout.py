@@ -7,6 +7,7 @@ from PyQt6.QtWidgets import QFrame, QHBoxLayout, QLabel, QPushButton, QSplitter,
 from src.ui.context_manager_panel import ContextManagerPanel
 from src.ui.chat.theme_styles import build_chat_widget_theme
 from src.ui.chat.composer import ChatComposer
+from src.ui.chat.conversation_view import ConversationView
 
 
 def build_chat_layout(widget):
@@ -65,9 +66,10 @@ def build_chat_layout(widget):
     chat_layout = QVBoxLayout(chat_container)
 
     # Chat Display
-    widget.display = QTextEdit()
-    widget.display.setReadOnly(True)
-    widget.display.setPlaceholderText("Pregunta cualquier cosa sobre tus notas...")
+    widget.display = ConversationView()
+    widget.display.setObjectName("chatConversation")
+    widget.display.scroll_area.setObjectName("chatConversation")
+    widget.source_list = widget.display  # Compatibility surface for integrations.
     chat_layout.addWidget(widget.display)
 
     widget.starters_container = QWidget()
@@ -122,11 +124,6 @@ def build_chat_layout(widget):
     widget.response_actions_layout.setContentsMargins(2, 2, 2, 2)
     chat_layout.addWidget(widget.response_actions)
 
-    widget.source_list = QWidget()
-    widget.source_layout = QVBoxLayout(widget.source_list)
-    widget.source_layout.setContentsMargins(2, 2, 2, 2)
-    chat_layout.addWidget(widget.source_list)
-
     widget.status_label = QLabel()
     widget.status_label.setAccessibleName("Chat status")
     widget.status_label.setVisible(False)
@@ -138,6 +135,7 @@ def build_chat_layout(widget):
     widget.context_panel = ContextManagerPanel(widget.db, widget.notebook_db, widget)
     widget.context_panel.toggle_requested.connect(widget.toggle_context_panel)
     widget.context_panel.add_context_requested.connect(widget.add_context)
+    widget.context_panel.remove_context_requested.connect(widget.show_remove_context_menu)
     widget.context_panel.reset_extra_context_requested.connect(widget.reset_extra_context)
     widget.context_panel.clear_chat_requested.connect(widget.clear_history)
     widget.splitter.addWidget(widget.context_panel)
@@ -204,19 +202,14 @@ def apply_chat_theme(widget):
         """
     )
     widget.display.setStyleSheet(f"""
-        QTextEdit {{
+        QScrollArea#chatConversation {{
             background-color: {display_bg};
             color: {display_text};
             border: 1px solid {display_border};
             border-radius: 8px;
-            font-size: 14px;
-            padding: 10px;
-            line-height: 1.5;
         }}
     """)
-    widget.display.document().setDefaultStyleSheet(
-        f"body {{ color: {display_text}; }} a {{ color: #64b5f6; }}"
-    )
+    widget.display.set_message_theme(display_bg, display_text)
     widget.input_field.setStyleSheet(f"""
         QTextEdit {{
             background-color: {input_bg};

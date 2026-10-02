@@ -38,6 +38,7 @@ class ContextManagerPanel(QWidget):
     context_changed = pyqtSignal()
     toggle_requested = pyqtSignal()
     add_context_requested = pyqtSignal()
+    remove_context_requested = pyqtSignal()
     reset_extra_context_requested = pyqtSignal()
     clear_chat_requested = pyqtSignal()
     COLLAPSED_WIDTH = 44
@@ -172,6 +173,7 @@ class ContextManagerPanel(QWidget):
             self.sync_cb,
             self.nb_list,
             self.add_context_btn,
+            self.remove_context_btn,
             self.reset_context_btn,
             self.clear_chat_btn,
             self.toggle_btn,
@@ -201,7 +203,9 @@ class ContextManagerPanel(QWidget):
         self.nb_list.blockSignals(False)
 
         self.forced_records = state.forced_records
+        self.sync_cb.blockSignals(True)
         self.sync_cb.setChecked(state.sync_enabled)
+        self.sync_cb.blockSignals(False)
         self._collapsed = state.collapsed
         self._update_status_labels()
         self.refresh_entries()

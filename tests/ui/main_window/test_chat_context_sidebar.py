@@ -50,6 +50,7 @@ def test_install_chat_context_sidebar_section_registers_hidden_context_panel(mon
     window.db = object()
     window.notebook_db = object()
     window._right_sidebar_sections = {}
+    window.sidebar_sync = MagicMock()
 
     right_panel = QWidget()
     right_layout = QVBoxLayout(right_panel)
@@ -76,7 +77,7 @@ def test_install_chat_context_sidebar_section_registers_hidden_context_panel(mon
 
         registered = window._right_sidebar_sections["chat_context"]
         assert window.chat_context_section is section
-        assert registered["title"] == "💬 Active Chat Context"
+        assert registered["title"] == "💬 Chat Context"
         assert registered["context_panel"] is window.chat_context_panel
         assert registered["top_widget"] is window.chat_context_panel
         assert registered["index"] == right_layout.indexOf(section)
@@ -86,7 +87,8 @@ def test_install_chat_context_sidebar_section_registers_hidden_context_panel(mon
             "notebook_db": window.notebook_db,
             "parent": right_panel,
             "show_header": False,
-            "interactive": False,
+            "interactive": True,
         }
+        window.sidebar_sync.bind_chat_context_panel.assert_called_once_with(window.chat_context_panel)
     finally:
         right_panel.deleteLater()

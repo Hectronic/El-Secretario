@@ -1,10 +1,13 @@
+import json
 from unittest.mock import MagicMock
 
 from src.database import DBManager
 from src.ui.chat.conversation_runtime import ChatConversationRuntime
 from src.ui.chat_widget import ChatWidget
+from src.ui.context_manager_panel import ContextManagerPanel
 from src.ui.main_window.chat_floating import FloatingChatCoordinator
-from PyQt6.QtWidgets import QFrame, QHBoxLayout, QMainWindow, QPushButton, QTabWidget, QWidget
+from src.ui.main_window.sidebar_sync import SidebarSyncCoordinator
+from PyQt6.QtWidgets import QFrame, QHBoxLayout, QMainWindow, QPushButton, QTabWidget, QWidget, QToolButton
 from PyQt6.QtCore import QObject, pyqtSignal
 
 
@@ -192,6 +195,10 @@ def test_floating_chat_round_trip_keeps_real_persisted_session(qtbot, tmp_path):
     chat.on_chat_finished("Persisted before floating.")
     session_id = chat.current_session_id
     coordinator.float_chat_widget(chat)
+    chat.toggle_context_panel()
+    assert not chat.context_panel.isHidden()
+    chat.toggle_context_panel()
+    assert chat.context_panel.isHidden()
     coordinator.minimize_floating_chat(chat)
     coordinator.restore_floating_chat(chat)
     coordinator.dock_chat_widget_to_tab(chat)
@@ -200,7 +207,7 @@ def test_floating_chat_round_trip_keeps_real_persisted_session(qtbot, tmp_path):
     assert "Persisted before floating." in saved["messages"]
     assert window.central_tabs.currentWidget() is chat
     assert chat.display_mode == "tab"
-    assert not chat.context_panel.isHidden()
+    assert chat.context_panel.isHidden()
     assert chat.input_field.toPlainText() == "Draft survives moving the chat"
 
 
@@ -261,6 +268,10 @@ def test_completed_answer_exposes_copy_followup_and_navigable_source(qtbot, tmp_
     worker.running = False
     worker.finished.emit("Friday.")
 
+    disclosure = widget.source_list.findChildren(QToolButton)[-1]
+    assert disclosure.text() == "Fuentes (1)"
+    assert not disclosure.isChecked()
+    disclosure.click()
     buttons = widget.source_list.findChildren(QPushButton)
     source_button = next(button for button in buttons if "Launch meeting" in button.text())
     source_button.click()
@@ -275,6 +286,9 @@ def test_completed_answer_exposes_copy_followup_and_navigable_source(qtbot, tmp_
     )
     qtbot.addWidget(restored)
     restored.source_requested.connect(opened.append)
+    restored_disclosure = restored.source_list.findChildren(QToolButton)[-1]
+    assert not restored_disclosure.isChecked()
+    restored_disclosure.click()
     restored_source = next(
         button for button in restored.source_list.findChildren(QPushButton)
         if "Launch meeting" in button.text()
@@ -284,6 +298,126 @@ def test_completed_answer_exposes_copy_followup_and_navigable_source(qtbot, tmp_
     assert opened == [23, 23]
     assert any("Copy assistant response" == button.accessibleName() for button in widget.findChildren(QPushButton))
     assert any("Ask a follow-up about this response" == button.accessibleName() for button in widget.findChildren(QPushButton))
+
+
+def test_right_sidebar_context_reaches_request_and_persists_with_session(qtbot, tmp_path):
+    db = DBManager(str(tmp_path / "sidebar-chat-context.sqlite"))
+    notebook_db = _notebook_port()
+    record_id = db.save("brief.wav", "Sidebar selected notes", 1.0, "Sidebar context meeting")
+    db.update_tags(record_id, "sidebar-tag")
+    worker = _SignalWorker()
+
+    def create_worker(*args):
+        worker.args = args
+        return worker
+
+    runtime = ChatConversationRuntime(
+        thread_factory=create_worker,
+        provider_validator=lambda _settings: (True, ""),
+        settings_factory=lambda *_args: object(),
+    )
+    chat = ChatWidget(
+        MagicMock(), persistence=db, notebook_persistence=notebook_db,
+        conversation_runtime=runtime,
+    )
+
+    class _Window:
+        def __init__(self):
+            self.central_tabs = QTabWidget()
+            self.central_tabs.addTab(chat, "Chat")
+            self._right_sidebar_last_non_chat_section = "tasks"
+            self._active_right_section = None
+            self.chat_context_panel = ContextManagerPanel(
+                db, notebook_db, show_header=False, interactive=True
+            )
+            self._right_sidebar_sections = {
+                "chat_context": {
+                    "container": QWidget(),
+                    "context_panel": self.chat_context_panel,
+                },
+                "tasks": {"container": QWidget()},
+            }
+            self.sidebar_sync = SidebarSyncCoordinator(self)
+            self.sidebar_sync.bind_chat_context_panel(self.chat_context_panel)
+
+        def _set_active_right_section(self, key):
+            self._active_right_section = key
+
+    window = _Window()
+    qtbot.addWidget(chat)
+    qtbot.addWidget(window.central_tabs)
+    window.sidebar_sync.sync_chat_context_section(chat)
+    chat.context_edit_requested.emit(chat)
+    assert window._active_right_section == "chat_context"
+
+    window.chat_context_panel.active_global_tags = ["sidebar-tag"]
+    window.chat_context_panel._update_status_labels()
+    window.chat_context_panel.context_changed.emit()
+    assert chat.context_summary.text().find("sidebar-tag") >= 0
+    assert window.chat_context_panel.remove_context_btn.isEnabled()
+
+    chat.input_field.setPlainText("What was decided?")
+    chat.send_message()
+    assert "Sidebar selected notes" in worker.args[2]
+    worker.running = False
+    worker.finished.emit("The selected meeting covered sidebar context.")
+
+    persisted = db.fetch_chat_sessions()[0]
+    assert '"type": "tag", "value": "sidebar-tag"' in persisted["context_data"]
+
+
+def test_restored_session_keeps_sources_with_each_answer(qtbot, tmp_path):
+    db = DBManager(str(tmp_path / "multiple-answer-sources.sqlite"))
+    messages = [
+        {"role": "user", "content": "Question one"},
+        {
+            "role": "assistant", "content": "Answer one",
+            "sources": [{
+                "source_id": "31", "title": "Source one", "role": "recording",
+                "excerpt": "Excerpt one", "degraded": False,
+            }],
+            "retrieval_degraded": False,
+        },
+        {"role": "user", "content": "Question two"},
+        {
+            "role": "assistant", "content": "Answer two",
+            "sources": [{
+                "source_id": "42", "title": "Source two", "role": "note",
+                "excerpt": "Excerpt two", "degraded": False,
+            }],
+            "retrieval_degraded": False,
+        },
+    ]
+    session_id = db.save_chat_session(
+        "Two answers", "Chat", json.dumps(messages), context_data="[]"
+    )
+    widget = ChatWidget(
+        MagicMock(), session_id=session_id, persistence=db,
+        notebook_persistence=_notebook_port(),
+    )
+    qtbot.addWidget(widget)
+    widget.show()
+
+    answers = [card for card in widget.display._cards if card.role == "Assistant"]
+    assert len(answers) == 2
+    assert [card.sources_toggle.text() for card in answers] == ["Fuentes (1)", "Fuentes (1)"]
+    assert all(not card.sources_toggle.isChecked() for card in answers)
+    assert not any(
+        button.isVisible()
+        for card in answers
+        for button in card.findChildren(QPushButton)
+        if button.accessibleName().startswith("Open source:")
+    )
+
+    answers[1].sources_toggle.click()
+
+    visible_source_names = [
+        button.accessibleName()
+        for card in answers
+        for button in card.findChildren(QPushButton)
+        if button.accessibleName().startswith("Open source:") and button.isVisible()
+    ]
+    assert visible_source_names == ["Open source: Source two"]
 
 
 def test_retry_reuses_one_user_message_and_rebuilds_current_context(qtbot, tmp_path):
