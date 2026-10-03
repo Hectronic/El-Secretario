@@ -67,7 +67,9 @@ class ProductivityCoordinator:
         self.refresh_views()
 
     def _tick(self):
+        focus_finished = False
         if not self.service.recovery_required and self.service.tick():
+            focus_finished = True
             self.refresh_views()
         if not self.break_service.recovery_required and self.break_service.tick():
             self._notify("Break complete", "Time to return to focus")
@@ -76,6 +78,16 @@ class ProductivityCoordinator:
             widget = self.window.central_tabs.widget(index)
             if isinstance(widget, PomodoroWidget):
                 widget.refresh()
+        manager = getattr(self.window, "system_tray_manager", None)
+        if manager is not None:
+            if self.service.state in ("running", "paused") and not self.service.recovery_required:
+                manager.set_focus_status(
+                    self.service.title,
+                    self.service.remaining_seconds,
+                    paused=self.service.state == "paused",
+                )
+            elif focus_finished:
+                manager.refresh_menu()
 
     def refresh_views(self):
         refresh_tags = getattr(self.window, "refresh_tag_filter", None)

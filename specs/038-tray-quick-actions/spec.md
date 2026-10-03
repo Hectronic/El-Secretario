@@ -1,8 +1,8 @@
 # SPEC-038: Contextual System Tray Quick Actions
 
-Status: Proposed
+Status: Implemented and validated
 Owner: System tray interactions
-Last updated: 2026-09-25
+Last updated: 2026-10-03
 
 ## Problem
 
@@ -144,6 +144,6 @@ menu. Unavailable feature actions are absent, not dead controls.
 
 ## Documentation
 
-- Update README and README_ES with quick actions, recording safety, and platform
-  fallback when implementation begins.
-- Register implementation status in `specs/README.md`.
+- README and README_ES document quick actions, recording safety, and tray
+  fallback.
+- Implementation status is registered in `specs/README.md`.

@@ -14,8 +14,8 @@
 
 import os
 import shutil
-from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QPushButton, 
-                             QListWidget, QListWidgetItem, QInputDialog, QMessageBox, 
+from PyQt6.QtWidgets import (QApplication, QWidget, QVBoxLayout, QHBoxLayout, QPushButton,
+                             QListWidget, QListWidgetItem, QInputDialog, QMessageBox,
                              QLabel, QTextEdit, QDialog, QDialogButtonBox, QProgressBar)
 from PyQt6.QtCore import Qt, pyqtSignal, QTimer
 from src.ui.styles import LIST_WIDGET_STYLE
@@ -100,6 +100,7 @@ class NotebookWidget(QWidget):
             self.current_audio_path = os.path.join(audio_dir, filename)
             
             self.recorder.start()
+            self._set_tray_recording_state(True)
             self.recording_seconds = 0
             self.update_recording_time()
             self.recording_timer.start(500) # Update every 500ms for blinking effect
@@ -115,6 +116,7 @@ class NotebookWidget(QWidget):
     def stop_recording(self):
         # Stop returns the path to the temporary recording
         temp_path = self.recorder.stop()
+        self._set_tray_recording_state(bool(getattr(self.recorder, "is_recording", False)))
         self.recording_timer.stop()
         self.record_btn.setText("🎤 Record Voice Note")
         self.rec_status.hide()
@@ -240,6 +242,7 @@ class NotebookWidget(QWidget):
                 self.recorder.stop()
             except Exception:
                 pass
+            self._set_tray_recording_state(bool(getattr(self.recorder, "is_recording", False)))
         if self._amplitude_connected:
             try:
                 self.recorder.amplitude_changed.disconnect(self.update_vu_meter)
@@ -247,6 +250,17 @@ class NotebookWidget(QWidget):
                 pass
             self._amplitude_connected = False
         self.transcription_runtime.cleanup()
+
+    @staticmethod
+    def _set_tray_recording_state(active):
+        app = QApplication.instance()
+        if app is None:
+            return
+        for window in app.topLevelWidgets():
+            manager = getattr(window, "system_tray_manager", None)
+            if manager is not None:
+                manager.set_recording_state(bool(active))
+                return
 
     def closeEvent(self, event):
         self.cleanup()

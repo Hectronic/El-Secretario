@@ -39,6 +39,12 @@ class MainWindowLifecycleCoordinator:
             window._api_timer.stop()
         window._pending_history_reload = False
         window._pending_tag_reload = False
+        tray_actions = getattr(window, "tray_actions", None)
+        if tray_actions is not None:
+            tray_actions.cleanup()
+        tray_manager = getattr(window, "system_tray_manager", None)
+        if tray_manager is not None:
+            tray_manager.cleanup()
         productivity = getattr(window, "productivity", None)
         if productivity is not None:
             productivity.cleanup()

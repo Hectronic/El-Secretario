@@ -56,7 +56,12 @@ class ContentTabCoordinator:
                 self.window.central_tabs.setCurrentIndex(index)
                 return widget
 
-        note_widget = NoteWidget(self.window.rag, record_id=record_id, task_queue=self.window.summary_task_queue)
+        note_widget = NoteWidget(
+            self.window.rag,
+            record_id=record_id,
+            task_queue=self.window.summary_task_queue,
+            persistence=self.window.db,
+        )
         note_widget.note_saved.connect(self.window.load_history)
         note_widget.status_changed.connect(self.window.handle_status_message)
         note_widget.progress_changed.connect(self.window.handle_progress)
