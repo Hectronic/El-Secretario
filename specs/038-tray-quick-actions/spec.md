@@ -1,6 +1,6 @@
 # SPEC-038: Contextual System Tray Quick Actions
 
-Status: Implemented; automated validation passed
+Status: Implemented; automated cross-platform validation passed
 Owner: System tray interactions
 Last updated: 2026-10-03
 
@@ -154,10 +154,14 @@ menu. Unavailable feature actions are absent, not dead controls.
   and verifies one timeline completion after duplicate finish dispatch.
 - Latest full-suite run: 1014 passed, 1 skipped because no real system tray is
   available, with 3 CUDA/NVML warnings.
+- GitHub Actions full-suite matrix passed on Ubuntu, macOS, and Windows.
+  [Workflow run](https://github.com/Hectronic/El-Secretario/actions/runs/37117487157)
+- Manual visual checks with a real desktop tray remain pending; the offscreen
+  workspace cannot verify native menu rendering or focus behavior.
 
 ## Documentation
 
 - README and README_ES document quick actions, recording safety, and tray
   fallback.
-- Automated implementation status is registered in `specs/README.md`; manual
-  cross-platform smoke checks remain pending.
+- Automated cross-platform validation is registered in `specs/README.md`; native
+  tray rendering/focus checks remain pending.

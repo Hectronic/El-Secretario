@@ -1,6 +1,6 @@
 # Implementation Plan: Contextual System Tray Quick Actions
 
-**Branch**: `038-tray-quick-actions` | **Status**: Implemented; automated validation passed
+**Branch**: `038-tray-quick-actions` | **Status**: Implemented; cross-platform automated validation passed
 
 ## Delivery Outline
 
@@ -14,8 +14,9 @@
 4. Verify cleanup and tray-unavailable fallback, run real Qt/SQLite integration
    tests and full virtualenv suite, and update English/Spanish documentation.
 
-Automated validation is complete. Manual menu/focus smoke checks on Windows,
-Ubuntu, and macOS remain pending because this workspace has no real system tray.
+The full automated suite passed on Ubuntu, macOS, and Windows. Manual native
+tray rendering/focus smoke checks remain pending because this workspace has no
+real system tray.
 
 ## Integration Boundary Decision
 
