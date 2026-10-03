@@ -65,6 +65,16 @@ Al terminar un Pomodoro, el estado se muestra en la aplicación aunque no haya n
 
 Para utilizar plenamente las funciones de El Secretario, deberás configurar los tokens de API. Puedes hacerlo fácilmente a través del botón **🔧 Settings** en la pantalla de Bienvenida, o manualmente en la configuración de la aplicación.
 
+Las categorías de Settings son **Appearance & language** (apariencia e idioma),
+**Recording & devices** (grabación y dispositivos), **Transcription & speakers**
+(transcripción y hablantes), **AI & chat**, **Search & knowledge**,
+**Automation & notifications** e **Integrations**. Busca por nombre o por
+términos como «micrófono» o «GPU» y activa **Advanced settings** para ver los
+backends, el cálculo, RAG, las instrucciones y las integraciones. Los cambios
+quedan pendientes hasta elegir **Save settings** o **Discard changes**. La
+pantalla indica si cada opción se aplica al instante, en la siguiente tarea o
+tras reiniciar; inicializar, recargar e indexar RAG siguen siendo acciones explícitas.
+
 1.  **Token de Hugging Face**: Requerido para la diarización de hablantes (identificar quién está hablando).
     -   Crea un token en: [https://huggingface.co/settings/tokens](https://huggingface.co/settings/tokens)
     -   Asegúrate de haber aceptado las condiciones de usuario para el modelo `pyannote/speaker-diarization-3.1`.
@@ -75,12 +85,12 @@ Para utilizar plenamente las funciones de El Secretario, deberás configurar los
 3.  **Ollama**: (Opcional) Alternativa para las funciones del Asistente de IA si prefieres ejecutar modelos localmente.
     -   Instala [Ollama](https://ollama.com/) en tu sistema.
     -   Asegúrate de que el servidor de Ollama esté funcionando antes de iniciar la aplicación.
-    -   Puedes seleccionar tu modelo local preferido (ej. `llama3`, `mistral`) en la configuración de la aplicación.
+    -   Puedes seleccionar tu modelo local preferido (ej. `llama3`, `mistral`) en **Ajustes -> IA y chat**.
 
 4.  **Sherpa-ONNX**: (Opcional) Backend alternativo de transcripción local.
     -   Instala las dependencias de `requirements.txt` para disponer del paquete Python `sherpa-onnx`.
     -   Descarga un modelo offline compatible en un directorio local, por ejemplo `models/sherpa-onnx`.
-    -   Configura la ruta del modelo y su tipo en **Ajustes -> Audio** si seleccionas `sherpa-onnx` como opción de transcripción.
+    -   Configura la ruta del modelo y su tipo en **Ajustes -> Transcripción y hablantes** si seleccionas `sherpa-onnx` como opción de transcripción.
     -   Si falta el modelo local configurado, El Secretario puede descargar automáticamente en el primer uso el archivo oficial por defecto `sherpa-onnx-whisper-tiny`.
 
 ## Uso

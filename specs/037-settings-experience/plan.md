@@ -1,6 +1,6 @@
 # Implementation Plan: Intuitive Settings With Full Control
 
-**Branch**: `037-settings-experience` | **Status**: Proposed
+**Branch**: `037-settings-experience` | **Status**: Implemented
 
 ## Delivery Outline
 
@@ -20,3 +20,15 @@
 This redesign crosses UI/signals, QSettings persistence, runtime consumers,
 and restart behavior. It requires real Qt/QSettings integration coverage, plus
 focused unit tests before any behavior-sensitive refactor.
+
+## Delivered
+
+- Catalog and inventory cover legacy setting keys, defaults, validation,
+  consumers, and apply timing across seven settings categories.
+- The Settings shell now stages edits, searches and opens controls, validates and
+  saves changed fields, supports per-field/category reset, and guards navigation.
+- Pomodoro global preferences now live under Automation & notifications; its
+  runtime reads the persisted interval preferences.
+- README variants and Spec Kit registry updated. Focused verification: 38 passed.
+  Full suite: 1002 passed, 1 skipped because the system tray is unavailable,
+  and 11 subtests passed.

@@ -22,6 +22,9 @@ class MainWindowShellCoordinator:
 
     def __init__(self, window):
         self.window = window
+        tabs = getattr(window, "central_tabs", None)
+        self._last_central_widget = tabs.currentWidget() if tabs is not None else None
+        self._restoring_settings_tab = False
 
     def on_right_section_header_clicked(self, section_key):
         if self.window._active_right_section == section_key:
@@ -62,6 +65,23 @@ class MainWindowShellCoordinator:
             )
 
     def on_central_tab_changed(self, _index):
+        tabs = self.window.central_tabs
+        current = tabs.currentWidget() if tabs is not None else None
+        previous = self._last_central_widget
+        if self._restoring_settings_tab:
+            self._restoring_settings_tab = False
+            self._last_central_widget = current
+            return
+        if previous is not None and current is not previous:
+            request_leave = getattr(previous, "request_leave", None)
+            if callable(request_leave) and not request_leave():
+                old_index = tabs.indexOf(previous)
+                if old_index >= 0:
+                    self._restoring_settings_tab = True
+                    tabs.setCurrentIndex(old_index)
+                    self._last_central_widget = previous
+                    return
+        self._last_central_widget = current
         self.window.refresh_tasks_sidebar()
         self.window._sync_chat_context_section()
 

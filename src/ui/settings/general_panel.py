@@ -32,9 +32,10 @@ from src.ui.styles import apply_theme
 class GeneralSettingsPanel(QWidget):
     """Panel for general application settings."""
 
-    def __init__(self, settings, parent=None):
+    def __init__(self, settings, parent=None, *, auto_fetch_ollama=True):
         super().__init__(parent)
         self.settings = settings
+        self.auto_fetch_ollama = auto_fetch_ollama
         self._setup_ui()
 
     def _setup_ui(self):
@@ -345,7 +346,7 @@ class GeneralSettingsPanel(QWidget):
         self.gemini_widget.setVisible(is_gemini)
         self.ollama_widget.setVisible(not is_gemini)
 
-        if not is_gemini and self.ollama_model_combo.count() <= 1:
+        if self.auto_fetch_ollama and not is_gemini and self.ollama_model_combo.count() <= 1:
             QTimer.singleShot(100, self._refresh_ollama_models)
 
     def _refresh_ollama_models(self):
@@ -387,8 +388,12 @@ class GeneralSettingsPanel(QWidget):
         field = SecretFieldWidget(current_value=current_value, placeholder=placeholder)
         return field, field.line_edit
 
-    def save(self):
-        """Save general settings."""
+    def save(self, *, apply_runtime=True):
+        """Save general settings, optionally deferring runtime side effects.
+
+        SettingsWidget stages the values first and applies immediate changes
+        only after the corresponding stored values have passed validation.
+        """
         self.settings.setValue("hf_token", self.token_input.text().strip())
         self.settings.setValue("gemini_key", self.gemini_key_input.text().strip())
         self.settings.setValue("gemini_model", self.gemini_model_combo.currentText())
@@ -397,7 +402,7 @@ class GeneralSettingsPanel(QWidget):
         self.settings.setValue("ai_provider", provider)
 
         self.settings.setValue("ollama_host", self.ollama_host_input.text().strip() or "http://localhost:11434")
-        if self.ollama_model_combo.currentText():
+        if self.ollama_model_combo.currentText() or self.ollama_model_combo.property("settingsClearOnSave"):
             self.settings.setValue("ollama_model", self.ollama_model_combo.currentText())
 
         selected_theme = self.theme_combo.currentText()
@@ -419,7 +424,7 @@ class GeneralSettingsPanel(QWidget):
         old_api = self.settings.value("enable_local_api", False, type=bool)
         new_api = self.enable_local_api_check.isChecked()
         self.settings.setValue("enable_local_api", new_api)
-        if old_api != new_api:
+        if apply_runtime and old_api != new_api:
             try:
                 mw = self.window()
                 if hasattr(mw, "toggle_local_api"):
@@ -433,4 +438,29 @@ class GeneralSettingsPanel(QWidget):
             self.enable_mcp_server_check.isChecked(),
         )
 
-        apply_theme(selected_theme)
+        if apply_runtime:
+            apply_theme(selected_theme)
+
+    def apply_saved_runtime(self, saved_keys):
+        """Apply immediate runtime changes after staged values are durable."""
+        failures = set()
+        if "app_theme" in saved_keys:
+            try:
+                apply_theme(self.settings.value("app_theme", "System"))
+            except Exception:
+                import logging
+                logging.exception("Failed to apply the saved application theme")
+                failures.add("app_theme")
+        if "enable_local_api" in saved_keys:
+            enabled = self.settings.value("enable_local_api", False, type=bool)
+            try:
+                mw = self.window()
+                if hasattr(mw, "toggle_local_api"):
+                    mw.toggle_local_api(enabled)
+                else:
+                    failures.add("enable_local_api")
+            except Exception:
+                import logging
+                logging.exception("Failed to apply the saved local API setting")
+                failures.add("enable_local_api")
+        return failures

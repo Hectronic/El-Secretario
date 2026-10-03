@@ -65,6 +65,16 @@ Al terminar un Pomodoro, l'estáu amuésase na aplicación anque nun haya avisos
 
 Pa utilizar dafechu les funciones d'El Secretario, deberás configurar los tokens d'API. Pues facelo fácilmente al traviés del botón **🔧 Settings** na pantalla de Bienvenida, o manualmente na configuración de l'aplicación.
 
+Les categoríes de Settings son **Appearance & language** (apariencia y llingua),
+**Recording & devices** (grabación y preseos), **Transcription & speakers**
+(trescripción y falantes), **AI & chat**, **Search & knowledge**,
+**Automation & notifications** ya **Integrations**. Busca por nome o por términos
+como «micrófonu» o «GPU» y activa **Advanced settings** pa ver backends, cómputu,
+RAG, instrucciones ya integraciones. Los cambios queden pendientes hasta escoyer
+**Save settings** o **Discard changes**. La pantalla indica si cada opción
+s'aplica al momentu, na siguiente xera o tres reaniciar; inicializar, recargar ya
+indexar RAG siguen siendo aiciones esplícites.
+
 1.  **Token de Hugging Face**: Requeríu pa la diarización de falantes (identificar quién ta falando).
     -   Crea un token en: [https://huggingface.co/settings/tokens](https://huggingface.co/settings/tokens)
     -   Asegúrate de tener aceptao les condiciones d'usuariu pal modelu `pyannote/speaker-diarization-3.1`.
@@ -75,12 +85,12 @@ Pa utilizar dafechu les funciones d'El Secretario, deberás configurar los token
 3.  **Ollama**: (Opcional) Alternativa pa les funciones del Asistente d'IA si prefieres executar modelos llocalmente.
     -   Instala [Ollama](https://ollama.com/) nel to sistema.
     -   Asegúrate de que'l servidor d'Ollama tea funcionante antes d'entamar l'aplicación.
-    -   Pues seleicionar el to modelu llocal preferíu (ex. `llama3`, `mistral`) na configuración de l'aplicación.
+    -   Pues seleicionar el to modelu llocal preferíu (ex. `llama3`, `mistral`) en **Axustes -> IA y chat**.
 
 4.  **Sherpa-ONNX**: (Opcional) Backend alternativu de trescripción llocal.
     -   Instala les dependencies de `requirements.txt` pa disponer del paquete Python `sherpa-onnx`.
     -   Descarga un modelu offline compatible nun direutoriu llocal, por exemplu `models/sherpa-onnx`.
-    -   Configura la ruta del modelu y el so tipu en **Ajustes -> Audio** si seleiciones `sherpa-onnx` como opción de trescripción.
+    -   Configura la ruta del modelu y el so tipu en **Axustes -> Trescripción y falantes** si seleiciones `sherpa-onnx` como opción de trescripción.
     -   Si falta'l modelu llocal configuráu, El Secretario pue descargar automáticamente nel primer usu l'archivu oficial por defeutu `sherpa-onnx-whisper-tiny`.
 
 ## Usu

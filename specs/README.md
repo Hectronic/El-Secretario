@@ -26,7 +26,7 @@ their implementation checklist here until delivery.
 - `034-pomodoro-timeline` — implemented; SQLite/Qt integration and full-suite validated
 - `035-recurring-meetings` — implemented
 - `036-chat-ux-workflows` — implemented and validated; one interactive context sidebar and per-answer sources collapsed by default; async cancellation details are in feature notes
-- `037-settings-experience` — proposed
+- `037-settings-experience` — implemented and validated; searchable categories, staged saves, scoped resets, and active-versus-saved status
 - `038-tray-quick-actions` — proposed
 - `039-pomodoro-quick-start` — proposed; simpler timer UI plus unified timeline, search, and chat discovery layered on SPEC-034
 
