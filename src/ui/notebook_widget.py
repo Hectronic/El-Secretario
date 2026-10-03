@@ -14,7 +14,7 @@
 
 import os
 import shutil
-from PyQt6.QtWidgets import (QApplication, QWidget, QVBoxLayout, QHBoxLayout, QPushButton,
+from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QPushButton,
                              QListWidget, QListWidgetItem, QInputDialog, QMessageBox,
                              QLabel, QTextEdit, QDialog, QDialogButtonBox, QProgressBar)
 from PyQt6.QtCore import Qt, pyqtSignal, QTimer
@@ -251,16 +251,11 @@ class NotebookWidget(QWidget):
             self._amplitude_connected = False
         self.transcription_runtime.cleanup()
 
-    @staticmethod
-    def _set_tray_recording_state(active):
-        app = QApplication.instance()
-        if app is None:
-            return
-        for window in app.topLevelWidgets():
-            manager = getattr(window, "system_tray_manager", None)
-            if manager is not None:
-                manager.set_recording_state(bool(active))
-                return
+    def _set_tray_recording_state(self, active):
+        window = self.window()
+        manager = getattr(window, "system_tray_manager", None)
+        if manager is not None:
+            manager.set_recording_state(bool(active))
 
     def closeEvent(self, event):
         self.cleanup()

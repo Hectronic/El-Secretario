@@ -101,6 +101,9 @@ class ProductivityCoordinator:
                 widget.refresh()
             elif isinstance(widget, RecurringMeetingsWidget):
                 widget.refresh()
+        manager = getattr(self.window, "system_tray_manager", None)
+        if manager:
+            manager.refresh_menu()
 
     def _tick_meetings(self):
         self.meeting_runtime.poll()
@@ -129,6 +132,9 @@ class ProductivityCoordinator:
             manager = getattr(self.window, "system_tray_manager", None)
             if manager:
                 manager.show_message("Meeting reminder", occurrence["title"])
+        manager = getattr(self.window, "system_tray_manager", None)
+        if manager:
+            manager.refresh_menu()
 
     def open_meetings(self):
         for index in range(self.window.central_tabs.count()):
@@ -154,20 +160,20 @@ class ProductivityCoordinator:
     def start_meeting_occurrence(self, occurrence_id):
         occurrence = self.window.db.meetings.get_occurrence(int(occurrence_id))
         if not occurrence:
-            return
+            return None
         if occurrence["recording_id"]:
-            self.window.open_recording_tab(int(occurrence["recording_id"]))
+            widget = self.window.open_recording_tab(int(occurrence["recording_id"]))
             self._close_meeting_reminder(int(occurrence_id))
-            return
+            return widget
         from src.ui.recording_in_progress_widget import RecordingInProgressWidget
         for index in range(self.window.central_tabs.count()):
             active = self.window.central_tabs.widget(index)
             if isinstance(active, RecordingInProgressWidget):
                 if active.config.get("meeting_occurrence_id") == int(occurrence_id):
                     self.window.central_tabs.setCurrentIndex(index)
-                    return
+                    return active
                 self.window.handle_status_message("Finish the active recording before starting this meeting.")
-                return
+                return None
         started = self.meeting_scheduler.start(int(occurrence_id))
         config = {
             "device_index": getattr(self.window.recorder, "device_index", None),
@@ -179,8 +185,12 @@ class ProductivityCoordinator:
             "diarization": self.settings.value("rec_config/diarization", False, type=bool),
             "language": self.settings.value("rec_config/language", None),
         }
-        self.window.recording_tabs.start_new_recording(config)
+        widget = self.window.recording_tabs.start_new_recording(config)
         self._close_meeting_reminder(int(occurrence_id))
+        manager = getattr(self.window, "system_tray_manager", None)
+        if manager:
+            manager.refresh_menu()
+        return widget
 
     def _snooze_meeting_occurrence(self, occurrence_id, minutes):
         self.meeting_scheduler.snooze(int(occurrence_id), int(minutes))

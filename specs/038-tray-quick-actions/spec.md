@@ -1,6 +1,6 @@
 # SPEC-038: Contextual System Tray Quick Actions
 
-Status: Implemented and validated
+Status: Implemented; automated validation passed
 Owner: System tray interactions
 Last updated: 2026-10-03
 
@@ -140,10 +140,24 @@ menu. Unavailable feature actions are absent, not dead controls.
 - Full suite: required because this crosses Qt menu/signals, recording lifecycle,
   persistence, notifications, and future scheduling/timer boundaries.
 - Manual: verify menu behavior and focus handling on Windows, Ubuntu, and macOS,
-  including desktops without a usable system tray.
+  including desktops without a usable system tray. Pending because this
+  workspace only provides an offscreen Linux Qt platform without a real tray.
+
+## Automated Validation Evidence
+
+- `tests/integration/test_tray_quick_actions.py` covers generic Start and
+  no-microphone recovery, one-time stop/save, cancel confirmation, text/audio
+  note persistence, meeting preflight, prepared recording provenance, and
+  occurrence snooze/dismiss transitions plus the no-tray main-window fallback
+  with real Qt widgets and temporary SQLite databases.
+- `tests/integration/test_pomodoro_main_window.py` covers tray focus actions
+  and verifies one timeline completion after duplicate finish dispatch.
+- Latest full-suite run: 1014 passed, 1 skipped because no real system tray is
+  available, with 3 CUDA/NVML warnings.
 
 ## Documentation
 
 - README and README_ES document quick actions, recording safety, and tray
   fallback.
-- Implementation status is registered in `specs/README.md`.
+- Automated implementation status is registered in `specs/README.md`; manual
+  cross-platform smoke checks remain pending.

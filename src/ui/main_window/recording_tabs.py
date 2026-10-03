@@ -143,7 +143,7 @@ class RecordingTabCoordinator:
             widget = window.central_tabs.widget(index)
             if isinstance(widget, RecordingInProgressWidget):
                 window.central_tabs.setCurrentIndex(index)
-                return
+                return widget
 
         if config.get("device_index") is not None:
             window.recorder.set_device(config["device_index"])
@@ -188,6 +188,7 @@ class RecordingTabCoordinator:
         window.central_tabs.setCurrentIndex(index)
         if not rec_widget.recording_started and config.get("meeting_occurrence_id"):
             window.db.meetings.transition(int(config["meeting_occurrence_id"]), "cancelled", now=utc_now())
+        return rec_widget
 
     def handle_recording_widget_saved(self, rec_widget):
         record_id = getattr(rec_widget, "current_record_id", None)

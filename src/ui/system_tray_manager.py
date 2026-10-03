@@ -154,8 +154,12 @@ class SystemTrayManager(QObject):
         elapsed = max(0, int(snapshot.get("recording_elapsed", 0)))
         elapsed_text = f"{elapsed // 60:02d}:{elapsed % 60:02d}"
         if recording:
-            status = "Audio note" if recording_kind == "audio_note" else "Recording"
-            self.recording_status_action.setText(f"{status} active · {elapsed_text}")
+            if recording_kind == "audio_note":
+                status = f"Audio note active · {elapsed_text}"
+            else:
+                title = str(snapshot.get("recording_title", "")).strip()
+                status = f"Recording · {title} · {elapsed_text}" if title else f"Recording active · {elapsed_text}"
+            self.recording_status_action.setText(status)
         self.recording_status_action.setVisible(recording)
         self.start_recording_action.setVisible(not recording)
         self.pause_recording_action.setVisible(recording and recording_kind == "capture" and controllable)

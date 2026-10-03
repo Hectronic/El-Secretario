@@ -7,8 +7,6 @@ from PyQt6.QtWidgets import QInputDialog, QMessageBox
 
 from src.persistence.meetings import parse_utc, utc_now
 from src.ui.notebook_widget import NotebookWidget
-from src.ui.note_widget import NoteWidget
-from src.ui.recording_in_progress.session import format_elapsed_time
 from src.ui.recording_in_progress_widget import RecordingInProgressWidget
 from src.ui.welcome_widget import WelcomeWidget
 
@@ -34,8 +32,15 @@ class TrayQuickActionsCoordinator:
             and getattr(recording_widget.recorder, "is_paused", False)
         )
         elapsed = 0
+        recording_title = ""
         if recording_widget is not None:
             elapsed = int(getattr(recording_widget, "duration_seconds", 0))
+            title_input = getattr(recording_widget, "title_input", None)
+            recording_title = (
+                title_input.text().strip()
+                if title_input is not None
+                else str(getattr(recording_widget, "config", {}).get("title", "")).strip()
+            )
         elif notebook_widget is not None:
             elapsed = int(getattr(notebook_widget, "recording_seconds", 0))
 
@@ -57,6 +62,7 @@ class TrayQuickActionsCoordinator:
             "recording_active": recording_active,
             "recording_paused": recording_paused,
             "recording_elapsed": elapsed,
+            "recording_title": recording_title,
             "recording_index": recording_index,
             "recording_kind": "capture" if recording_widget is not None else "audio_note" if notebook_widget is not None else "busy",
             "recording_controllable": recording_widget is not None or notebook_widget is not None,
@@ -451,9 +457,46 @@ class TrayQuickActionsCoordinator:
         if self.snapshot()["recording_active"]:
             self._status("Finish the active recording before starting this meeting.", error=True)
             return False
+        if not self._preflight_meeting_capture():
+            return False
         productivity = self.window.productivity
-        productivity.start_meeting_occurrence(int(occurrence_id))
+        widget = productivity.start_meeting_occurrence(int(occurrence_id))
+        if widget is None or not getattr(widget, "recording_started", False):
+            self._status("The prepared meeting recording could not start. Check recording setup.", error=True)
+            self._refresh_menu()
+            return False
+        self._status(f"Meeting recording started: {occurrence['title']}.")
         self._refresh_menu()
+        return True
+
+    def _preflight_meeting_capture(self):
+        recorder = self.window.recorder
+        try:
+            devices = recorder.get_input_devices()
+        except Exception as error:
+            self._focus_capture_setup(f"Could not check the recording device: {error}")
+            return False
+        if getattr(recorder, "capture_machine_audio", False):
+            return True
+        if not devices:
+            self._focus_capture_setup(
+                "No microphone is available. Select or connect a device in recording setup."
+            )
+            return False
+        selected = getattr(recorder, "device_index", None)
+        if selected is not None:
+            try:
+                available = {int(index) for index, _name in devices}
+                if int(selected) not in available:
+                    self._focus_capture_setup(
+                        "The saved microphone is unavailable. Choose an available device in recording setup."
+                    )
+                    return False
+            except (TypeError, ValueError):
+                self._focus_capture_setup(
+                    "The saved microphone is unavailable. Choose an available device in recording setup."
+                )
+                return False
         return True
 
     def snooze_meeting(self, occurrence_id):
