@@ -14,6 +14,7 @@ Read this in [Español](README_ES.md) | [Asturianu](README_AST.md)
 - **Live amplitude history**: The recording screen shows a scrolling waveform of recent audio levels, follows the current palette, and fades to silence when paused.
 - **Audio Recording & Import**: Record audio directly within the app or import existing files.
 - **Recording Safety Guardian**: See the branded active-recording indicator in the system tray where supported; pause, resume, stop/save, or cancel it safely; configure duration/silence reminders and optionally opt in to stopping after a silence warning.
+- **System tray quick actions**: Start or control recordings, create text/audio notes, check the next meeting, manage Pomodoro sessions, and open Timeline, Tasks, or Settings. The menu follows live app state; recording setup and in-app controls remain available when the desktop has no usable tray.
 - **Recording Editing**: Open a recording in a second editor tab, trim audio segments, and automatically retranscribe the edited clip. The first trim keeps a `.orig` backup of the original file.
 - **Transcription & Diarization**: Automatically transcribe audio, copy the full transcription with one click, and identify different speakers (diarization) using local Whisper backends, `sherpa-onnx`, and pyannote.audio.
 - Long-audio diarization reduces redundant analysis windows and indexes speaker turns once; pyannote uses adaptive CUDA batches when CUDA is available and `force_cpu` is off, then retries on CPU only after a CUDA runtime failure.

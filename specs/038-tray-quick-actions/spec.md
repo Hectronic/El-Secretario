@@ -1,8 +1,8 @@
 # SPEC-038: Contextual System Tray Quick Actions
 
-Status: Proposed
+Status: Implemented; automated cross-platform validation passed
 Owner: System tray interactions
-Last updated: 2026-09-25
+Last updated: 2026-10-03
 
 ## Problem
 
@@ -140,10 +140,28 @@ menu. Unavailable feature actions are absent, not dead controls.
 - Full suite: required because this crosses Qt menu/signals, recording lifecycle,
   persistence, notifications, and future scheduling/timer boundaries.
 - Manual: verify menu behavior and focus handling on Windows, Ubuntu, and macOS,
-  including desktops without a usable system tray.
+  including desktops without a usable system tray. Pending because this
+  workspace only provides an offscreen Linux Qt platform without a real tray.
+
+## Automated Validation Evidence
+
+- `tests/integration/test_tray_quick_actions.py` covers generic Start and
+  no-microphone recovery, one-time stop/save, cancel confirmation, text/audio
+  note persistence, meeting preflight, prepared recording provenance, and
+  occurrence snooze/dismiss transitions plus the no-tray main-window fallback
+  with real Qt widgets and temporary SQLite databases.
+- `tests/integration/test_pomodoro_main_window.py` covers tray focus actions
+  and verifies one timeline completion after duplicate finish dispatch.
+- Latest full-suite run: 1014 passed, 1 skipped because no real system tray is
+  available, with 3 CUDA/NVML warnings.
+- GitHub Actions full-suite matrix passed on Ubuntu, macOS, and Windows.
+  [Workflow run](https://github.com/Hectronic/El-Secretario/actions/runs/37117487157)
+- Manual visual checks with a real desktop tray remain pending; the offscreen
+  workspace cannot verify native menu rendering or focus behavior.
 
 ## Documentation
 
-- Update README and README_ES with quick actions, recording safety, and platform
-  fallback when implementation begins.
-- Register implementation status in `specs/README.md`.
+- README and README_ES document quick actions, recording safety, and tray
+  fallback.
+- Automated cross-platform validation is registered in `specs/README.md`; native
+  tray rendering/focus checks remain pending.

@@ -41,6 +41,7 @@ from src.ui.main_window.layout import build_main_window_layout
 from src.ui.main_window.window_lifecycle import MainWindowLifecycleCoordinator
 from src.ui.main_window.window_navigation import MainWindowNavigationCoordinator
 from src.ui.main_window.productivity import ProductivityCoordinator
+from src.ui.main_window.tray_actions import TrayQuickActionsCoordinator
 from src.ui.styles import apply_theme
 from src.ui.system_tray_manager import SystemTrayManager
 
@@ -134,6 +135,8 @@ class MainWindow(QMainWindow):
         bootstrap_main_window(self)
         if isinstance(getattr(self.db, "db_name", None), str):
             self.productivity = ProductivityCoordinator(self)
+        self.tray_actions = TrayQuickActionsCoordinator(self)
+        self.system_tray_manager.set_action_coordinator(self.tray_actions)
         logging.info("MainWindow initialized.")
 
     def _apply_rag_runtime_env(self, rag_config):

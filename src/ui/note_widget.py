@@ -120,6 +120,19 @@ class NoteWidget(QWidget):
         self.delete_btn.clicked.connect(self.delete_note)
         layout.addWidget(self.delete_btn, alignment=Qt.AlignmentFlag.AlignRight)
 
+    def prepare_quick_note(self):
+        """Present this feature-owned note editor as a compact capture surface."""
+        for index in range(1, self.tabs.count()):
+            self.tabs.setTabVisible(index, False)
+        self.summarize_btn.hide()
+        self.extract_tasks_btn.hide()
+        self.delete_btn.hide()
+        self.title_input.setText(self.title_input.text().strip() or "Quick note")
+        self.title_input.setPlaceholderText("Note title")
+        self.content_editor.setPlaceholderText("Write a quick note…")
+        self.tabs.setCurrentIndex(0)
+        self.content_editor.setFocus()
+
     def update_preview(self):
         self.preview_display.setMarkdown(self.content_editor.toPlainText())
 

@@ -27,7 +27,7 @@ their implementation checklist here until delivery.
 - `035-recurring-meetings` — implemented
 - `036-chat-ux-workflows` — implemented and validated; one interactive context sidebar and per-answer sources collapsed by default; async cancellation details are in feature notes
 - `037-settings-experience` — implemented and validated; searchable categories, staged saves, scoped resets, and active-versus-saved status
-- `038-tray-quick-actions` — proposed
+- `038-tray-quick-actions` — implemented; Qt/SQLite integration and full suites passed on Ubuntu/macOS/Windows; native tray rendering/focus checks pending
 - `039-pomodoro-quick-start` — proposed; simpler timer UI plus unified timeline, search, and chat discovery layered on SPEC-034
 
 ## Roadmap relationship
