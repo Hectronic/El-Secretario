@@ -27,8 +27,10 @@ focused unit tests before any behavior-sensitive refactor.
   consumers, and apply timing across seven settings categories.
 - The Settings shell now stages edits, searches and opens controls, validates and
   saves changed fields, supports per-field/category reset, and guards navigation.
+- Secret reveal and copy actions are explicitly named for assistive technology;
+  secret inputs no longer impose a wide minimum width.
 - Pomodoro global preferences now live under Automation & notifications; its
   runtime reads the persisted interval preferences.
 - README variants and Spec Kit registry updated. Focused verification: 38 passed.
-  Full suite: 1002 passed, 1 skipped because the system tray is unavailable,
+  Full suite: 1003 passed, 1 skipped because the system tray is unavailable,
   and 11 subtests passed.

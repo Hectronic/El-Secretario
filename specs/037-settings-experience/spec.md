@@ -167,5 +167,7 @@ change values by itself. Category and disclosure state are remembered locally.
   settings.
 - Updated README.md, README_ES.md, and README_AST.md for category navigation and
   save/apply timing.
-- Full-suite validation: 1002 passed, 1 skipped (system tray unavailable), 11
+- Secret controls remain masked until explicitly shown and expose named Show,
+  Hide, and Copy actions; their inputs can shrink in narrow layouts.
+- Full-suite validation: 1003 passed, 1 skipped (system tray unavailable), 11
   subtests passed on 2026-10-03.

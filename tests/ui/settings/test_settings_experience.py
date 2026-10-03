@@ -1,5 +1,5 @@
 from PyQt6.QtCore import QSettings
-from PyQt6.QtWidgets import QMessageBox, QPushButton
+from PyQt6.QtWidgets import QMessageBox, QPushButton, QLineEdit
 
 from src.ui.settings.catalog import CATEGORIES
 from src.ui.settings.store import clear_pending_restart_status
@@ -253,3 +253,22 @@ def test_narrow_settings_view_keeps_controls_in_vertical_scroll_area(qtbot, monk
 
     assert widget.surface_scroll.horizontalScrollBarPolicy().name == "ScrollBarAlwaysOff"
     assert widget.surface_scroll.viewport().width() > 0
+
+
+def test_secret_controls_are_masked_responsive_and_accessible(qtbot, monkeypatch, tmp_path):
+    widget, _settings = _widget(monkeypatch, tmp_path)
+    qtbot.addWidget(widget)
+    widget.show()
+
+    secret = widget.general_panel.gemini_key_input
+    secret_widget = widget.general_panel.gemini_container
+    show_button = secret_widget.show_button
+    copy_button = secret_widget.copy_button
+    assert secret.echoMode() == QLineEdit.EchoMode.Password
+    assert secret.minimumWidth() == 0
+    assert show_button.accessibleName() == "Show or hide token"
+    assert copy_button.accessibleName() == "Copy token to clipboard"
+    assert show_button.text() == "Show"
+    show_button.click()
+    assert secret.echoMode() == QLineEdit.EchoMode.Normal
+    assert show_button.text() == "Hide"

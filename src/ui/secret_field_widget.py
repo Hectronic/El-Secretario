@@ -14,7 +14,14 @@
 
 from __future__ import annotations
 
-from PyQt6.QtWidgets import QApplication, QHBoxLayout, QLineEdit, QPushButton, QWidget
+from PyQt6.QtWidgets import (
+    QApplication,
+    QHBoxLayout,
+    QLineEdit,
+    QPushButton,
+    QSizePolicy,
+    QWidget,
+)
 
 
 class SecretFieldWidget(QWidget):
@@ -27,8 +34,8 @@ class SecretFieldWidget(QWidget):
     def __init__(self, current_value: str = "", placeholder: str = "", parent=None):
         super().__init__(parent)
         self.line_edit = QLineEdit()
-        self.show_button = QPushButton("👁️")
-        self.copy_button = QPushButton("📋")
+        self.show_button = QPushButton("Show")
+        self.copy_button = QPushButton("Copy")
         self._setup_ui(current_value, placeholder)
 
     def text(self) -> str:
@@ -45,15 +52,19 @@ class SecretFieldWidget(QWidget):
         self.line_edit.setPlaceholderText(placeholder)
         self.line_edit.setText(current_value)
         self.line_edit.setEchoMode(QLineEdit.EchoMode.Password)
-        self.line_edit.setMinimumWidth(350)
+        self.line_edit.setMinimumWidth(0)
+        self.line_edit.setSizePolicy(
+            QSizePolicy.Policy.Expanding,
+            QSizePolicy.Policy.Fixed,
+        )
 
-        self.show_button.setToolTip("Show/Hide Token")
-        self.show_button.setFixedSize(30, 30)
+        self.show_button.setToolTip("Show or hide token")
+        self.show_button.setAccessibleName("Show or hide token")
         self.show_button.setCheckable(True)
         self.show_button.clicked.connect(self._toggle_echo)
 
-        self.copy_button.setToolTip("Copy Token")
-        self.copy_button.setFixedSize(30, 30)
+        self.copy_button.setToolTip("Copy token to clipboard")
+        self.copy_button.setAccessibleName("Copy token to clipboard")
         self.copy_button.clicked.connect(self._copy_text)
 
         layout.addWidget(self.line_edit)
@@ -63,11 +74,11 @@ class SecretFieldWidget(QWidget):
     def _toggle_echo(self):
         if self.show_button.isChecked():
             self.line_edit.setEchoMode(QLineEdit.EchoMode.Normal)
-            self.show_button.setText("🔒")
+            self.show_button.setText("Hide")
             return
 
         self.line_edit.setEchoMode(QLineEdit.EchoMode.Password)
-        self.show_button.setText("👁️")
+        self.show_button.setText("Show")
 
     def _copy_text(self):
         QApplication.clipboard().setText(self.line_edit.text())

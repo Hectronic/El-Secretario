@@ -37,17 +37,18 @@ def test_secret_field_toggles_echo_mode_and_label():
     try:
         assert widget.line_edit.text() == "secret-value"
         assert widget.line_edit.echoMode() == QLineEdit.EchoMode.Password
-        assert widget.show_button.text() == "👁️"
+        assert widget.show_button.text() == "Show"
+        assert widget.show_button.accessibleName() == "Show or hide token"
 
         widget.show_button.click()
 
         assert widget.line_edit.echoMode() == QLineEdit.EchoMode.Normal
-        assert widget.show_button.text() == "🔒"
+        assert widget.show_button.text() == "Hide"
 
         widget.show_button.click()
 
         assert widget.line_edit.echoMode() == QLineEdit.EchoMode.Password
-        assert widget.show_button.text() == "👁️"
+        assert widget.show_button.text() == "Show"
     finally:
         widget.close()
         sip.delete(widget)
