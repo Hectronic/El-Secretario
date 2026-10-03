@@ -44,7 +44,8 @@ class PomodoroWidget(QWidget):
         self.long_break_minutes = self._duration(form, "Long break", "pomodoro/long_break_minutes", 15)
         self.tray_notifications = QCheckBox("Notify from the system tray when focus ends")
         self.tray_notifications.setChecked(self.settings.value("pomodoro/tray_notifications", True, type=bool))
-        self.tray_notifications.toggled.connect(lambda checked: self.settings.setValue("pomodoro/tray_notifications", checked))
+        self.tray_notifications.setEnabled(False)
+        self.tray_notifications.setToolTip("Change this preference in Settings → Automation & notifications.")
         form.addRow("Notifications", self.tray_notifications)
         layout.addLayout(form)
 
@@ -128,7 +129,8 @@ class PomodoroWidget(QWidget):
         except (TypeError, ValueError):
             value = default
         spin.setValue(min(240, max(1, value)))
-        spin.valueChanged.connect(lambda value, setting_key=key: self.settings.setValue(setting_key, value))
+        spin.setEnabled(False)
+        spin.setToolTip("Change this default in Settings → Automation & notifications.")
         form.addRow(f"{label} minutes", spin)
         return spin
 
@@ -156,7 +158,9 @@ class PomodoroWidget(QWidget):
                     self.service.cancel()
                 else:
                     return
-            self.service.start(self.title_input.text(), self.tags_input.text(), self.focus_minutes.value() * 60)
+            focus_minutes = self._configured_minutes("pomodoro/focus_minutes", 25)
+            self.focus_minutes.setValue(focus_minutes)
+            self.service.start(self.title_input.text(), self.tags_input.text(), focus_minutes * 60)
             self.status_label.setText("Focus started")
             self.activity_changed.emit()
             self.refresh()
@@ -175,7 +179,13 @@ class PomodoroWidget(QWidget):
         if not self.break_service:
             return
         try:
-            duration = self.short_break_minutes.value() if kind == "short" else self.long_break_minutes.value()
+            key, default, display = (
+                ("pomodoro/short_break_minutes", 5, self.short_break_minutes)
+                if kind == "short"
+                else ("pomodoro/long_break_minutes", 15, self.long_break_minutes)
+            )
+            duration = self._configured_minutes(key, default)
+            display.setValue(duration)
             self.break_service.start(kind, duration * 60)
             self.status_label.setText(f"{kind.capitalize()} break started")
             self.refresh()
@@ -319,6 +329,14 @@ class PomodoroWidget(QWidget):
 
     def refresh(self):
         state = self.service.state
+        if state not in ("running", "paused"):
+            self.focus_minutes.setValue(self._configured_minutes("pomodoro/focus_minutes", 25))
+        if not self.break_service or self.break_service.state not in ("running", "paused"):
+            self.short_break_minutes.setValue(self._configured_minutes("pomodoro/short_break_minutes", 5))
+            self.long_break_minutes.setValue(self._configured_minutes("pomodoro/long_break_minutes", 15))
+        self.tray_notifications.setChecked(
+            self.settings.value("pomodoro/tray_notifications", True, type=bool)
+        )
         remaining = int(self.service.remaining_seconds + 0.999)
         self.time_label.setText(f"{state.capitalize()} · {remaining // 60:02d}:{remaining % 60:02d} remaining")
         self.pause_button.setEnabled(state in ("running", "paused"))
@@ -342,6 +360,12 @@ class PomodoroWidget(QWidget):
             for button in (self.short_break_button, self.long_break_button,
                            self.break_pause_button, self.break_finish_button, self.break_cancel_button):
                 button.setEnabled(False)
+
+    def _configured_minutes(self, key, default):
+        try:
+            return min(240, max(1, int(self.settings.value(key, default))))
+        except (TypeError, ValueError):
+            return default
 
     def cleanup(self):
         self._clock_timer.stop()

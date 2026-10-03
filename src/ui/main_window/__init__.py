@@ -380,6 +380,12 @@ class MainWindow(QMainWindow):
         return self.content_tabs.open_tasks_tab(create_new=create_new)
 
     def close_tab(self, index):
+        widget = self.central_tabs.widget(index) if self.central_tabs is not None else None
+        request_leave = getattr(widget, "request_leave", None)
+        if callable(request_leave) and not request_leave():
+            return
+        if getattr(self.shell_actions, "_last_central_widget", None) is widget:
+            self.shell_actions._last_central_widget = None
         return self.tab_lifecycle.close_tab(index)
 
     def close_floating_chat(self, chat_widget):
@@ -570,6 +576,12 @@ class MainWindow(QMainWindow):
     # open_maintenance_tab removed - now handled by open_tools_tab
 
     def closeEvent(self, event):
+        for index in range(self.central_tabs.count() if self.central_tabs is not None else 0):
+            settings_widget = self.central_tabs.widget(index)
+            request_leave = getattr(settings_widget, "request_leave", None)
+            if callable(request_leave) and not request_leave():
+                event.ignore()
+                return
         tray_available = hasattr(self, "system_tray_manager") and getattr(self.system_tray_manager, "_tray_icon", None) is not None
         if not tray_available or (hasattr(self, "_force_quit") and self._force_quit):
             lifecycle = getattr(self, "window_lifecycle", None)

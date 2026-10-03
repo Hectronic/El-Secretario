@@ -1,8 +1,8 @@
 # SPEC-037: Intuitive Settings With Full Control
 
-Status: Proposed
+Status: Implemented
 Owner: Settings experience
-Last updated: 2026-09-25
+Last updated: 2026-10-03
 
 ## Problem
 
@@ -153,3 +153,21 @@ change values by itself. Category and disclosure state are remembered locally.
 - Update README and README_ES with the new navigation and the distinction between
   saving, applying, and restarting when implementation begins.
 - Register implementation status in `specs/README.md`.
+
+## Implementation Notes
+
+- Delivered the seven canonical categories, bilingual search synonyms, Basic and
+  Advanced disclosure, deep links, scoped resets, staged saves, partial field
+  validation, and saved-versus-active restart status in `src/ui/settings/`.
+- Added `inventory.md` and characterization/UI/integration coverage. Integration
+  checks use real temporary QSettings, Qt signals, downstream transcription
+  configuration, and a temporary SQLite Pomodoro service.
+- Moved global Pomodoro preferences into Settings while keeping the timer
+  display-only. RAG operations remain explicit actions and only save their own
+  settings.
+- Updated README.md, README_ES.md, and README_AST.md for category navigation and
+  save/apply timing.
+- Secret controls remain masked until explicitly shown and expose named Show,
+  Hide, and Copy actions; their inputs can shrink in narrow layouts.
+- Full-suite validation: 1003 passed, 1 skipped (system tray unavailable), 11
+  subtests passed on 2026-10-03.

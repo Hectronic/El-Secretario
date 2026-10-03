@@ -11,7 +11,7 @@
 
 """Prompt customization settings panel."""
 
-from PyQt6.QtWidgets import QLabel, QPushButton, QTextEdit, QVBoxLayout, QWidget
+from PyQt6.QtWidgets import QLabel, QTextEdit, QVBoxLayout, QWidget
 
 from src.ui.settings.prompts_defaults import DEFAULT_PROMPTS
 
@@ -48,24 +48,6 @@ class PromptsSettingsPanel(QWidget):
 
         for prompt_key, title, description in prompt_configs:
             self._add_prompt_editor(layout, prompt_key, title, description)
-
-        reset_btn = QPushButton("🔄 Reset to Defaults")
-        reset_btn.setFixedWidth(150)
-        reset_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #FF9800;
-                color: white;
-                font-weight: bold;
-                border: none;
-                border-radius: 4px;
-                padding: 8px;
-            }
-            QPushButton:hover {
-                background-color: #F57C00;
-            }
-        """)
-        reset_btn.clicked.connect(self._reset_to_defaults)
-        layout.addWidget(reset_btn)
 
         layout.addStretch()
 

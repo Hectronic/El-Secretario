@@ -8,6 +8,12 @@ def bootstrap_main_window(window):
     construction while this helper owns the deterministic startup order.
     """
 
+    import sys
+    if "pytest" not in sys.modules:
+        from PyQt6.QtCore import QSettings
+        from src.ui.settings.store import clear_pending_restart_status
+        clear_pending_restart_status(QSettings("Hectronic", "Secretario"))
+
     window._log_user_settings_snapshot("startup")
     window.load_history()
     window.refresh_tag_filter()

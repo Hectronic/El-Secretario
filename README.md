@@ -83,6 +83,15 @@ Invoke-WebRequest -Uri "https://raw.githubusercontent.com/Hectronic/El-Secretari
 
 To fully utilize the features of El Secretario, you will need to configure the API tokens. You can do this easily via the **🔧 Settings** button on the Welcome screen, or manually in the application settings.
 
+Settings are grouped into **Appearance & language**, **Recording & devices**,
+**Transcription & speakers**, **AI & chat**, **Search & knowledge**,
+**Automation & notifications**, and **Integrations**. Search by a label or a
+term such as “microphone” or “GPU”; use **Advanced settings** to reveal backend,
+compute, RAG, prompt, and integration details. Changes stay staged until you
+choose **Save settings** or **Discard changes**. The screen identifies settings
+that apply immediately, on the next job, or after a restart; RAG initialize,
+reload, and reindex remain explicit actions.
+
 1.  **Hugging Face Token**: Required for speaker diarization (identifying who is speaking).
     -   Create a token at: [https://huggingface.co/settings/tokens](https://huggingface.co/settings/tokens)
     -   Ensure you have accepted the user conditions for the `pyannote/speaker-diarization-3.1` model.
@@ -93,12 +102,12 @@ To fully utilize the features of El Secretario, you will need to configure the A
 3.  **Ollama**: (Optional) Alternative for AI Assistant features if you prefer to run models locally.
     -   Install [Ollama](https://ollama.com/) on your system.
     -   Ensure the Ollama server is running before starting the app.
-    -   You can select your preferred local model (e.g., `llama3`, `mistral`) in the application settings.
+    -   You can select your preferred local model (e.g., `llama3`, `mistral`) in **Settings -> AI & chat**.
 
 4.  **Sherpa-ONNX**: (Optional) Alternative local transcription backend.
     -   Install dependencies from `requirements.txt` so the `sherpa-onnx` Python package is available.
     -   Download a compatible offline model to a local directory, for example `models/sherpa-onnx`.
-    -   Configure the model directory and model type in **Settings -> Audio** if you select `sherpa-onnx` as your transcription option.
+    -   Configure the model directory and model type in **Settings -> Transcription & speakers** if you select `sherpa-onnx` as your transcription option.
     - If the configured local model is missing, El Secretario can automatically download the default official `sherpa-onnx-whisper-tiny` archive on first use.
 
     ### Auto-Updater
@@ -106,9 +115,9 @@ To fully utilize the features of El Secretario, you will need to configure the A
     El Secretario features a transparent, cross-platform auto-update system that checks for updates on startup.
 
     - **How it works:** When launched, the application fetches the latest commits from `origin/main` on a 3-second connection timeout. If updates are found, it pulls them down and installs any dependency changes from `requirements.txt` before starting the main interface.
-    - **Background Checks:** You can manually check for updates via the **🔄 Auto-Updater** section in the Settings panel, which triggers background checks.
+    - **Background Checks:** You can manually check for updates in **Settings -> Automation & notifications**.
     - **Disabling Auto-Updates:** If you are a developer working on local changes, you can disable the auto-updater by:
-    - Unchecking **Enable automatic updates on startup** in the Settings panel.
+    - Unchecking **Check for updates on startup** in **Settings -> Automation & notifications**.
     - Setting the environment variable `DISABLE_AUTO_UPDATE=1` or `DISABLE_AUTO_UPDATE=true` in your terminal environment.
 
     ## Usage
