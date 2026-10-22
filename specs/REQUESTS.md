@@ -70,3 +70,10 @@ Origen: requisitos FR-001–FR-014 y criterios de aceptación de SPEC-039. Todos
 | REQ-040.2 | Specs vivas que describan la funcionalidad realmente existente. | Implementada | Usuario en esta sesión; CURRENT.md y las referencias de implementación de cada spec. |
 | REQ-040.3 | Mantener registro, contratos, evidencia y tareas sincronizados en futuros cambios. | Implementada | AGENTS.md, constitución y plantilla de specs. |
 | REQ-040.4 | Crear rama, subirla y abrir PR con la revisión y estos ajustes. | Implementada | Usuario en esta sesión; rama `039-pomodoro-quick-start`, [PR #67](https://github.com/Hectronic/El-Secretario/pull/67). |
+
+## Seguimiento de PR #67
+
+| ID | Petición | Estado | Origen / entrega |
+| --- | --- | --- | --- |
+| REQ-031.1 | Corregir el fallo de la pipeline Windows de la PR #67 al liberar el WAV tras comprimir. | Implementada | Usuario en esta sesión; fallo de CI 39798480934; SPEC-031. |
+| REQ-037.1 | Mejorar en la misma PR la apariencia de ajustes mostrada en la captura. | Implementada | Usuario en esta sesión y captura; SPEC-037. |

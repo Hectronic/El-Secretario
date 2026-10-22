@@ -97,3 +97,31 @@ def test_saved_stt_preferences_reach_next_job_and_rag_signal_uses_persisted_conf
     assert settings.value("rag_persist_directory") == "new-vectors"
     assert settings.value("app_theme") == "System"
     assert widget.has_unsaved_changes()
+
+
+def test_compact_settings_layout_keeps_real_save_and_rag_actions_working(qtbot, monkeypatch, tmp_path):
+    from src.ui.settings.catalog import CATEGORIES
+
+    monkeypatch.setenv("EL_SECRETARIO_SKIP_AUDIO_ENUM", "1")
+    settings = QSettings(str(tmp_path / "compact-settings.ini"), QSettings.Format.IniFormat)
+    settings.setValue("settings/category", "Search & knowledge")
+    monkeypatch.setattr("src.ui.settings.widget.QSettings", lambda *_args: settings)
+    widget = SettingsWidget()
+    qtbot.addWidget(widget)
+    widget.resize(1100, 850)
+    widget.show()
+    widget.advanced_toggle.click()
+    widget.rag_panel.persist_dir_input.setText("compact-vectors")
+    qtbot.waitUntil(widget.save_btn.isEnabled)
+    widget.save_btn.click()
+    assert settings.value("rag_persist_directory") == "compact-vectors"
+    assert not widget.has_unsaved_changes()
+    spy = QSignalSpy(widget.rag_reload_requested)
+    widget.rag_reload_btn.click()
+    assert len(spy) == 1
+    assert spy[0][0]["persist_directory"] == "compact-vectors"
+    widget.category_list.setCurrentRow(CATEGORIES.index("Recording & devices"))
+    assert widget.audio_panel.mic_combo.isVisible()
+    assert widget.rag_panel.isHidden()
+    assert widget.category_heading.text() == "Recording & devices"
+    assert settings.value("settings/category") == "Recording & devices"

@@ -11,3 +11,9 @@ Last updated: 2026-09-19
 
 
 STT compatibility is validated at the shared local-audio boundary: generated MP3 files are opened through `soundfile` and `Recorder.get_duration`, the same duration-probing path used before backend selection. External model inference remains covered by the existing provider suites.
+
+## Windows follow-up
+
+- [x] T006 Reproduce transient and persistent source locks and add bounded background retries.
+- [x] T007 Run focused unit and real Qt/SQLite integration regressions.
+- [x] T008 Record the full-suite result and link native Windows CI evidence in the plan.

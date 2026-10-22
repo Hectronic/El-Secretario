@@ -85,6 +85,8 @@ Invoke-WebRequest -Uri "https://raw.githubusercontent.com/Hectronic/El-Secretari
 
 ## Configuration
 
+Settings groups controls at the top, uses spaced category navigation and adapts help text contrast to light and dark themes. Resizing keeps related controls and actions together. Narrow windows use a category selector so controls keep the available width.
+
 To fully utilize the features of El Secretario, you will need to configure the API tokens. You can do this easily via the **🔧 Settings** button on the Welcome screen, or manually in the application settings.
 
 Settings are grouped into **Appearance & language**, **Recording & devices**,

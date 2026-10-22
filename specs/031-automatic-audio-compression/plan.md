@@ -29,3 +29,23 @@ Spec: [spec.md](spec.md)
 - Compression, SQLite swap, Qt service, and full capture lifecycle integration tests pass.
 - Shared capture/transcription/persistence coverage passes (`117 passed, 8 subtests passed`).
 - Full suite completed successfully with exit code `0`.
+
+## Windows CI follow-up (2026-10-22, REQ-031.1)
+
+CI run 39798480934 failed only on Windows: the real Qt/SQLite capture lifecycle test observed the WAV retained after the media source was detached. Windows can release the FFmpeg handle asynchronously. The background worker now retries PermissionError up to 10 times with 100 ms between attempts; the Qt thread stays free. Persistent failures still retain the original WAV and valid MP3 reference.
+
+No owner changes or file moves. Unit regression covers transient and persistent sharing locks. Existing `tests/integration/test_recording_compression_lifecycle.py` proves the real capture → Qt source release → worker → SQLite filename swap → original-file removal contract; `test_audio_compression_service.py` proves the real completion signal follows persistence and cleanup. Native Windows CI will verify its actual backend.
+
+Focused units (30 passed, including Settings):
+
+```bash
+QT_QPA_PLATFORM=offscreen PYTHONUNBUFFERED=1 ./.venv/bin/python -m pytest tests/test_audio_compression.py tests/ui/settings -q
+```
+
+Focused integration (5 passed, including Settings):
+
+```bash
+QT_QPA_PLATFORM=offscreen PYTHONUNBUFFERED=1 ./.venv/bin/python -m pytest tests/integration/test_recording_compression_lifecycle.py tests/integration/test_audio_compression_service.py tests/integration/test_settings_experience.py tests/integration/test_recording_player_state.py -q
+```
+
+Full Linux/offscreen suite: 1037 passed, 1 skipped (system tray unavailable), 11 subtests passed in 129.35 seconds; command `QT_QPA_PLATFORM=offscreen PYTHONUNBUFFERED=1 ./.venv/bin/python -m pytest -q`. Native Windows validation is tracked in [PR #67 checks](https://github.com/Hectronic/El-Secretario/pull/67/checks).

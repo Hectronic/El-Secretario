@@ -67,6 +67,8 @@ Al terminar un Pomodoro, el estado se muestra en la aplicación aunque no haya n
 
 ## Configuración
 
+Settings agrupa los controles arriba, separa las categorías y adapta el contraste de las ayudas a los temas claro y oscuro. Al redimensionar, mantiene juntas las opciones y sus acciones. Las ventanas estrechas usan un selector de categoría para dejar todo el ancho a los controles.
+
 Para utilizar plenamente las funciones de El Secretario, deberás configurar los tokens de API. Puedes hacerlo fácilmente a través del botón **🔧 Settings** en la pantalla de Bienvenida, o manualmente en la configuración de la aplicación.
 
 Las categorías de Settings son **Appearance & language** (apariencia e idioma),

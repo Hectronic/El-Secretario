@@ -2,7 +2,7 @@
 
 Status: Implemented
 Owner: Settings experience
-Last updated: 2026-10-03
+Last updated: 2026-10-22
 
 ## Problem
 
@@ -180,3 +180,9 @@ Reviewed: 2026-10-22. Categorías buscables, cambios pendientes y restablecimien
 - Existing coverage: [tests/integration/test_settings_experience.py](../../tests/integration/test_settings_experience.py); execution results and remaining validation belong in `plan.md`.
 - Request: [REQ-037](../REQUESTS.md); current feature map: [CURRENT.md](../CURRENT.md).
 - Requirements and acceptance examples above describe the contract; proposed timings or resource targets require measured evidence before being treated as guarantees.
+
+## Compact presentation (REQ-037.1, 2026-10-22)
+
+Settings categories have clearly spaced navigation items and a current-category heading. Existing control panels are grouped into bordered sections at their natural height, aligned to the top; growing the window leaves unused space below the controls instead of spreading it between sections. Hidden form rows do not reserve space. Help/default text and the primary save action use contrast appropriate to the active light/dark theme; live theme changes preserve the existing controls and staged state. Advanced-mode hints describe only the current category. Below 860 px, an accessible category selector replaces the sidebar, leaving the content its full width; selection and search stay synchronized.
+
+The presentation helper belongs to `src/ui/settings/presentation.py`; the shell keeps category/search navigation, validation, staged saves and existing RAG signals. No setting keys or runtime/provider policy change. Coverage includes a resize regression, live-theme category geometry and a real QSettings/Qt integration path through Save, Reload RAG and category navigation.

@@ -8,3 +8,10 @@
 - [x] T006 Add contextual deep links, accessibility, and narrow-window behavior.
 - [x] T007 Add real QSettings/Qt integration coverage for saved-to-active behavior.
 - [x] T008 Run focused and full virtualenv tests; update README and README_ES.
+
+## Appearance follow-up
+
+- [x] T009 Reproduce expanding gaps with resize coverage and keep panel content at the top.
+- [x] T010 Improve category spacing, headings, grouped sections and light/dark help contrast.
+- [x] T011 Check live theme changes and real save/RAG/category integration.
+- [x] T012 Record the full-suite result and link cross-platform CI evidence.
