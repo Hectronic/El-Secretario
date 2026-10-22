@@ -389,3 +389,15 @@ def test_compact_device_row_fits_long_native_device_names(qtbot, monkeypatch, tm
     qtbot.wait(20)
     assert widget.surface.width() <= widget.surface_scroll.viewport().width()
     assert widget.audio_panel.mic_combo.currentText() == device_name
+
+
+def test_compact_integration_actions_stack_with_their_status(qtbot, monkeypatch, tmp_path):
+    widget, _settings = _widget(monkeypatch, tmp_path)
+    qtbot.addWidget(widget)
+    widget.general_panel.copy_mcp_config_btn.setMinimumWidth(340)
+    widget.general_panel.mcp_status_label.setMinimumWidth(340)
+    widget.resize(680, 540)
+    widget.show()
+    widget.category_picker.setCurrentIndex(CATEGORIES.index("Integrations"))
+    qtbot.wait(20)
+    assert widget.surface.width() <= widget.surface_scroll.viewport().width()

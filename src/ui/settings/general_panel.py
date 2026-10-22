@@ -195,7 +195,9 @@ class GeneralSettingsPanel(QWidget):
         layout.addWidget(self.enable_mcp_server_check)
 
         mcp_row = QHBoxLayout()
-        self.copy_mcp_config_btn = QPushButton("Copy Claude Desktop Config")
+        mcp_row.setObjectName("settingsSectionActions")
+        self.copy_mcp_config_btn = QPushButton("Copy MCP config")
+        self.copy_mcp_config_btn.setToolTip("Copy Claude Desktop MCP configuration")
         self.copy_mcp_config_btn.clicked.connect(self._copy_claude_config)
         self.mcp_status_label = QLabel("Click to copy Claude configuration.")
         self.mcp_status_label.setStyleSheet("color: gray; font-size: 13px;")
@@ -215,6 +217,7 @@ class GeneralSettingsPanel(QWidget):
         layout.addWidget(self.enable_update_check)
 
         updater_row = QHBoxLayout()
+        updater_row.setObjectName("settingsSectionActions")
         self.check_update_btn = QPushButton("Check for Updates")
         self.check_update_btn.clicked.connect(self._check_for_updates)
         self.updater_status_label = QLabel("Click to check for updates.")
@@ -228,7 +231,7 @@ class GeneralSettingsPanel(QWidget):
         os_section_label.setStyleSheet("font-size: 18px; font-weight: bold; color: #607D8B; margin-top: 20px;")
         layout.addWidget(os_section_label)
         
-        self.repair_shortcuts_btn = QPushButton("Repair Desktop / App Shortcuts")
+        self.repair_shortcuts_btn = QPushButton("Repair shortcuts")
         self.repair_shortcuts_btn.setToolTip("Re-generate OS desktop/app launcher shortcuts.")
         self.repair_shortcuts_btn.clicked.connect(self._repair_shortcuts)
         layout.addWidget(self.repair_shortcuts_btn)

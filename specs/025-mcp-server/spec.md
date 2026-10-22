@@ -25,7 +25,7 @@ Rather than forcing the user to manually export data or copy-paste text, "El Sec
     - `stop_recording()` (Stops recording, initiates transcription, and saves the file).
     - `create_task(title, description, due_date)` (Remotely inserts a task card on the board).
   - A settings general panel checkbox toggle (`enable_mcp_integration`) with QSettings persistence.
-  - A UX utility button "Copy Claude Desktop Config" that automatically copies the required JSON configuration snippet to the clipboard for frictionless user setup.
+  - A UX utility button "Copy MCP config" that automatically copies the required JSON configuration snippet to the clipboard for frictionless user setup.
 - **Out of scope:**
   - Standard MCP over SSE (Server-Sent Events) network transports (stdio transport is preferred and standard for local desktop integration).
   - Audio streaming or diarization processing over the MCP protocol (only text metadata, transcripts, and JSON states are exchanged).
@@ -55,7 +55,7 @@ To protect the desktop app's memory and ensure absolute stability:
 ### 2. UI Setting & Configuration Copy Helper
 In `src/ui/settings/general_panel.py`:
 - **"Enable MCP Server Integration"** checkbox (persisted as `enable_mcp_server`). If checked, the launcher allows the MCP process. If unchecked, the MCP proxy process instantly rejects connection attempts, enforcing strict privacy.
-- **"Copy Claude Desktop Config"** button:
+- **"Copy MCP config"** button:
   - Generates the exact JSON block matching the current environment:
     ```json
     {
@@ -133,7 +133,7 @@ In `src/ui/settings/general_panel.py`:
 - **Privacy Override Verification:**
   - Toggle off "Enable MCP Integration" in general settings. Start the MCP server process via stdio, and verify it immediately terminates with a clean error message.
 - **UI Copy Helper Validation:**
-  - Click the "Copy Claude Desktop Config" button in settings, paste, and verify that the JSON is valid and has correct absolute paths of the environment python and directories.
+  - Click the "Copy MCP config" button in settings, paste, and verify that the JSON is valid and has correct absolute paths of the environment python and directories.
 
 ## Living implementation reference
 

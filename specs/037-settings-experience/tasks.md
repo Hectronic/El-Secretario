@@ -25,3 +25,5 @@
 - [x] T018 Run Windows portability regressions before the larger CI suites.
 
 - [x] T019 Apply compact reflow to form rows, reset/maintenance actions and long device/model selectors.
+
+- [x] T020 Stack auxiliary action/status rows and retain concise MCP/shortcut actions, with a minimum-width regression.

@@ -118,5 +118,6 @@ def set_compact_settings_panel(panel, compact):
         form.setRowWrapPolicy(policy)
     direction = (QBoxLayout.Direction.TopToBottom if compact
                  else QBoxLayout.Direction.LeftToRight)
-    for row in panel.findChildren(QBoxLayout, "settingsFieldActions"):
-        row.setDirection(direction)
+    for name in ("settingsFieldActions", "settingsSectionActions"):
+        for row in panel.findChildren(QBoxLayout, name):
+            row.setDirection(direction)

@@ -68,7 +68,7 @@ in seconds; model-type helpers normalize legacy Sherpa values.
 | Refresh Ollama models | AI & chat | Network read only; does not save or change provider settings |
 | Check for updates | Automation & notifications | Network action; existing safe restart flow remains owner |
 | Repair desktop/app shortcuts | Integrations | Runs the existing platform installer action |
-| Copy Claude Desktop config | Integrations | Explicit clipboard action; generated config contains no credentials |
+| Copy MCP config | Integrations | Explicit clipboard action; generated config contains no credentials |
 | Initialize RAG | Search & knowledge | Explicitly saves valid RAG edits, then emits `rag_initialize_requested` |
 | Reload RAG | Search & knowledge | Explicitly saves valid RAG edits, then emits `rag_reload_requested` |
 | Queue RAG reindex | Search & knowledge | Emits `rag_reindex_requested`; never runs on open/search |

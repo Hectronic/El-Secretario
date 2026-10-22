@@ -9,5 +9,5 @@ Last updated: 2026-09-15
 - [x] T004 Implement MCP Resource endpoints for listing transcriptions and reading specific transcripts.
 - [x] T005 Implement MCP Tool handlers for `search_knowledge`, `start_recording`, `stop_recording`, and `create_task` mapping them to the API.
 - [x] T006 Integrate "Enable MCP Server" checkbox inside the Settings General Panel.
-- [x] T007 Program "Copy Claude Desktop Config" button inside settings to copy a dynamically-crafted path config to the clipboard.
+- [x] T007 Program "Copy MCP config" button inside settings to copy a dynamically-crafted path config to the clipboard.
 - [x] T008 Develop automated integration tests verifying MCP tool-to-HTTP mapping and settings-enforced termination.

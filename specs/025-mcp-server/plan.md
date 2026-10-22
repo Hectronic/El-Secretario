@@ -36,7 +36,7 @@ Develop a standalone MCP Server process (`src/api/mcp_server.py`) using the offi
 ### Phase 4: UI Integration & Clipboard Helper
 - In `GeneralSettingsPanel`, add:
   - "Enable Model Context Protocol (MCP) Server Integration" checkbox.
-  - "Copy Claude Desktop Configuration" button.
+  - "Copy MCP config" button.
 - Program the button click to:
   - Query current Python interpreter path (`sys.executable`).
   - Calculate absolute path of `src/api/mcp_server.py`.

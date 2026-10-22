@@ -82,3 +82,9 @@ The Windows job now runs the registry, Settings UI and Settings integration regr
 Run 39819427472 passed the footer constraints and ordinary-font case; the early gate found the Recording & devices compound row still wider than the viewport with the stronger 14 pt font. Compact mode now consistently places labels/controls/reset actions on separate lines across all panels, stacks section actions, and bounds combo minimum content lengths while preserving their values. A long native-device-name regression checks the real selector's complete value and the surface width. Wide mode restores inline field layouts.
 
 Focused units: 32 passed with the existing registry/Settings command. Focused integration: 8 passed with the existing Settings/MainWindow command. Final Linux/offscreen validation: 1042 passed, 1 skipped (system tray unavailable), 11 subtests passed in 149.25 seconds, using the full-suite command already documented above. The four compact-layout/device-name regressions also passed with QT_SCALE_FACTOR=1.5. The early Windows portability gate remains enabled.
+
+### Auxiliary integration actions
+
+Run 39821124421 passed the other six categories under the larger font and isolated the remaining width to Integrations. Reproduced the auxiliary MCP button/status row locally (734 px surface vs 630 px viewport). MCP/update auxiliary rows now use the same compact stacking as field and maintenance actions. Concise MCP/shortcut button captions preserve their callbacks and tooltip detail; the MCP spec/inventory now use the current caption.
+
+Focused units: 33 passed with the documented registry/Settings command. Focused integration: 8 passed with the documented Settings/MainWindow command. The unchanged full-suite command is run for this revision; final results and native checks are reported in [PR #67](https://github.com/Hectronic/El-Secretario/pull/67). No validation assertions are removed or relaxed.
