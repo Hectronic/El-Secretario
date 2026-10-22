@@ -16,3 +16,5 @@ QT_QPA_PLATFORM=offscreen PYTHONUNBUFFERED=1 ./.venv/bin/python -m pytest tests/
 ```
 
 Resultado: 3 passed. Comprueba inventario de 40 directorios, artefactos, IDs de petición únicos, enlaces locales de specs/catálogo y enlaces de los tres README. La comprobación queda en la suite para detectar divergencias futuras. Sin cambios de runtime propios de 040; la entrega conjunta usa las pruebas de 039.
+
+Entrega conjunta en la rama `039-pomodoro-quick-start`: [PR #67](https://github.com/Hectronic/El-Secretario/pull/67). Suite completa de la entrega: 1031 passed, 1 skipped, 11 subtests passed (véase el plan de 039 para el comando y contratos).

@@ -69,4 +69,4 @@ Origen: requisitos FR-001–FR-014 y criterios de aceptación de SPEC-039. Todos
 | REQ-040.1 | Un archivo con cada petición, ordenada y vinculada a su estado. | Implementada | Usuario en esta sesión; este archivo. |
 | REQ-040.2 | Specs vivas que describan la funcionalidad realmente existente. | Implementada | Usuario en esta sesión; CURRENT.md y las referencias de implementación de cada spec. |
 | REQ-040.3 | Mantener registro, contratos, evidencia y tareas sincronizados en futuros cambios. | Implementada | AGENTS.md, constitución y plantilla de specs. |
-| REQ-040.4 | Crear rama, subirla y abrir PR con la revisión y estos ajustes. | En curso | Usuario en esta sesión; entrega Git/GitHub. |
+| REQ-040.4 | Crear rama, subirla y abrir PR con la revisión y estos ajustes. | Implementada | Usuario en esta sesión; rama `039-pomodoro-quick-start`, [PR #67](https://github.com/Hectronic/El-Secretario/pull/67). |

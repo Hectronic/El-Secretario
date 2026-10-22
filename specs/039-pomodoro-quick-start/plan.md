@@ -76,3 +76,5 @@ Full suite command (1031 passed, 1 skipped because system tray is unavailable, 1
 ```bash
 QT_QPA_PLATFORM=offscreen PYTHONUNBUFFERED=1 ./.venv/bin/python -m pytest -q
 ```
+
+Published branch: `039-pomodoro-quick-start`. Review: [PR #67](https://github.com/Hectronic/El-Secretario/pull/67).

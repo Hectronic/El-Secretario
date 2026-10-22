@@ -16,4 +16,4 @@
 - [x] T011 Reproduce and fix Pomodoro context overwriting the selected tag filter, with real SQLite/Qt regression coverage.
 - [x] T012 Make secondary controls actually collapse and verify expansion.
 - [x] T013 Reuse the coordinator timer and verify the visible paused state.
-- [ ] T014 Record the final full-suite result and publish the reviewed branch/PR.
+- [x] T014 Record the final full-suite result and publish the reviewed branch/PR.
