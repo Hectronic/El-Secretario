@@ -21,6 +21,7 @@ def test_parse_chat_context_state_normalizes_mixed_contexts():
             {"type": "tag", "value": "ops"},
             {"type": "notebook", "value": 3},
             {"type": "recording", "value": "7", "label": "Design Review"},
+            {"type": "pomodoro", "value": "12"},
         ]
     )
 
@@ -30,3 +31,4 @@ def test_parse_chat_context_state_normalizes_mixed_contexts():
     assert state["forced_record_ids"] == {7}
     assert state["forced_record_labels"] == ["Design Review"]
     assert state["has_recording_context"] is True
+    assert state["forced_pomodoro_ids"] == {12}

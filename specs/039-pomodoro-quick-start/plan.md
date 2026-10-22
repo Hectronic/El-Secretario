@@ -1,6 +1,6 @@
 # Implementation Plan: Simple Pomodoro And Unified Activity Discovery
 
-**Branch**: `039-pomodoro-quick-start` | **Status**: Proposed
+**Branch**: `039-pomodoro-quick-start` | **Status**: Implemented and validated
 
 ## Delivery Outline
 
@@ -37,3 +37,42 @@ may be deterministic doubles.
   feature-specific timelines.
 - Search and chat context must resolve source identities to their owning records;
   index/read-model entries must not become duplicate editable source content.
+
+## Implementation and Validation Record
+
+- Welcome quick-start delegates to the shared Pomodoro and break services;
+  timer setup/capture controls are grouped under a collapsed secondary section.
+- The existing activity timeline composes stable references to daily and weekly
+  summaries with meetings, Pomodoros, and notes. Local search recognizes these
+  sources plus existing recording/note content, and chat context can explicitly
+  select a Pomodoro and its saved notes.
+
+## Review on 2026-10-22
+
+Environment: Linux, project `.venv`, Qt `offscreen`.
+
+- Corrected selected Pomodoro tags overwriting the chat's record/task filters. The regression uses a real context panel and temporary SQLite with differently tagged notes.
+- Corrected secondary controls remaining visible in an unchecked QGroupBox; its content now actually hides and reappears on expansion.
+- Welcome refresh uses the coordinator's existing timer; no additional QTimer owns or polls its state. Running/paused state is visible in the localized action.
+- No files moved. Owners remain productivity persistence, the Pomodoro widget, Welcome presentation and chat context packages.
+- Follow-up: profile mixed-source timeline pagination on large histories before changing its read model. Native visual checks on Windows/macOS are not covered by this Linux offscreen run.
+
+Focused unit command (120 passed):
+
+```bash
+QT_QPA_PLATFORM=offscreen PYTHONUNBUFFERED=1 ./.venv/bin/python -m pytest tests/ui/welcome tests/ui/chat tests/ui/context_manager tests/ui/main_window/test_search_actions.py tests/ui/test_search_results_widget.py tests/persistence tests/app/pomodoro -q
+```
+
+Focused integration command (28 passed):
+
+```bash
+QT_QPA_PLATFORM=offscreen PYTHONUNBUFFERED=1 ./.venv/bin/python -m pytest tests/integration/test_pomodoro_main_window.py tests/integration/test_pomodoro_timeline_flow.py tests/integration/test_chat_session_persistence.py tests/integration/test_context_manager_panel_sync.py -q
+```
+
+Integration contracts: `test_pomodoro_main_window.py` covers Welcome intent, shared service/SQLite persistence, duplicate prevention, paused/break routing and summary navigation. `test_pomodoro_timeline_flow.py` covers mixed-source chronology, note persistence, discovery and selected chat context, including preservation of tag filters. These use real Qt and SQLite; external provider/audio edges are replaced deterministically.
+
+Full suite command (1031 passed, 1 skipped because system tray is unavailable, 11 subtests passed; 138.17 seconds):
+
+```bash
+QT_QPA_PLATFORM=offscreen PYTHONUNBUFFERED=1 ./.venv/bin/python -m pytest -q
+```

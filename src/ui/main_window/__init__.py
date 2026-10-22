@@ -467,6 +467,9 @@ class MainWindow(QMainWindow):
     def open_pomodoro_tab(self):
         return self.productivity.open_pomodoro()
 
+    def open_pomodoro_from_welcome(self):
+        return self.productivity.open_pomodoro_from_welcome()
+
     def open_timeline_tab(self):
         return self.productivity.open_timeline()
 

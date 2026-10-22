@@ -12,6 +12,7 @@ class ContextPanelState:
     tags: list[str] = field(default_factory=list)
     notebook_ids: list[int] = field(default_factory=list)
     forced_records: list[dict] = field(default_factory=list)
+    forced_pomodoro_ids: list[int] = field(default_factory=list)
     sync_enabled: bool = True
     collapsed: bool = False
 
@@ -22,6 +23,7 @@ class ContextPanelState:
             "active_global_tags": list(self.tags),
             "notebook_ids": list(self.notebook_ids),
             "forced_records": [dict(record) for record in self.forced_records],
+            "forced_pomodoro_ids": list(self.forced_pomodoro_ids),
             "sync_enabled": self.sync_enabled,
             "collapsed": self.collapsed,
         }
@@ -37,6 +39,7 @@ def state_from_dict(value):
         tags=[str(tag).strip() for tag in value.get("active_global_tags") or [] if str(tag).strip()],
         notebook_ids=list(value.get("notebook_ids") or []),
         forced_records=[dict(record) for record in value.get("forced_records") or []],
+        forced_pomodoro_ids=[int(value) for value in value.get("forced_pomodoro_ids") or []],
         sync_enabled=bool(value.get("sync_enabled", True)),
         collapsed=bool(value.get("collapsed", False)),
     )

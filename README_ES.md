@@ -22,6 +22,8 @@ El Secretario es una herramienta inteligente de transcripción y organización d
 - **Libretas y Colecciones**: Organiza tus grabaciones en libretas y colecciones. Accede a ellas directamente desde la barra lateral.
 - **Vista de Calendario**: Explora tus grabaciones por fecha.
 - **Pomodoro y timeline**: Usa los botones laterales para medir sesiones de concentración, pausarlas o terminarlas antes, tomar notas de texto o audio con título y revisar la actividad por fecha y etiquetas. La sesión dura 25 minutos por defecto; los descansos corto y largo duran 5 y 15 minutos y se pueden ajustar en la pestaña Pomodoro. La transcripción de notas de audio es opcional y utiliza el backend configurado.
+
+Welcome también ofrece **Iniciar Pomodoro** para comenzar con un clic una sesión con la duración guardada; si ya hay una sesión o descanso activo, abre ese mismo temporizador y muestra su estado. El reloj y los controles esenciales aparecen primero, y la configuración, los descansos y las notas están en una sección desplegable. El Timeline general reúne Pomodoros, reuniones, notas y referencias a resúmenes diarios y semanales guardados. La búsqueda general encuentra títulos y etiquetas de Pomodoro, contenido de notas y resúmenes; el chat permite añadir explícitamente un Pomodoro y sus notas como contexto.
 - **Reuniones recurrentes**: Guarda plantillas locales diarias, semanales o mensuales con zona horaria, recordatorios, título/etiquetas, duración y vista por fecha. Cada aviso permite iniciar una grabación preparada, posponer, descartar o abrir detalles; el audio solo comienza al elegir iniciar. No hay sincronización con calendarios externos ni recordatorios en segundo plano cuando la aplicación está cerrada.
 - **Herramientas Unificadas**: Limpieza de almacenamiento, procesamiento por lotes y exportación/importación de datos en una sola pestaña.
 - **Tema Personalizable**: Soporte para temas Claro, Oscuro y del Sistema.
@@ -31,6 +33,7 @@ El Secretario es una herramienta inteligente de transcripción y organización d
 - Notas de arquitectura: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
 - Guía de arquitectura: [docs/ARCHITECTURE_GUIDE.md](docs/ARCHITECTURE_GUIDE.md)
 - Registro de funcionalidades en Spec Kit: [specs/README.md](specs/README.md)
+- Peticiones ordenadas y funcionalidad actual: [REQUESTS](specs/REQUESTS.md) · [CURRENT](specs/CURRENT.md)
 
 Al terminar un Pomodoro, el estado se muestra en la aplicación aunque no haya notificaciones de bandeja. Si la aplicación se cierra durante una sesión, en el siguiente inicio permite completarla, reanudarla o descartarla. El timeline oculta los descansos hasta activar **Show breaks**.
 

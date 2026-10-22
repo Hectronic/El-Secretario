@@ -29,3 +29,12 @@ that real Qt note and batch widgets persist/query through the injected facade, a
 `tests/integration/test_notebook_widget_persistence.py` proves the notebook UI
 uses the delegated notebook store. External AI, audio, RAG and network edges are
 not part of this refactor.
+
+## Living implementation reference
+
+Reviewed: 2026-10-22. Persistencia por agregados con fachada DBManager compatible.
+
+- Owner: [src/persistence](../../src/persistence).
+- Existing coverage: [tests/integration/test_persistence_ports.py](../../tests/integration/test_persistence_ports.py); execution results and remaining validation belong in `plan.md`.
+- Request: [REQ-029](../REQUESTS.md); current feature map: [CURRENT.md](../CURRENT.md).
+- Requirements and acceptance examples above describe the contract; proposed timings or resource targets require measured evidence before being treated as guarantees.

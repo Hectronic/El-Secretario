@@ -46,18 +46,18 @@ def resolve_chat_display_title(session_name, chat_history, forced_record_labels,
     return "New Chat"
 
 
-def build_chat_session_payload(chat_history, context_panel, forced_record_ids):
+def build_chat_session_payload(chat_history, context_panel, forced_record_ids, forced_pomodoro_ids=()):
     """Build the JSON payloads used when saving or updating a chat session."""
     return {
         "messages_json": json.dumps(chat_history),
-        "context_json": json.dumps(build_chat_session_contexts(context_panel, forced_record_ids)),
+        "context_json": json.dumps(build_chat_session_contexts(context_panel, forced_record_ids, forced_pomodoro_ids)),
         "name": build_new_chat_session_name(chat_history),
     }
 
 
-def persist_chat_session(db, current_session_id, chat_history, context_panel, forced_record_ids):
+def persist_chat_session(db, current_session_id, chat_history, context_panel, forced_record_ids, forced_pomodoro_ids=()):
     """Create or update a chat session and return the final session id."""
-    payload = build_chat_session_payload(chat_history, context_panel, forced_record_ids)
+    payload = build_chat_session_payload(chat_history, context_panel, forced_record_ids, forced_pomodoro_ids)
     if current_session_id:
         db.update_chat_session(
             current_session_id,

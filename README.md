@@ -24,6 +24,8 @@ Read this in [Español](README_ES.md) | [Asturianu](README_AST.md)
 - **Notebooks & Collections**: Organize your recordings into notebooks and collections. Access them directly from the sidebar.
 - **Calendar View**: Browse your recordings by date.
 - **Pomodoro & Timeline**: Use the sidebar buttons to time focused work, pause or finish early, take titled text or audio notes, and review activity by date and tag. Focus defaults to 25 minutes; short and long breaks default to 5 and 15 minutes and can be changed in the Pomodoro tab. Audio-note transcription is opt-in and uses the configured transcription backend.
+
+Welcome also offers a localized **Start Pomodoro** action for a one-click focus session using the saved duration; when a focus or break is already active, it opens that same timer and shows its current state. The timer and essential controls stay first, with setup, breaks, and notes in an expandable section. The general Timeline includes Pomodoros, meetings, notes, and references to saved daily and weekly summaries. General search also matches Pomodoro titles, tags, saved note content, and summary text, and chat can explicitly add a Pomodoro with its notes as context.
 - **Recurring Meetings**: Save local-only daily, weekly, or monthly meeting templates with time-zone-aware reminders, title/tags, duration, and a date view. Reminders can start a prepared recording, snooze, dismiss, or open details; recording starts only after you choose Start. No external calendar sync or background-daemon reminders are provided while the app is closed.
 - **Unified Tools**: Storage cleanup, batch processing, and data export/import in one convenient tab.
 - **Customizable Theme**: Support for Light, Dark, and System themes.
@@ -33,6 +35,7 @@ Read this in [Español](README_ES.md) | [Asturianu](README_AST.md)
 - Architecture notes: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
 - Architecture guide: [docs/ARCHITECTURE_GUIDE.md](docs/ARCHITECTURE_GUIDE.md)
 - Spec Kit feature registry: [specs/README.md](specs/README.md)
+- Ordered requests and current functionality: [REQUESTS](specs/REQUESTS.md) · [CURRENT](specs/CURRENT.md)
 
 Pomodoro completion remains available in-app if system tray notifications are unavailable. If the app closes during a focus interval, it offers an explicit complete, resume, or discard choice on the next launch. The timeline hides breaks until **Show breaks** is enabled.
 

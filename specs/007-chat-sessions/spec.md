@@ -118,3 +118,12 @@ Users need to ask questions over selected recordings, notes, notebooks, tags, da
 
 - Should floating chat layout preferences persist per session or globally once product behavior is explicitly desired?
 - Should chat context assembly receive a typed context object instead of reading directly from `ContextManagerPanel` before expanding context types further?
+
+## Living implementation reference
+
+Reviewed: 2026-10-22. Conversaciones persistidas, contexto seleccionado y chat flotante; incluye Pomodoros explícitos.
+
+- Owner: [src/ui/chat](../../src/ui/chat).
+- Existing coverage: [tests/integration/test_chat_session_persistence.py](../../tests/integration/test_chat_session_persistence.py); execution results and remaining validation belong in `plan.md`.
+- Request: [REQ-007](../REQUESTS.md); current feature map: [CURRENT.md](../CURRENT.md).
+- Requirements and acceptance examples above describe the contract; proposed timings or resource targets require measured evidence before being treated as guarantees.

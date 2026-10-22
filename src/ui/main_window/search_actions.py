@@ -26,11 +26,11 @@ class SearchActionsCoordinator:
         self.window = window
 
     def perform_welcome_search(self, query):
-        if not self.window.rag:
-            QMessageBox.warning(self.window, "RAG Error", "RAG Engine not initialized.")
+        if not query:
             return
 
-        if not query:
+        if not getattr(self.window, "rag", None):
+            self.on_search_finished_new_tab([], query)
             return
 
         if self.window.search_thread and self.window.search_thread.isRunning():
@@ -49,8 +49,16 @@ class SearchActionsCoordinator:
         self.window.search_thread = None
 
         search_widget = SearchResultsWidget(query)
-        search_widget.display_results(results)
+        db = getattr(self.window, "db", None)
+        search_sources = getattr(db, "search_activity_sources", None)
+        local_results = search_sources(query) if callable(search_sources) else []
+        if not isinstance(local_results, list):
+            local_results = []
+        search_widget.display_results(list(results or []) + local_results)
         search_widget.result_clicked.connect(self.window.open_recording_tab)
+        productivity = getattr(self.window, "productivity", None)
+        if productivity is not None:
+            search_widget.source_requested.connect(productivity.open_source)
 
         index = self.window.central_tabs.addTab(search_widget, f"Search: {query}")
         self.window.central_tabs.setCurrentIndex(index)

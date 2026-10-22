@@ -23,3 +23,12 @@ Implement an automatic, background audio compression system. Immediately after a
 Completed WAV captures are encoded immediately by `AudioCompressionJob` in a daemon background thread using FFmpeg (`libmp3lame`, mono, 16 kHz, 32 kbps). The WAV remains available while transcription is active. Once the recording widget releases its source, the job conditionally swaps the SQLite filename to the MP3 and removes the original WAV.
 
 The media source is detached before releasing it so Windows backends can close their file handle. A failed encoding leaves the original WAV and database reference untouched; a deletion failure retains both files while keeping the valid MP3 reference.
+
+## Living implementation reference
+
+Reviewed: 2026-10-22. Compresión integrada en el ciclo de vida de grabación.
+
+- Owner: [src/audio.py](../../src/audio.py).
+- Existing coverage: [tests/integration/test_recording_compression_lifecycle.py](../../tests/integration/test_recording_compression_lifecycle.py); execution results and remaining validation belong in `plan.md`.
+- Request: [REQ-031](../REQUESTS.md); current feature map: [CURRENT.md](../CURRENT.md).
+- Requirements and acceptance examples above describe the contract; proposed timings or resource targets require measured evidence before being treated as guarantees.

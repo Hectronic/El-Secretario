@@ -40,3 +40,12 @@ use real Qt signals, a temporary SQLite database, and deterministic audio/tray
 edges; verify delivery from a worker thread, pause/resume, terminal cleanup and
 startup failure. The real Recorder callback test proves 20 Hz throttling without
 losing PCM blocks. Run focused tests before the complete suite in offscreen mode.
+
+## Living implementation reference
+
+Reviewed: 2026-10-22. Presentación de la forma de onda durante la grabación.
+
+- Owner: [src/ui/recording_in_progress/waveform.py](../../src/ui/recording_in_progress/waveform.py).
+- Existing coverage: [tests/ui/recording_in_progress/test_waveform.py](../../tests/ui/recording_in_progress/test_waveform.py); execution results and remaining validation belong in `plan.md`.
+- Request: [REQ-027](../REQUESTS.md); current feature map: [CURRENT.md](../CURRENT.md).
+- Requirements and acceptance examples above describe the contract; proposed timings or resource targets require measured evidence before being treated as guarantees.

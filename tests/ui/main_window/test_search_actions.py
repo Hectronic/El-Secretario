@@ -89,3 +89,16 @@ def test_on_search_finished_new_tab_opens_results(monkeypatch):
     assert coordinator.window.search_thread is None
     assert len(coordinator.window.central_tabs.widgets) == 1
     assert coordinator.window.central_tabs.current == 0
+
+
+def test_welcome_search_without_rag_still_opens_local_activity_results(monkeypatch):
+    _app()
+    monkeypatch.setattr(module, "SearchResultsWidget", _SearchWidget)
+    window = _Window()
+    window.rag = None
+    window.db = MagicMock()
+    window.db.search_activity_sources.return_value = [{"event_type": "pomodoro", "source_id": 3}]
+    coordinator = SearchActionsCoordinator(window)
+    coordinator.perform_welcome_search("focus")
+    assert len(window.central_tabs.widgets) == 1
+    assert window.central_tabs.widgets[0].results == [{"event_type": "pomodoro", "source_id": 3}]

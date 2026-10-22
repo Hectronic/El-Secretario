@@ -84,3 +84,12 @@ Users need recordings, notes, summaries, and generated AI text to be searchable 
 
 - Should subprocess integration tests exercise real Chroma subprocess query/upsert on Windows CI instead of only runner/wrapper behavior?
 - Should a typed store adapter interface replace direct Chroma collection access before adding alternative vector stores?
+
+## Living implementation reference
+
+Reviewed: 2026-10-22. Indexación y búsqueda con resultados compatibles y fallback local.
+
+- Owner: [src/rag](../../src/rag).
+- Existing coverage: [tests/integration/test_rag_engine_contract.py](../../tests/integration/test_rag_engine_contract.py); execution results and remaining validation belong in `plan.md`.
+- Request: [REQ-006](../REQUESTS.md); current feature map: [CURRENT.md](../CURRENT.md).
+- Requirements and acceptance examples above describe the contract; proposed timings or resource targets require measured evidence before being treated as guarantees.

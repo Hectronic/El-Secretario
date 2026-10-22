@@ -28,6 +28,7 @@ from src.transcription_options import (
     get_transcription_model_options,
 )
 from src.ui.styles import LIST_WIDGET_STYLE
+from src.ui.welcome.pomodoro_labels import pomodoro_labels
 
 
 def build_welcome_layout(widget, analog_clock_cls):
@@ -145,6 +146,14 @@ def build_welcome_layout(widget, analog_clock_cls):
         header_row.addLayout(clock_column, 0)
         header_layout.addLayout(header_row)
         layout.addWidget(header_container)
+
+        widget.pomodoro_btn = QPushButton(pomodoro_labels()["start"])
+        widget.pomodoro_btn.setObjectName("welcomePomodoroQuickStart")
+        widget.pomodoro_btn.setAccessibleName(pomodoro_labels()["start"])
+        widget.pomodoro_btn.setMinimumHeight(48)
+        widget.pomodoro_btn.setStyleSheet("font-size: 17px; font-weight: bold; padding: 8px 20px; background: #ef6c00; color: white; border-radius: 8px;")
+        widget.pomodoro_btn.clicked.connect(widget.pomodoro_requested.emit)
+        layout.addWidget(widget.pomodoro_btn, 0, Qt.AlignmentFlag.AlignHCenter)
 
         widget.clock_timer = QTimer(widget)
         widget.clock_timer.timeout.connect(widget._update_digital_clock)
@@ -494,4 +503,3 @@ def set_rec_button_size(widget, size):
         """Keep REC visually circular regardless of active theme and compact mode."""
         widget.rec_btn.setFixedSize(size, size)
         widget.rec_btn.setStyleSheet(f"border-radius: {size // 2}px;")
-

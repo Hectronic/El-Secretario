@@ -1,14 +1,20 @@
 from pathlib import Path
+from datetime import datetime, timezone
 
 from PyQt6.QtCore import QDate, Qt, QTimer
 from PyQt6.QtWidgets import QComboBox, QMainWindow, QTabWidget
 
 from src.app.pomodoro.service import PomodoroService
+from src.app.scheduling.scheduler import MeetingScheduler
 from src.database import DBManager
+from src.notebook_database import NotebookDBManager
 from src.ui.pomodoro.widget import PomodoroWidget
 from src.ui.timeline.widget import TimelineWidget
 from src.ui.main_window.productivity import ProductivityCoordinator
 from src.ui.main_window.sidebar_sync import SidebarSyncCoordinator
+from src.ui.chat.add_context_dialog import AddContextDialog
+from src.ui.chat.context_builder import build_chat_context_text, build_chat_session_contexts
+from src.ui.welcome.pomodoro_labels import pomodoro_labels
 from types import SimpleNamespace
 
 
@@ -49,6 +55,7 @@ def test_focus_notes_and_timeline_cross_real_sqlite_qt_boundaries(qtbot, tmp_pat
     widget = PomodoroWidget(service, db, recorder=Recorder(tmp_path / "capture.wav"),
                             audio_dir=tmp_path / "audio")
     qtbot.addWidget(widget)
+    widget.secondary_group.setChecked(True)
     changed = []
     widget.activity_changed.connect(lambda: changed.append(True))
     widget.title_input.setText("Deep work")
@@ -85,6 +92,23 @@ def test_focus_notes_and_timeline_cross_real_sqlite_qt_boundaries(qtbot, tmp_pat
     assert timeline.list_widget.count() == 0
 
 
+def test_timer_first_view_starts_with_valid_default_title_and_collapsed_details(qtbot, tmp_path):
+    db = DBManager(str(tmp_path / "timer-first.sqlite"))
+    service = PomodoroService(db, clock=Clock())
+    widget = PomodoroWidget(service, db, recorder=Recorder(tmp_path / "timer-first.wav"),
+                            audio_dir=tmp_path / "audio")
+    qtbot.addWidget(widget)
+    assert widget.secondary_group.isChecked() is False
+    assert widget.title_input.isHidden() or not widget.title_input.isVisibleTo(widget)
+    widget.secondary_group.setChecked(True)
+    assert widget.title_input.isVisibleTo(widget)
+    widget.secondary_group.setChecked(False)
+    assert widget.title_input.text() == pomodoro_labels()["quick_focus"]
+    widget.start_button.click()
+    assert service.state == "running"
+    assert db.fetch_active_pomodoro()["title"] == pomodoro_labels()["quick_focus"]
+
+
 def test_timeline_week_and_note_tag_filters(qtbot, tmp_path):
     db = DBManager(str(tmp_path / "week.sqlite"))
     db.create_productivity_note("text", "A", ["Ideas"], body="a",
@@ -96,6 +120,102 @@ def test_timeline_week_and_note_tag_filters(qtbot, tmp_path):
     timeline.set_global_filters(QDate(2026, 9, 21), None, "Ideas")
     assert timeline.list_widget.count() == 1
     assert "A" in timeline.list_widget.item(0).text()
+
+
+def test_activity_timeline_composes_summary_references_with_pomodoros(qtbot, tmp_path):
+    db = DBManager(str(tmp_path / "activity.sqlite"))
+    db.save_daily_summary("2026-09-25", "Daily content", "Work")
+    weekly_id = db.save_weekly_summary("2026-09-27", "Weekly content", "Work")
+    now = datetime(2026, 9, 25, 7, 0, tzinfo=timezone.utc)
+    db.create_template({
+        "title": "Planning meeting", "tags": ["Work"], "timezone": "Europe/Madrid",
+        "local_start_time": "10:00", "expected_duration_seconds": 3600,
+        "reminder_lead_seconds": 600, "recurrence_kind": "daily",
+        "recurrence_payload": {"version": 1}, "starts_on": "2026-09-25", "occurrence_limit": 1,
+    }, now=now)
+    scheduler = MeetingScheduler(db.meetings, clock=lambda: now)
+    occurrence_id = scheduler.materialize(now=now)[0]
+    scheduler.start(occurrence_id, now=now)
+    service = PomodoroService(db, clock=Clock())
+    service.start("Focus item", "Work", 60)
+    service.finish()
+    timeline = TimelineWidget(db)
+    qtbot.addWidget(timeline)
+    timeline.set_global_filters(None, None, "Work")
+    assert timeline.list_widget.count() == 4
+    entries = [timeline.list_widget.item(i) for i in range(timeline.list_widget.count())]
+    event_types = [entry.data(Qt.ItemDataRole.UserRole)[0] for entry in entries]
+    assert event_types == ["weekly_summary", "daily_summary", "meeting_occurrence", "pomodoro"]
+    selected = next(entry for entry in entries if entry.data(Qt.ItemDataRole.UserRole)[0] == "weekly_summary")
+    source_id = selected.data(Qt.ItemDataRole.UserRole)[1]
+    assert db.fetch_weekly_summary_by_id(source_id)["id"] == weekly_id
+    db.save_weekly_summary("2026-09-27", "Updated weekly content", "Work")
+    timeline.refresh()
+    assert timeline.list_widget.count() == 4
+
+
+def test_general_activity_search_finds_pomodoro_notes_and_summaries(tmp_path):
+    db = DBManager(str(tmp_path / "search-activity.sqlite"))
+    service = PomodoroService(db, clock=Clock())
+    service.start("Design sprint", "Roadmap", 60)
+    db.create_productivity_note("text", "Sprint notes", ["Roadmap"], body="Review milestones",
+                                pomodoro_id=service.pomodoro_id, captured_at="2026-09-25T10:00:00+00:00")
+    db.save_daily_summary("2026-09-25", "Roadmap delivery recap")
+    found = db.search_activity_sources("Roadmap")
+    assert {row["event_type"] for row in found} == {"pomodoro", "text_note", "daily_summary"}
+    note = next(row for row in found if row["event_type"] == "text_note")
+    assert "Review milestones" in note["text"]
+
+
+def test_local_general_search_finds_existing_record_and_meeting_content(tmp_path):
+    db = DBManager(str(tmp_path / "meeting-search.sqlite"))
+    db.save("", "stakeholders approved scope", 0, title="Review", recording_notes="Budget confirmed")
+    now = datetime(2026, 9, 25, 7, 0, tzinfo=timezone.utc)
+    db.create_template({
+        "title": "Planning meeting", "tags": ["Roadmap"], "timezone": "Europe/Madrid",
+        "local_start_time": "10:00", "expected_duration_seconds": 3600,
+        "reminder_lead_seconds": 600, "recurrence_kind": "daily",
+        "recurrence_payload": {"version": 1}, "starts_on": "2026-09-25", "occurrence_limit": 1,
+    }, now=now)
+    MeetingScheduler(db.meetings, clock=lambda: now).materialize(now=now)
+    assert any(row["event_type"] == "record" and "stakeholders" in row["text"]
+               for row in db.search_activity_sources("stakeholders"))
+    assert any(row["event_type"] == "meeting_occurrence"
+               for row in db.search_activity_sources("Roadmap"))
+
+
+def test_explicit_chat_picker_to_sqlite_pomodoro_context(qtbot, tmp_path):
+    db = DBManager(str(tmp_path / "chat-pomodoro.sqlite"))
+    service = PomodoroService(db, clock=Clock())
+    service.start("Design review", "Planning", 60)
+    pomodoro_id = service.pomodoro_id
+    db.create_productivity_note("text", "Decisions", ["Planning"], body="Approve milestones",
+                                pomodoro_id=pomodoro_id, captured_at="2026-09-25T09:15:00+00:00")
+    service.finish()
+    notebook_db = NotebookDBManager(str(tmp_path / "chat-notebooks.sqlite"))
+    dialog = AddContextDialog(db, notebook_db)
+    qtbot.addWidget(dialog)
+    dialog.tabs.setCurrentWidget(dialog.pomodoro_list)
+    dialog.pomodoro_list.setCurrentRow(0)
+    dialog.on_accept()
+    selected_id = dialog.selected_context["value"]
+
+    class Panel:
+        current_week_monday = None
+        current_date_filter = None
+        def get_active_notebooks(self): return []
+        def get_active_tags(self): return []
+
+    class RagDouble:
+        def search(self, *_args, **_kwargs): return []
+
+    context = build_chat_context_text(db, notebook_db, RagDouble(), "question", Panel(), set(),
+                                      forced_pomodoro_ids={selected_id})
+    assert "Design review" in context
+    assert "2026-09-25" in context
+    assert "Planning" in context
+    assert "Approve milestones" in context
+    assert {"type": "pomodoro", "value": selected_id} in build_chat_session_contexts(Panel(), set(), {selected_id})
 
 
 def test_window_coordinator_keeps_timer_after_tab_closes_and_reports_completion(qtbot, tmp_path):
@@ -140,6 +260,7 @@ def test_cancelling_audio_note_does_not_cancel_focus(qtbot, tmp_path):
     widget = PomodoroWidget(service, db, recorder=Recorder(tmp_path / "discard.wav"),
                             audio_dir=tmp_path / "audio")
     qtbot.addWidget(widget)
+    widget.secondary_group.setChecked(True)
     widget.title_input.setText("Focus")
     widget.start_button.click()
     widget.note_title.setText("Discard me")
@@ -194,6 +315,7 @@ def test_opt_in_audio_transcription_updates_saved_note(qtbot, tmp_path, monkeypa
     widget = PomodoroWidget(PomodoroService(db, clock=Clock()), db,
                             recorder=Recorder(tmp_path / "voice.wav"), audio_dir=tmp_path / "audio")
     qtbot.addWidget(widget)
+    widget.secondary_group.setChecked(True)
     widget.note_title.setText("Voice note")
     widget.transcribe_audio.setChecked(True)
     widget.audio_button.click()
@@ -202,3 +324,24 @@ def test_opt_in_audio_transcription_updates_saved_note(qtbot, tmp_path, monkeypa
     assert started_paths == [db.fetch_productivity_note(event["source_id"])["audio_ref"]]
     qtbot.waitUntil(lambda: db.fetch_productivity_note(event["source_id"])["transcription"] == "Spoken idea")
     widget.cleanup()
+
+
+def test_selected_pomodoro_preserves_chat_tag_filters(qtbot, tmp_path):
+    from src.ui.context_manager_panel import ContextManagerPanel
+
+    db = DBManager(str(tmp_path / "tag-context.sqlite"))
+    notebooks = NotebookDBManager(str(tmp_path / "tag-notebooks.sqlite"))
+    selected = db.save_note("Selected operations", "Keep operations context")
+    other = db.save_note("Other planning", "Exclude planning record")
+    db.update_tags(selected, "Operations")
+    db.update_tags(other, "Planning")
+    service = PomodoroService(db, clock=Clock())
+    service.start("Explicit focus", "Planning", 60)
+    panel = ContextManagerPanel(db, notebooks)
+    qtbot.addWidget(panel)
+    panel.apply_state({"active_global_tags": ["Operations"]})
+    context = build_chat_context_text(db, notebooks, None, "question", panel, set(),
+                                      forced_pomodoro_ids={service.pomodoro_id})
+    assert "Explicit focus" in context
+    assert "Keep operations context" in context
+    assert "Exclude planning record" not in context

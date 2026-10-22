@@ -9,11 +9,13 @@ def test_context_state_round_trip_normalizes_values_and_labels():
         "active_global_tags": [" work ", "", "ops"],
         "notebook_ids": [2],
         "forced_records": [{"id": 7, "title": "Pinned"}],
+        "forced_pomodoro_ids": [12],
         "sync_enabled": False,
         "collapsed": True,
     })
 
     assert state.as_dict()["active_global_tags"] == ["work", "ops"]
+    assert state.as_dict()["forced_pomodoro_ids"] == [12]
     assert status_labels(state) == ("Dates: 2026-09-07 to 2026-09-08", "Tags: work, ops")
 
 

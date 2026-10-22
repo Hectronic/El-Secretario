@@ -18,6 +18,7 @@ from PyQt6.QtCore import Qt, pyqtSignal
 
 class SearchResultsWidget(QWidget):
     result_clicked = pyqtSignal(int) # Emits record_id
+    source_requested = pyqtSignal(str, int)
 
     def __init__(self, query, parent=None):
         super().__init__(parent)
@@ -47,6 +48,14 @@ class SearchResultsWidget(QWidget):
         self.header_label.setText(f"Search Results for: '{self.query}' ({len(results)} found)")
         
         for res in results:
+            event_type = res.get("event_type")
+            if event_type:
+                type_label = res.get("record_type") or event_type
+                item_text = f"{res['title']} ({res.get('occurred_at', 'Unknown date')}) · {type_label.replace('_', ' ')}\n{res.get('text', '')[:200]}"
+                item = QListWidgetItem(item_text)
+                item.setData(Qt.ItemDataRole.UserRole, (event_type, int(res["source_id"])))
+                self.results_list.addItem(item)
+                continue
             title = res['metadata'].get('title', 'Untitled')
             date = res['metadata'].get('date', 'Unknown Date')
             score = 1 - res['distance']
@@ -61,4 +70,7 @@ class SearchResultsWidget(QWidget):
     def on_item_clicked(self, item):
         data = item.data(Qt.ItemDataRole.UserRole)
         if data:
-            self.result_clicked.emit(int(data))
+            if isinstance(data, tuple):
+                self.source_requested.emit(data[0], data[1])
+            else:
+                self.result_clicked.emit(int(data))

@@ -90,3 +90,11 @@ Expected output:
 - A short note naming the Spec Kit feature artifact updated.
 - The files moved or reshaped, if any.
 - The exact focused and broader test commands run.
+
+## Living Specs And Request Ledger
+
+- Register every new user request in `specs/REQUESTS.md` with a stable ID, known origin, implementation state and owning spec. Preserve prior requests, including superseded or discarded ones, with their resolution; never invent missing conversation history.
+- Treat each feature's `spec.md` as its living product contract. Update existing behavior and ownership in the same PR as the code. Keep unimplemented proposals explicitly separate and tracked in `tasks.md`.
+- Keep `specs/CURRENT.md` synchronized with actual functionality, existing owner paths, coverage and known limitations; keep `specs/README.md` complete for every numbered feature.
+- Separate implementation status from validation evidence. Record exact commands, date, environment, outcomes and remaining manual checks in `plan.md`; do not treat checked tasks or illustrative performance targets as proof.
+- Use `specs/templates/feature-spec.md` for new areas. Existing feature corrections update the owner spec rather than creating duplicate contracts.

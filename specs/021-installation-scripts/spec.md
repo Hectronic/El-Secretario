@@ -41,3 +41,12 @@ Users currently need technical knowledge to set up the application (cloning the 
 ## Documentation
 
 - Update `README.md` to feature the new simple installation commands.
+
+## Living implementation reference
+
+Reviewed: 2026-10-22. Scripts de instalación para los entornos admitidos.
+
+- Owner: [scripts](../../scripts).
+- Existing coverage: [tests/integration/test_install_scripts.py](../../tests/integration/test_install_scripts.py); execution results and remaining validation belong in `plan.md`.
+- Request: [REQ-021](../REQUESTS.md); current feature map: [CURRENT.md](../CURRENT.md).
+- Requirements and acceptance examples above describe the contract; proposed timings or resource targets require measured evidence before being treated as guarantees.

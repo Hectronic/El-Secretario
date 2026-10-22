@@ -165,3 +165,12 @@ menu. Unavailable feature actions are absent, not dead controls.
   fallback.
 - Automated cross-platform validation is registered in `specs/README.md`; native
   tray rendering/focus checks remain pending.
+
+## Living implementation reference
+
+Reviewed: 2026-10-22. Acciones de captura, foco y reuniones delegadas a sus servicios existentes.
+
+- Owner: [src/ui/system_tray_manager.py](../../src/ui/system_tray_manager.py).
+- Existing coverage: [tests/integration/test_tray_quick_actions.py](../../tests/integration/test_tray_quick_actions.py); execution results and remaining validation belong in `plan.md`.
+- Request: [REQ-038](../REQUESTS.md); current feature map: [CURRENT.md](../CURRENT.md).
+- Requirements and acceptance examples above describe the contract; proposed timings or resource targets require measured evidence before being treated as guarantees.

@@ -156,3 +156,12 @@ Required integration cases:
 
 - Coordinate with SPEC-015 and SPEC-016; do not duplicate recording guardian or
   performance measurement responsibilities.
+
+## Living implementation reference
+
+Reviewed: 2026-10-22. Contratos de cancelación, errores y cierre de trabajadores y colas.
+
+- Owner: [src/worker_components/lifecycle.py](../../src/worker_components/lifecycle.py).
+- Existing coverage: [tests/test_shutdown_cleanup_stress.py](../../tests/test_shutdown_cleanup_stress.py); execution results and remaining validation belong in `plan.md`.
+- Request: [REQ-017](../REQUESTS.md); current feature map: [CURRENT.md](../CURRENT.md).
+- Requirements and acceptance examples above describe the contract; proposed timings or resource targets require measured evidence before being treated as guarantees.

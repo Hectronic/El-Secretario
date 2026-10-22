@@ -67,9 +67,10 @@ class TimelineWidget(QWidget):
 
     def load_more(self):
         start, end, tag = self._filters
-        rows = self.db.fetch_timeline(start_date=start, end_date=end, tag=tag,
-                                      limit=self._page_size, offset=self._offset,
-                                      show_breaks=self.show_breaks.isChecked())
+        fetch = getattr(self.db, "fetch_activity_timeline", None) or self.db.fetch_timeline
+        rows = fetch(start_date=start, end_date=end, tag=tag,
+                     limit=self._page_size, offset=self._offset,
+                     show_breaks=self.show_breaks.isChecked())
         for event in rows:
             label = f"{event['occurred_at'][:16]}  ·  {event['title_snapshot']}  ·  {event['event_type'].replace('_', ' ')}"
             if event["display_tags"]:

@@ -74,3 +74,12 @@ Users need the right sidebar to reflect the context of the currently active chat
 - Should the remaining right-sidebar section creation move out of `MainWindow.__init__` into dedicated builders once more section contracts are documented?
 - Should context panel state use a typed dataclass shared by `ContextManagerPanel`, `ChatWidget`, and `SidebarSyncCoordinator` instead of raw dictionaries?
 - Should floating chat focus/activation explicitly select the mirrored sidebar source when multiple floating chats are visible?
+
+## Living implementation reference
+
+Reviewed: 2026-10-22. Contexto serializable por fechas, etiquetas, cuadernos, registros y Pomodoros seleccionados.
+
+- Owner: [src/ui/context_manager_panel.py](../../src/ui/context_manager_panel.py).
+- Existing coverage: [tests/integration/test_context_manager_panel_sync.py](../../tests/integration/test_context_manager_panel_sync.py); execution results and remaining validation belong in `plan.md`.
+- Request: [REQ-008](../REQUESTS.md); current feature map: [CURRENT.md](../CURRENT.md).
+- Requirements and acceptance examples above describe the contract; proposed timings or resource targets require measured evidence before being treated as guarantees.

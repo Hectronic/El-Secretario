@@ -369,6 +369,16 @@ class SummariesRepository(RepositoryBase):
             cursor.execute(query, params)
             return [dict(row) for row in cursor.fetchall()]
 
+    def fetch_daily_summary_by_id(self, summary_id: int) -> Optional[Dict[str, Any]]:
+        with self.get_connection() as conn:
+            row = conn.execute("SELECT * FROM daily_summaries WHERE id=?", (int(summary_id),)).fetchone()
+            return dict(row) if row else None
+
+    def fetch_weekly_summary_by_id(self, summary_id: int) -> Optional[Dict[str, Any]]:
+        with self.get_connection() as conn:
+            row = conn.execute("SELECT * FROM weekly_summaries WHERE id=?", (int(summary_id),)).fetchone()
+            return dict(row) if row else None
+
     def get_weeks_without_summary(self, tags_filter: Optional[str] = None, exclude_current_week: bool = False) -> List[str]:
         """
         Get weeks with content but without a summary.

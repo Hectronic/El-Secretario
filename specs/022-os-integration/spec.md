@@ -42,3 +42,12 @@ After installation via source, the application lacks native OS integration. It n
 ## Documentation
 
 - Document how to rebuild shortcuts if they are accidentally deleted.
+
+## Living implementation reference
+
+Reviewed: 2026-10-22. Instalación de accesos de aplicación según plataforma.
+
+- Owner: [scripts](../../scripts).
+- Existing coverage: [tests/integration/test_install_scripts.py](../../tests/integration/test_install_scripts.py); execution results and remaining validation belong in `plan.md`.
+- Request: [REQ-022](../REQUESTS.md); current feature map: [CURRENT.md](../CURRENT.md).
+- Requirements and acceptance examples above describe the contract; proposed timings or resource targets require measured evidence before being treated as guarantees.

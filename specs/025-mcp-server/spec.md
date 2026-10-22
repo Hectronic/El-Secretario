@@ -134,3 +134,12 @@ In `src/ui/settings/general_panel.py`:
   - Toggle off "Enable MCP Integration" in general settings. Start the MCP server process via stdio, and verify it immediately terminates with a clean error message.
 - **UI Copy Helper Validation:**
   - Click the "Copy Claude Desktop Config" button in settings, paste, and verify that the JSON is valid and has correct absolute paths of the environment python and directories.
+
+## Living implementation reference
+
+Reviewed: 2026-10-22. Interfaz MCP sobre las funciones de la aplicación.
+
+- Owner: [src/api/mcp_server.py](../../src/api/mcp_server.py).
+- Existing coverage: [tests/test_mcp_server.py](../../tests/test_mcp_server.py); execution results and remaining validation belong in `plan.md`.
+- Request: [REQ-025](../REQUESTS.md); current feature map: [CURRENT.md](../CURRENT.md).
+- Requirements and acceptance examples above describe the contract; proposed timings or resource targets require measured evidence before being treated as guarantees.

@@ -37,9 +37,13 @@ produce user-facing messages without losing queued or persisted work.
   external network, AI, STT, RAG, and audio hardware may be deterministic doubles.
 - Keep feature artifacts in `specs/<NNN-feature>/` synchronized with behavior.
 
+### VI. Living contracts and traceable requests
+
+Every user request is recorded with stable identity, known origin, state and owning feature in `specs/REQUESTS.md`. Feature specs describe current implemented contracts, with proposals and unmeasured targets explicitly separated. `specs/CURRENT.md` maps existing functionality to code, tests and limits. Update these artifacts in the same PR as behavior changes; retain superseded requests and use Git for detailed history. Plans record dated validation evidence independently from implementation status.
+
 ## Governance
 
 This constitution governs future feature plans and tasks. Amendments require an
 explicit update to this file and the affected feature artifacts.
 
-**Version**: 1.0.0 | **Ratified**: 2026-09-10 | **Last Amended**: 2026-09-10
+**Version**: 1.1.0 | **Ratified**: 2026-09-10 | **Last Amended**: 2026-10-22

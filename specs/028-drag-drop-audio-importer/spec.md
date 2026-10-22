@@ -24,3 +24,12 @@ Validation covers the Qt drag event contract with deterministic MIME data, the
 copy/persistence/transcription boundary with a temporary SQLite database, and the
 existing dialog import behavior. Network, audio hardware and transcription models
 remain outside the test boundary.
+
+## Living implementation reference
+
+Reviewed: 2026-10-22. Arrastre de audio conectado al flujo de importación.
+
+- Owner: [src/ui/main_window/drag_drop.py](../../src/ui/main_window/drag_drop.py).
+- Existing coverage: [tests/integration/test_drag_drop_audio_import.py](../../tests/integration/test_drag_drop_audio_import.py); execution results and remaining validation belong in `plan.md`.
+- Request: [REQ-028](../REQUESTS.md); current feature map: [CURRENT.md](../CURRENT.md).
+- Requirements and acceptance examples above describe the contract; proposed timings or resource targets require measured evidence before being treated as guarantees.

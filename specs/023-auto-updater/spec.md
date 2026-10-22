@@ -56,3 +56,12 @@ The transparent auto-updater is implemented across three coordinated architectur
 ## Documentation
 
 - Add a section in `README.md` explaining the auto-update behavior and how developers can disable it if they are working on local changes.
+
+## Living implementation reference
+
+Reviewed: 2026-10-22. Comprobación de actualizaciones e integración del actualizador.
+
+- Owner: [src/auto_updater.py](../../src/auto_updater.py).
+- Existing coverage: [tests/test_auto_updater.py](../../tests/test_auto_updater.py); execution results and remaining validation belong in `plan.md`.
+- Request: [REQ-023](../REQUESTS.md); current feature map: [CURRENT.md](../CURRENT.md).
+- Requirements and acceptance examples above describe the contract; proposed timings or resource targets require measured evidence before being treated as guarantees.

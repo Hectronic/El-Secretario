@@ -101,5 +101,6 @@ class MainWindowShellCoordinator:
         welcome.settings_requested.connect(window.open_settings_tab)
         welcome.generate_daily_summary_requested.connect(window.generate_today_daily_summary)
         welcome.status_message_requested.connect(window.handle_status_message)
+        welcome.pomodoro_requested.connect(window.open_pomodoro_from_welcome)
         window.central_tabs.addTab(welcome, "Welcome")
         window._set_tab_action_buttons(welcome)

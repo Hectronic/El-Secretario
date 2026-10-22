@@ -95,3 +95,12 @@ configured runtime policy.
   regresses beyond the recorded baseline.
 - Capture changes preserve WAV content, sample rate, channel count, and
   stop/cancel semantics.
+
+## Living implementation reference
+
+Reviewed: 2026-10-22. Benchmark reproducible y pruebas del baseline; resultados dependen del host.
+
+- Owner: [benchmarks](../../benchmarks).
+- Existing coverage: [tests/test_runtime_performance_baseline.py](../../tests/test_runtime_performance_baseline.py); execution results and remaining validation belong in `plan.md`.
+- Request: [REQ-016](../REQUESTS.md); current feature map: [CURRENT.md](../CURRENT.md).
+- Requirements and acceptance examples above describe the contract; proposed timings or resource targets require measured evidence before being treated as guarantees.

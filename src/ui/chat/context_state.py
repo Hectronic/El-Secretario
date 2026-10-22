@@ -25,6 +25,7 @@ def parse_chat_context_state(contexts):
         "active_global_tags": [],
         "notebook_ids": [],
         "forced_record_ids": set(),
+        "forced_pomodoro_ids": set(),
         "forced_record_labels": [],
         "has_recording_context": False,
     }
@@ -57,5 +58,10 @@ def parse_chat_context_state(contexts):
             label = ((ctx or {}).get("label") or f"Recording {rid}").strip()
             if label and label not in state["forced_record_labels"]:
                 state["forced_record_labels"].append(label)
+        elif ctx_type == "pomodoro":
+            try:
+                state["forced_pomodoro_ids"].add(int(ctx_value))
+            except (TypeError, ValueError):
+                continue
 
     return state

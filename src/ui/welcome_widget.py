@@ -30,6 +30,7 @@ from src.ui.welcome.layout import (
     build_welcome_layout,
     set_rec_button_size,
 )
+from src.ui.welcome.pomodoro_labels import pomodoro_labels
 Recorder = None
 
 class AnalogClockWidget(QWidget):
@@ -104,6 +105,7 @@ class WelcomeWidget(QWidget):
     settings_requested = pyqtSignal() # New settings signal
     generate_daily_summary_requested = pyqtSignal()
     status_message_requested = pyqtSignal(str)
+    pomodoro_requested = pyqtSignal()
 
     def __init__(self, db, parent=None):
         super().__init__(parent)
@@ -119,6 +121,7 @@ class WelcomeWidget(QWidget):
         self.mic_runtime = WelcomeMicRuntime(self)
         self.capture_runtime = WelcomeCaptureRuntime(self)
         self.landing_actions = WelcomeLandingActions(self)
+        self.pomodoro_state = None
         self.init_ui()
         self.load_favorites()
         self.load_today()
@@ -146,6 +149,17 @@ class WelcomeWidget(QWidget):
 
     def init_ui(self):
         build_welcome_layout(self, AnalogClockWidget)
+
+    def set_pomodoro_state(self, state, remaining_seconds=0, title=""):
+        labels = pomodoro_labels()
+        self.pomodoro_state = state
+        if state in ("running", "paused"):
+            minutes, seconds = divmod(max(0, int(remaining_seconds)), 60)
+            self.pomodoro_btn.setText(f"{labels['open']} · {labels[state]} · {minutes:02d}:{seconds:02d}")
+            self.pomodoro_btn.setAccessibleName(f"{labels['open']}, {title}, {state}, {minutes} minutes {seconds} seconds remaining")
+        else:
+            self.pomodoro_btn.setText(labels["start"])
+            self.pomodoro_btn.setAccessibleName(labels["start"])
 
     def resizeEvent(self, event):
         super().resizeEvent(event)

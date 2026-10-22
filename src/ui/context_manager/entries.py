@@ -14,7 +14,7 @@ def fetch_context_records(db, state):
     return []
 
 
-def entry_descriptors(forced_records, records, notebook_entries):
+def entry_descriptors(forced_records, records, notebook_entries, forced_pomodoros=()):
     descriptors = []
     seen_record_ids = set()
     for record in forced_records:
@@ -32,4 +32,7 @@ def entry_descriptors(forced_records, records, notebook_entries):
         descriptors.append((f"{icon} {record.get('title') or 'Untitled'}", str(record.get("created_at") or "")))
     for entry in notebook_entries:
         descriptors.append((f"📓 {entry.get('title') or 'Notebook note'}", ""))
+    for session in forced_pomodoros:
+        descriptors.append((f"📌 🍅 {session.get('title') or 'Pomodoro'}",
+                            f"{session.get('started_at') or ''} · {', '.join(session.get('tags') or [])}"))
     return descriptors

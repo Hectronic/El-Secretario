@@ -147,6 +147,11 @@ class ProductivityRepository(RepositoryBase):
         with self.get_connection() as conn:
             return _decode(conn.execute("SELECT * FROM pomodoros WHERE id=?", (pomodoro_id,)).fetchone())
 
+    def fetch_pomodoros(self, limit=500):
+        with self.get_connection() as conn:
+            return [_decode(row) for row in conn.execute(
+                "SELECT * FROM pomodoros ORDER BY started_at DESC,id DESC LIMIT ?", (int(limit),))]
+
     def fetch_active_pomodoro(self):
         with self.get_connection() as conn:
             return _decode(conn.execute("SELECT * FROM pomodoros WHERE state IN ('running','paused') LIMIT 1").fetchone())
@@ -304,3 +309,83 @@ class ProductivityRepository(RepositoryBase):
             parent = json.loads(row.pop("parent_tags")) if row["parent_tags"] else []
             row["display_tags"] = normalize_tags(row["tags_snapshot"] + parent)
         return rows
+
+    def fetch_activity_timeline(self, *, start_date=None, end_date=None, tag=None, limit=50, offset=0, show_breaks=False):
+        """Compose source timeline events and persisted summary references."""
+        rows = []
+        source_offset = 0
+        while True:
+            batch = self.fetch_timeline(start_date=start_date, end_date=end_date, tag=tag,
+                                        limit=200, offset=source_offset, show_breaks=show_breaks)
+            rows.extend(batch)
+            source_offset += len(batch)
+            if len(batch) < 200:
+                break
+        with self.get_connection() as conn:
+            for table, event_type, date_field, title in (
+                ("daily_summaries", "daily_summary", "date", "Daily summary"),
+                ("weekly_summaries", "weekly_summary", "week_start", "Weekly summary"),
+            ):
+                clauses, values = [], []
+                if start_date:
+                    clauses.append(f"{date_field} >= ?")
+                    values.append(str(start_date))
+                if end_date:
+                    clauses.append(f"{date_field} <= ?")
+                    values.append(str(end_date))
+                if tag:
+                    clauses.append("(',' || replace(lower(tags_filter), ', ', ',') || ',') LIKE ?")
+                    values.append(f"%,{str(tag).lower()},%")
+                sql = f"SELECT * FROM {table}" + (" WHERE " + " AND ".join(clauses) if clauses else "")
+                for summary in conn.execute(sql, values):
+                    item = dict(summary)
+                    date_value = item[date_field]
+                    rows.append({"id": f"{event_type}:{item['id']}", "event_type": event_type,
+                                 "source_id": item["id"], "occurred_at": f"{date_value}T23:59:59",
+                                 "title_snapshot": f"{title} · {date_value}",
+                                 "tags_snapshot": [], "display_tags": [v.strip() for v in item.get("tags_filter", "").split(",") if v.strip()]})
+        rows.sort(key=lambda row: (row["occurred_at"], row["event_type"], str(row["source_id"])), reverse=True)
+        return rows[offset:offset + limit]
+
+    def search_activity_sources(self, query, *, limit=100):
+        """Find Pomodoros, their notes, and persisted daily/weekly summaries."""
+        query = f"%{str(query).strip()}%"
+        if query == "%%":
+            return []
+        results = []
+        with self.get_connection() as conn:
+            rows = conn.execute("""SELECT id,type,title,created_at,transcription,recording_notes,summary,cleaned_text,tags
+                FROM records WHERE title LIKE ? OR transcription LIKE ? OR recording_notes LIKE ?
+                    OR summary LIKE ? OR cleaned_text LIKE ? OR tags LIKE ?
+                ORDER BY created_at DESC LIMIT ?""",
+                (query, query, query, query, query, query, limit)).fetchall()
+            results.extend({"event_type": "record", "source_id": row["id"], "title": row["title"] or "Untitled",
+                            "occurred_at": row["created_at"], "text": " ".join((row["transcription"] or "", row["recording_notes"] or "", row["summary"] or "", row["cleaned_text"] or "")),
+                            "record_type": row["type"]} for row in rows)
+            rows = conn.execute("""SELECT e.source_id,e.occurred_at,e.title_snapshot,e.tags_snapshot,
+                    r.transcription,r.recording_notes
+                FROM timeline_events e LEFT JOIN meeting_occurrences m ON m.id=e.source_id
+                LEFT JOIN records r ON r.id=m.recording_id
+                WHERE e.event_type='meeting_occurrence' AND
+                    (e.title_snapshot LIKE ? OR e.tags_snapshot LIKE ? OR r.transcription LIKE ? OR r.recording_notes LIKE ?)
+                ORDER BY e.occurred_at DESC LIMIT ?""",
+                (query, query, query, query, limit)).fetchall()
+            results.extend({"event_type": "meeting_occurrence", "source_id": row["source_id"],
+                            "title": row["title_snapshot"], "occurred_at": row["occurred_at"],
+                            "text": " ".join((row["tags_snapshot"] or "", row["transcription"] or "", row["recording_notes"] or ""))} for row in rows)
+            rows = conn.execute("""SELECT id,title,tags,started_at AS occurred_at,state AS kind
+                FROM pomodoros WHERE title LIKE ? OR tags LIKE ? ORDER BY started_at DESC LIMIT ?""",
+                (query, query, limit)).fetchall()
+            results.extend({"event_type": "pomodoro", "source_id": row["id"], "title": row["title"],
+                            "occurred_at": row["occurred_at"], "text": row["tags"] or ""} for row in rows)
+            rows = conn.execute("""SELECT id,kind,title,body,transcription,captured_at
+                FROM productivity_notes WHERE title LIKE ? OR body LIKE ? OR transcription LIKE ? OR tags LIKE ?
+                ORDER BY captured_at DESC LIMIT ?""", (query, query, query, query, limit)).fetchall()
+            results.extend({"event_type": f"{row['kind']}_note", "source_id": row["id"], "title": row["title"],
+                            "occurred_at": row["captured_at"], "text": " ".join((row["body"] or "", row["transcription"] or ""))} for row in rows)
+            for table, event_type, date_field in (("daily_summaries", "daily_summary", "date"), ("weekly_summaries", "weekly_summary", "week_start")):
+                rows = conn.execute(f"SELECT id,{date_field} AS occurred_at,summary,tags_filter FROM {table} WHERE summary LIKE ? OR tags_filter LIKE ? ORDER BY {date_field} DESC LIMIT ?", (query, query, limit)).fetchall()
+                results.extend({"event_type": event_type, "source_id": row["id"], "title": f"{event_type.replace('_', ' ').title()} · {row['occurred_at']}",
+                                "occurred_at": row["occurred_at"], "text": row["summary"]} for row in rows)
+        results.sort(key=lambda row: (row["occurred_at"], row["event_type"], row["source_id"]), reverse=True)
+        return results[:limit]

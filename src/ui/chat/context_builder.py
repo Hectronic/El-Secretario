@@ -17,7 +17,7 @@
 import logging
 
 
-def build_chat_context_text(db, notebook_db, rag, query, context_panel, forced_record_ids, *, return_sources=False):
+def build_chat_context_text(db, notebook_db, rag, query, context_panel, forced_record_ids, *, forced_pomodoro_ids=(), return_sources=False):
     context_text_parts = []
     source_results = []
     retrieval_degraded = False
@@ -39,6 +39,24 @@ def build_chat_context_text(db, notebook_db, rag, query, context_panel, forced_r
         if isinstance(rec, dict) and rec.get("id") is not None:
             records.append(rec)
             seen_ids.add(int(rec["id"]))
+
+    for pomodoro_id in sorted(forced_pomodoro_ids):
+        session = db.fetch_pomodoro(int(pomodoro_id))
+        if not session:
+            continue
+        notes = db.fetch_productivity_notes(int(pomodoro_id))
+        note_text = []
+        for note in notes:
+            parts = [part for part in (note.get("title"), note.get("body"), note.get("transcription")) if part]
+            if parts:
+                note_text.append(f"- {note.get('kind', 'note')}: " + " · ".join(parts))
+        session_tags = ", ".join(session.get("tags") or [])
+        details = f"[Pomodoro: {session.get('title') or 'Untitled'} ({session.get('started_at') or ''})]"
+        if session_tags:
+            details += f"\nTags: {session_tags}"
+        if note_text:
+            details += "\nNotes:\n" + "\n".join(note_text)
+        context_text_parts.append(details)
 
     if context_panel.current_week_monday:
         start_date = context_panel.current_week_monday.toString("yyyy-MM-dd")
@@ -115,7 +133,7 @@ def build_chat_context_text(db, notebook_db, rag, query, context_panel, forced_r
     return (context_text, source_results, retrieval_degraded) if return_sources else context_text
 
 
-def build_chat_session_contexts(context_panel, forced_record_ids):
+def build_chat_session_contexts(context_panel, forced_record_ids, forced_pomodoro_ids=()):
     save_contexts = []
     if context_panel.current_week_monday and context_panel.current_date_filter:
         save_contexts.append(
@@ -136,5 +154,7 @@ def build_chat_session_contexts(context_panel, forced_record_ids):
         save_contexts.append({"type": "notebook", "value": notebook_id})
     for rid in sorted(forced_record_ids):
         save_contexts.append({"type": "recording", "value": rid})
+    for pomodoro_id in sorted(forced_pomodoro_ids):
+        save_contexts.append({"type": "pomodoro", "value": pomodoro_id})
 
     return save_contexts

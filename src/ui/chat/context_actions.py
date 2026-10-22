@@ -12,6 +12,8 @@ def apply_initial_contexts(widget, contexts):
     widget.context_panel.current_date_filter = parsed["current_date_filter"]
     widget.context_panel.active_global_tags = list(parsed["active_global_tags"])
     widget.forced_record_ids = set(parsed["forced_record_ids"])
+    widget.forced_pomodoro_ids = set(parsed["forced_pomodoro_ids"])
+    widget.context_panel.forced_pomodoro_ids = sorted(widget.forced_pomodoro_ids)
     widget.forced_record_labels = list(parsed["forced_record_labels"])
     for index in range(widget.context_panel.nb_list.count()):
         item = widget.context_panel.nb_list.item(index)

@@ -79,3 +79,12 @@ Users need transcription to choose a reliable speech-to-text backend and runtime
 - Should `TranscriberThread` shrink further by moving diarization orchestration into a dedicated `src/worker_components/diarization.py` helper once SPEC-003 has its own file?
 - Should backend preference and fallback decisions be represented by typed configuration objects before adding more STT providers?
 - Should Windows CI include a smoke test for the spawned subprocess path using a fake backend target instead of only unit-level process behavior?
+
+## Living implementation reference
+
+Reviewed: 2026-10-22. Selección de backend, dispositivo y cómputo con fallback y limpieza.
+
+- Owner: [src/worker_components](../../src/worker_components).
+- Existing coverage: [tests/stt_providers](../../tests/stt_providers); execution results and remaining validation belong in `plan.md`.
+- Request: [REQ-002](../REQUESTS.md); current feature map: [CURRENT.md](../CURRENT.md).
+- Requirements and acceptance examples above describe the contract; proposed timings or resource targets require measured evidence before being treated as guarantees.

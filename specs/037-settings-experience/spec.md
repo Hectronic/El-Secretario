@@ -171,3 +171,12 @@ change values by itself. Category and disclosure state are remembered locally.
   Hide, and Copy actions; their inputs can shrink in narrow layouts.
 - Full-suite validation: 1003 passed, 1 skipped (system tray unavailable), 11
   subtests passed on 2026-10-03.
+
+## Living implementation reference
+
+Reviewed: 2026-10-22. Categorías buscables, cambios pendientes y restablecimiento por ámbito.
+
+- Owner: [src/ui/settings](../../src/ui/settings).
+- Existing coverage: [tests/integration/test_settings_experience.py](../../tests/integration/test_settings_experience.py); execution results and remaining validation belong in `plan.md`.
+- Request: [REQ-037](../REQUESTS.md); current feature map: [CURRENT.md](../CURRENT.md).
+- Requirements and acceptance examples above describe the contract; proposed timings or resource targets require measured evidence before being treated as guarantees.
