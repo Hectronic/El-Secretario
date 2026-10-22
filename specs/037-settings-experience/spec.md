@@ -192,3 +192,5 @@ The presentation helper belongs to `src/ui/settings/presentation.py`; the shell 
 Informational labels and checkbox captions wrap to the available width rather than imposing a sentence-wide minimum. The existing QCheckBox remains the state/signal owner and retains an accessible name; clicking its wrapping caption toggles the same control. Both ordinary and larger system fonts must fit the complete settings surface inside a narrow viewport across all seven categories, with no hidden horizontal overflow.
 
 Compact mode also stacks footer actions. The available page width governs responsive navigation; action-row minimum hints must not widen the containing window or force it back into sidebar mode.
+
+In compact mode, form labels, controls and their reset actions use separate lines; RAG maintenance actions also stack. Drop-down minimum widths depend on a bounded content length rather than the longest device/model name; selected values remain complete and unchanged. Wide layouts restore inline rows.

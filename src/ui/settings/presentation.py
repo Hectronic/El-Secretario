@@ -1,7 +1,7 @@
 """Compact, theme-aware presentation for the existing Settings controls."""
 
 from PyQt6.QtCore import Qt
-from PyQt6.QtWidgets import QCheckBox, QFormLayout, QHBoxLayout, QLabel, QSizePolicy, QWidget
+from PyQt6.QtWidgets import QBoxLayout, QCheckBox, QComboBox, QFormLayout, QHBoxLayout, QLabel, QSizePolicy, QWidget
 
 
 def compact_settings_panel(panel):
@@ -24,6 +24,9 @@ def compact_settings_panel(panel):
         form.setLabelAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop)
         form.setHorizontalSpacing(18)
         form.setVerticalSpacing(12)
+    for combo in panel.findChildren(QComboBox):
+        combo.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon)
+        combo.setMinimumContentsLength(12)
     for label in panel.findChildren(QLabel):
         label.setWordWrap(True)
         style = label.styleSheet()
@@ -106,3 +109,14 @@ def setting_control_view(control, category):
     layout.addWidget(control, 0, Qt.AlignmentFlag.AlignTop)
     layout.addWidget(caption, 1)
     return row
+
+
+def set_compact_settings_panel(panel, compact):
+    policy = (QFormLayout.RowWrapPolicy.WrapAllRows if compact
+              else QFormLayout.RowWrapPolicy.WrapLongRows)
+    for form in panel.findChildren(QFormLayout):
+        form.setRowWrapPolicy(policy)
+    direction = (QBoxLayout.Direction.TopToBottom if compact
+                 else QBoxLayout.Direction.LeftToRight)
+    for row in panel.findChildren(QBoxLayout, "settingsFieldActions"):
+        row.setDirection(direction)

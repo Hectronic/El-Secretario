@@ -23,3 +23,5 @@
 - [x] T016 Reproduce footer-induced widening and stack actions in compact mode.
 - [x] T017 Verify width and Save persistence inside a real tab host.
 - [x] T018 Run Windows portability regressions before the larger CI suites.
+
+- [x] T019 Apply compact reflow to form rows, reset/maintenance actions and long device/model selectors.

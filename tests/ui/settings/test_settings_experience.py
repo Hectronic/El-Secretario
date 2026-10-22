@@ -375,3 +375,17 @@ def test_narrow_settings_actions_do_not_force_the_window_wider(qtbot, monkeypatc
     for action in actions:
         right = action.mapTo(widget, action.rect().topRight()).x()
         assert right < widget.width()
+
+
+def test_compact_device_row_fits_long_native_device_names(qtbot, monkeypatch, tmp_path):
+    widget, _settings = _widget(monkeypatch, tmp_path)
+    qtbot.addWidget(widget)
+    widget.category_picker.setCurrentIndex(CATEGORIES.index("Recording & devices"))
+    device_name = "USB conference microphone with a long operating-system device name " * 5
+    widget.audio_panel.mic_combo.addItem(device_name, 77)
+    widget.audio_panel.mic_combo.setCurrentIndex(widget.audio_panel.mic_combo.count() - 1)
+    widget.resize(680, 540)
+    widget.show()
+    qtbot.wait(20)
+    assert widget.surface.width() <= widget.surface_scroll.viewport().width()
+    assert widget.audio_panel.mic_combo.currentText() == device_name

@@ -49,7 +49,8 @@ from src.ui.settings.productivity_panel import ProductivitySettingsPanel
 from src.ui.settings.rag_panel import RAGSettingsPanel
 from src.ui.settings.store import SettingsOverlay
 from src.ui.settings.presentation import (
-    collapse_hidden_form_rows, compact_settings_panel, setting_control_view, settings_styles,
+    collapse_hidden_form_rows, compact_settings_panel, set_compact_settings_panel,
+    setting_control_view, settings_styles,
 )
 
 
@@ -218,6 +219,9 @@ class SettingsWidget(QWidget):
 
     def resizeEvent(self, event):
         super().resizeEvent(event)
+        self._update_compact_layout()
+
+    def _update_compact_layout(self):
         if hasattr(self, "category_picker"):
             compact = self.width() < 860
             self.category_list.setVisible(not compact)
@@ -226,6 +230,11 @@ class SettingsWidget(QWidget):
                 direction = (QBoxLayout.Direction.TopToBottom if compact
                              else QBoxLayout.Direction.LeftToRight)
                 self.footer_layout.setDirection(direction)
+            if hasattr(self, "catalog"):
+                for panel in (self.general_panel, self.audio_panel, self.rag_panel,
+                              self.prompts_panel, self.productivity_panel):
+                    set_compact_settings_panel(panel, compact)
+                self.rag_actions_widget.layout().setDirection(direction)
 
     def _refresh_presentation(self):
         if getattr(self, "_refreshing_presentation", False):
@@ -285,6 +294,7 @@ class SettingsWidget(QWidget):
             self._install_field_chrome(field)
         self._prepare_static_controls()
         self._connect_dirty_tracking()
+        self._update_compact_layout()
 
     def _connect_dirty_tracking(self):
         seen = set()
@@ -330,6 +340,7 @@ class SettingsWidget(QWidget):
             wrap_layout.setContentsMargins(0, 2, 0, 4)
             wrap_layout.setSpacing(3)
             control_row = QHBoxLayout()
+            control_row.setObjectName("settingsFieldActions")
             control_row.setContentsMargins(0, 0, 0, 0)
             target.setParent(wrapper)
             control_row.addWidget(setting_control_view(target, field.category), 1)
@@ -367,6 +378,7 @@ class SettingsWidget(QWidget):
             wrap_layout = QVBoxLayout(wrapper)
             wrap_layout.setContentsMargins(0, 4, 0, 4)
             control_row = QHBoxLayout()
+            control_row.setObjectName("settingsFieldActions")
             target.setParent(wrapper)
             control_row.addWidget(setting_control_view(target, field.category), 1)
             reset = QPushButton("Reset")
