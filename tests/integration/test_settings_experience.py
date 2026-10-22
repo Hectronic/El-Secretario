@@ -143,3 +143,31 @@ def test_compact_settings_layout_keeps_real_save_and_rag_actions_working(qtbot, 
     qtbot.waitUntil(widget.save_btn.isEnabled)
     widget.save_btn.click()
     assert settings.value("pomodoro/tray_notifications", type=bool) is not before
+
+
+def test_compact_settings_footer_fits_inside_real_tab_host_and_saves(qtbot, monkeypatch, tmp_path):
+    from PyQt6.QtCore import Qt
+    from PyQt6.QtWidgets import QTabWidget
+    from src.ui.settings.catalog import CATEGORIES
+
+    monkeypatch.setenv("EL_SECRETARIO_SKIP_AUDIO_ENUM", "1")
+    settings = QSettings(str(tmp_path / "tab-settings.ini"), QSettings.Format.IniFormat)
+    monkeypatch.setattr("src.ui.settings.widget.QSettings", lambda *_args: settings)
+    host = QTabWidget()
+    qtbot.addWidget(host)
+    widget = SettingsWidget()
+    for action in (widget.reset_category_btn, widget.discard_btn, widget.save_btn):
+        action.setMinimumWidth(310)
+    host.addTab(widget, "Settings")
+    host.resize(680, 540)
+    host.show()
+    qtbot.waitUntil(widget.category_picker.isVisible)
+    assert host.width() == 680
+    assert widget.width() < 680
+    widget.category_picker.setCurrentIndex(CATEGORIES.index("Automation & notifications"))
+    widget.productivity_panel.focus_minutes.setValue(42)
+    qtbot.waitUntil(widget.save_btn.isEnabled)
+    qtbot.mouseClick(widget.save_btn, Qt.MouseButton.LeftButton)
+    assert settings.value("pomodoro/focus_minutes", type=int) == 42
+    for action in (widget.reset_category_btn, widget.discard_btn, widget.save_btn):
+        assert action.mapTo(widget, action.rect().topRight()).x() < widget.width()

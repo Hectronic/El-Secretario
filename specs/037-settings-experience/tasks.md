@@ -19,3 +19,7 @@
 - [x] T013 Reproduce Windows-like larger system fonts and prevent horizontal clipping in every category.
 - [x] T014 Preserve caption clicks, accessibility and persistence through real Qt/QSettings integration.
 - [x] T015 Record full local validation and link native CI for the Windows font follow-up.
+
+- [x] T016 Reproduce footer-induced widening and stack actions in compact mode.
+- [x] T017 Verify width and Save persistence inside a real tab host.
+- [x] T018 Run Windows portability regressions before the larger CI suites.

@@ -356,3 +356,22 @@ def test_narrow_settings_navigation_leaves_room_for_controls(qtbot, monkeypatch,
     assert widget.category_list.isVisible()
     assert widget.category_picker.isHidden()
     assert widget.category_list.currentItem().text() == "Automation & notifications"
+
+
+def test_narrow_settings_actions_do_not_force_the_window_wider(qtbot, monkeypatch, tmp_path):
+    widget, _settings = _widget(monkeypatch, tmp_path)
+    qtbot.addWidget(widget)
+    actions = (widget.reset_category_btn, widget.discard_btn, widget.save_btn)
+    # Native fonts or translated action labels can each need this much width;
+    # one action fits comfortably, while their old horizontal row does not.
+    for action in actions:
+        action.setMinimumWidth(310)
+    widget.resize(680, 540)
+    widget.show()
+    qtbot.wait(20)
+    assert widget.width() == 680
+    assert widget.category_picker.isVisible()
+    assert widget.category_list.isHidden()
+    for action in actions:
+        right = action.mapTo(widget, action.rect().topRight()).x()
+        assert right < widget.width()

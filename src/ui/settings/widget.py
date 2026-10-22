@@ -23,12 +23,14 @@ from PyQt6.QtWidgets import (
     QFormLayout,
     QHBoxLayout,
     QLabel,
+    QLayout,
     QLineEdit,
     QListWidget,
     QListWidgetItem,
     QMessageBox,
     QPushButton,
     QScrollArea,
+    QSizePolicy,
     QVBoxLayout,
     QWidget,
 )
@@ -89,7 +91,11 @@ class SettingsWidget(QWidget):
 
     def _build_shell(self):
         self.setObjectName("settingsPage")
+        # Available page width chooses the compact layout. Do not let a wide
+        # action row raise the window minimum before resizeEvent can reflow it.
+        self.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
         root = QVBoxLayout(self)
+        root.setSizeConstraint(QLayout.SizeConstraint.SetNoConstraint)
         root.setContentsMargins(18, 16, 18, 12)
         root.setSpacing(10)
 
@@ -192,7 +198,9 @@ class SettingsWidget(QWidget):
         restart_row.addWidget(self.restart_btn)
         root.addLayout(restart_row)
 
-        footer = QHBoxLayout()
+        footer = QBoxLayout(QBoxLayout.Direction.TopToBottom)
+        self.footer_layout = footer
+        footer.setSpacing(6)
         self.reset_category_btn = QPushButton("Reset category…")
         self.reset_category_btn.clicked.connect(self._reset_category)
         footer.addWidget(self.reset_category_btn)
@@ -214,6 +222,10 @@ class SettingsWidget(QWidget):
             compact = self.width() < 860
             self.category_list.setVisible(not compact)
             self.category_picker.setVisible(compact)
+            if hasattr(self, "footer_layout"):
+                direction = (QBoxLayout.Direction.TopToBottom if compact
+                             else QBoxLayout.Direction.LeftToRight)
+                self.footer_layout.setDirection(direction)
 
     def _refresh_presentation(self):
         if getattr(self, "_refreshing_presentation", False):

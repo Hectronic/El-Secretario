@@ -68,3 +68,11 @@ QT_QPA_PLATFORM=offscreen PYTHONUNBUFFERED=1 ./.venv/bin/python -m pytest tests/
 ```
 
 Final Linux/offscreen validation: 1039 passed, 1 skipped (system tray unavailable), 11 subtests passed in 135.08 seconds with `QT_QPA_PLATFORM=offscreen PYTHONUNBUFFERED=1 ./.venv/bin/python -m pytest -q`. Native results are tracked in [PR #67 checks](https://github.com/Hectronic/El-Secretario/pull/67/checks).
+
+### Footer minimum-width follow-up
+
+Run 39816840316 verified UTF-8 and ordinary Windows fonts, but the stronger 14 pt regression exposed an action-row minimum forcing the window wider and reactivating the sidebar. Reproduced locally with 310 px action widths: a requested 680 px window expanded to 986 px. The shell now allows the available width to govern layout and stacks footer actions in compact mode. Added a real QTabWidget/QSettings integration check that keeps the host narrow and persists a changed preference by clicking Save.
+
+Focused units: 31 passed (`QT_QPA_PLATFORM=offscreen PYTHONUNBUFFERED=1 ./.venv/bin/python -m pytest tests/test_spec_registry.py tests/ui/settings -q`). Focused integration: 8 passed (`QT_QPA_PLATFORM=offscreen PYTHONUNBUFFERED=1 ./.venv/bin/python -m pytest tests/integration/test_settings_experience.py tests/integration/test_pomodoro_main_window.py -q`). Full Linux/offscreen validation: 1041 passed, 1 skipped (system tray unavailable), 11 subtests passed in 131.37 seconds using the same full-suite command above. The footer actions also stay within the 540 px window height with the larger system font.
+
+The Windows job now runs the registry, Settings UI and Settings integration regressions immediately after dependency installation, before the larger suites; full integration and full unit coverage remain enabled. Native results are tracked in the PR checks.
