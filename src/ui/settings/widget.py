@@ -46,7 +46,9 @@ from src.ui.settings.prompts_panel import PromptsSettingsPanel
 from src.ui.settings.productivity_panel import ProductivitySettingsPanel
 from src.ui.settings.rag_panel import RAGSettingsPanel
 from src.ui.settings.store import SettingsOverlay
-from src.ui.settings.presentation import collapse_hidden_form_rows, compact_settings_panel, settings_styles
+from src.ui.settings.presentation import (
+    collapse_hidden_form_rows, compact_settings_panel, setting_control_view, settings_styles,
+)
 
 
 RESTART_KEYS = {"enable_auto_update", "enable_mcp_server"}
@@ -318,7 +320,7 @@ class SettingsWidget(QWidget):
             control_row = QHBoxLayout()
             control_row.setContentsMargins(0, 0, 0, 0)
             target.setParent(wrapper)
-            control_row.addWidget(target, 1)
+            control_row.addWidget(setting_control_view(target, field.category), 1)
             reset = QPushButton("Reset")
             reset.setAccessibleName(f"Reset {field.label} to default")
             reset.setToolTip(f"Restore default: {self._default_text(field)}")
@@ -354,7 +356,7 @@ class SettingsWidget(QWidget):
             wrap_layout.setContentsMargins(0, 4, 0, 4)
             control_row = QHBoxLayout()
             target.setParent(wrapper)
-            control_row.addWidget(target, 1)
+            control_row.addWidget(setting_control_view(target, field.category), 1)
             reset = QPushButton("Reset")
             reset.setAccessibleName(f"Reset {field.label} to default")
             reset.setToolTip(f"Restore default: {self._default_text(field)}")

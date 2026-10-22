@@ -125,3 +125,21 @@ def test_compact_settings_layout_keeps_real_save_and_rag_actions_working(qtbot, 
     assert widget.rag_panel.isHidden()
     assert widget.category_heading.text() == "Recording & devices"
     assert settings.value("settings/category") == "Recording & devices"
+
+
+    # Wrapping the caption must retain normal click, accessibility and save
+    # behavior on the original QCheckBox, through real Qt events and QSettings.
+    from PyQt6.QtCore import Qt
+    from src.ui.settings.presentation import CheckBoxDescription
+
+    widget.category_list.setCurrentRow(CATEGORIES.index("Automation & notifications"))
+    field = next(field for field in widget.catalog if field.key == "pomodoro/tray_notifications")
+    caption = field.wrapper.findChild(CheckBoxDescription)
+    before = field.control.isChecked()
+    assert field.control.accessibleName()
+    widget.surface_scroll.ensureWidgetVisible(caption)
+    qtbot.mouseClick(caption, Qt.MouseButton.LeftButton)
+    assert field.control.isChecked() is not before
+    qtbot.waitUntil(widget.save_btn.isEnabled)
+    widget.save_btn.click()
+    assert settings.value("pomodoro/tray_notifications", type=bool) is not before

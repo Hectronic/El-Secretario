@@ -1,7 +1,7 @@
 """Compact, theme-aware presentation for the existing Settings controls."""
 
 from PyQt6.QtCore import Qt
-from PyQt6.QtWidgets import QFormLayout, QLabel, QSizePolicy
+from PyQt6.QtWidgets import QCheckBox, QFormLayout, QHBoxLayout, QLabel, QSizePolicy, QWidget
 
 
 def compact_settings_panel(panel):
@@ -25,6 +25,7 @@ def compact_settings_panel(panel):
         form.setHorizontalSpacing(18)
         form.setVerticalSpacing(12)
     for label in panel.findChildren(QLabel):
+        label.setWordWrap(True)
         style = label.styleSheet()
         if "font-size: 18px" in style or "font-size: 16px" in style:
             label.setStyleSheet("font-size: 16px; font-weight: 600; padding-top: 4px;")
@@ -69,3 +70,39 @@ def collapse_hidden_form_rows(panel):
             visible = any(item is not None and item.widget() is not None
                           and not item.widget().isHidden() for item in widgets)
             form.setRowVisible(row, visible)
+
+
+class CheckBoxDescription(QLabel):
+    """A wrapping checkbox caption that preserves click-to-toggle behavior."""
+
+    def __init__(self, checkbox, category):
+        super().__init__(checkbox.text())
+        self.checkbox = checkbox
+        self.setProperty("settingsCategory", category)
+        self.setWordWrap(True)
+        self.setBuddy(checkbox)
+
+    def mouseReleaseEvent(self, event):
+        if event.button() == Qt.MouseButton.LeftButton and self.checkbox.isEnabled():
+            self.checkbox.click()
+            event.accept()
+        else:
+            super().mouseReleaseEvent(event)
+
+
+def setting_control_view(control, category):
+    if not isinstance(control, QCheckBox) or not control.text():
+        return control
+    # Native QCheckBox captions cannot wrap and impose the full sentence as a
+    # minimum width, especially with Windows fonts and display scaling.
+    caption = CheckBoxDescription(control, category)
+    if not control.accessibleName():
+        control.setAccessibleName(control.text())
+    control.setText("")
+    row = QWidget(control.parentWidget())
+    layout = QHBoxLayout(row)
+    layout.setContentsMargins(0, 0, 0, 0)
+    layout.setSpacing(6)
+    layout.addWidget(control, 0, Qt.AlignmentFlag.AlignTop)
+    layout.addWidget(caption, 1)
+    return row

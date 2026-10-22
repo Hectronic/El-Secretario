@@ -6,3 +6,7 @@
 - [x] T004 Corregir índice y sincronizar reglas, constitución y plantilla.
 - [x] T005 Enlazar registro y catálogo desde los tres README.
 - [x] T006 Validar enlaces, IDs e inventario tras los últimos cambios.
+
+- [x] T007 Decode all registry/README/spec Markdown explicitly as UTF-8.
+- [x] T008 Reproduce non-UTF-8 defaults in a subprocess and retain all existing link checks.
+- [x] T009 Record full local validation and link native CI for the Windows encoding follow-up.

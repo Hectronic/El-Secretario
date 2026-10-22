@@ -66,7 +66,7 @@ Al terminar un Pomodoro, l'estáu amuésase na aplicación anque nun haya avisos
 
 ## Configuración
 
-Settings agrupa los controles arriba, separta les categoríes y adapta el contraste de les ayudes a los temes claru y escuru. Al redimensionar, caltién xuntes les opciones y les sos aiciones. Les ventanes estreches usen un selector de categoría pa dexar tol anchu a los controles.
+Settings agrupa los controles arriba, separta les categoríes y adapta el contraste de les ayudes a los temes claru y escuru. Al redimensionar, caltién xuntes les opciones y les sos aiciones. Les ventanes estreches usen un selector de categoría pa dexar tol anchu a los controles. Les descripciones axústense tamién con fontes de sistema más grandes.
 
 Pa utilizar dafechu les funciones d'El Secretario, deberás configurar los tokens d'API. Pues facelo fácilmente al traviés del botón **🔧 Settings** na pantalla de Bienvenida, o manualmente na configuración de l'aplicación.
 

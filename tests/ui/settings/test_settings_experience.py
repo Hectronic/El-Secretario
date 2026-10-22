@@ -1,3 +1,5 @@
+import pytest
+
 from PyQt6.QtCore import QSettings
 from PyQt6.QtWidgets import QMessageBox, QPushButton, QLineEdit
 
@@ -314,7 +316,20 @@ def test_settings_follow_live_theme_changes_without_rebuilding_controls(qtbot, q
         qapp.setStyleSheet(previous)
 
 
-def test_narrow_settings_navigation_leaves_room_for_controls(qtbot, monkeypatch, tmp_path):
+@pytest.fixture(params=[None, 14])
+def settings_system_font(qapp, request):
+    from PyQt6.QtGui import QFont
+
+    previous = qapp.font()
+    if request.param is not None:
+        qapp.setFont(QFont("Segoe UI", request.param))
+    try:
+        yield
+    finally:
+        qapp.setFont(previous)
+
+
+def test_narrow_settings_navigation_leaves_room_for_controls(qtbot, monkeypatch, tmp_path, settings_system_font):
     from PyQt6.QtCore import QPoint
 
     widget, _settings = _widget(monkeypatch, tmp_path)
@@ -330,6 +345,12 @@ def test_narrow_settings_navigation_leaves_room_for_controls(qtbot, monkeypatch,
     control = widget.productivity_panel.focus_minutes
     right = control.mapTo(widget.surface, QPoint(control.width(), 0)).x()
     assert right <= widget.surface_scroll.viewport().width()
+    assert widget.surface.width() <= widget.surface_scroll.viewport().width()
+    for category in CATEGORIES:
+        widget.category_picker.setCurrentIndex(CATEGORIES.index(category))
+        qtbot.wait(20)
+        assert widget.surface.width() <= widget.surface_scroll.viewport().width(), category
+    widget.category_picker.setCurrentIndex(CATEGORIES.index("Automation & notifications"))
     widget.resize(1100, 700)
     qtbot.wait(20)
     assert widget.category_list.isVisible()

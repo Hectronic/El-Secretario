@@ -77,3 +77,5 @@ Origen: requisitos FR-001–FR-014 y criterios de aceptación de SPEC-039. Todos
 | --- | --- | --- | --- |
 | REQ-031.1 | Corregir el fallo de la pipeline Windows de la PR #67 al liberar el WAV tras comprimir. | Implementada | Usuario en esta sesión; fallo de CI 39798480934; SPEC-031. |
 | REQ-037.1 | Mejorar en la misma PR la apariencia de ajustes mostrada en la captura. | Implementada | Usuario en esta sesión y captura; SPEC-037. |
+| REQ-037.2 | Corregir los recortes de ajustes con fuentes y métricas de Windows. | Implementada | Usuario en esta sesión; fallos del run 39813238392; SPEC-037. |
+| REQ-040.5 | Corregir la lectura de documentación UTF-8 en la CI Windows con locale cp1252. | Implementada | Usuario en esta sesión; fallos del run 39813238392; SPEC-040. |

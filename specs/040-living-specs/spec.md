@@ -31,3 +31,7 @@ Propietarios: specs/, AGENTS.md y .specify/memory/constitution.md. No modifica l
 ## Validación
 
 Cobertura permanente en `tests/test_spec_registry.py`: enlaces locales, IDs y cobertura del inventario con el Python del venv; revisión del índice frente a los 40 directorios. No cruza un límite de ejecución de componentes; no requiere una prueba de integración adicional. La entrega conjunta de 039 sí requiere su cobertura SQLite/Qt y suite completa.
+
+## Portable documentation checks (REQ-040.5)
+
+Repository Markdown is UTF-8. Registry, feature-contract and translated README checks decode it explicitly as UTF-8, independent of the host locale or Python UTF-8 mode. A subprocess regression disables UTF-8 mode and runs all three existing document checks under the host's non-UTF-8 default (ASCII in the Linux C locale, cp1252 on typical Windows runners).

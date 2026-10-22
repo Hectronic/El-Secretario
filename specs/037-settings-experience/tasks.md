@@ -15,3 +15,7 @@
 - [x] T010 Improve category spacing, headings, grouped sections and light/dark help contrast.
 - [x] T011 Check live theme changes and real save/RAG/category integration.
 - [x] T012 Record the full-suite result and link cross-platform CI evidence.
+
+- [x] T013 Reproduce Windows-like larger system fonts and prevent horizontal clipping in every category.
+- [x] T014 Preserve caption clicks, accessibility and persistence through real Qt/QSettings integration.
+- [x] T015 Record full local validation and link native CI for the Windows font follow-up.

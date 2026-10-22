@@ -13,15 +13,15 @@ def _features():
 
 
 def _local_targets(path):
-    for target in re.findall(r"\]\(([^)]+)\)", path.read_text()):
+    for target in re.findall(r"\]\(([^)]+)\)", path.read_text(encoding="utf-8")):
         if not re.match(r"^(https?:|mailto:|#)", target):
             yield path.parent / target.split("#", 1)[0]
 
 
 def test_every_feature_has_artifacts_request_and_current_inventory():
-    index = (SPECS / "README.md").read_text()
-    requests = (SPECS / "REQUESTS.md").read_text()
-    current = (SPECS / "CURRENT.md").read_text()
+    index = (SPECS / "README.md").read_text(encoding="utf-8")
+    requests = (SPECS / "REQUESTS.md").read_text(encoding="utf-8")
+    current = (SPECS / "CURRENT.md").read_text(encoding="utf-8")
     for feature in _features():
         assert f"{feature.name}/spec.md" in index
         assert f"{feature.name}/spec.md" in requests
@@ -46,6 +46,25 @@ def test_registry_and_current_evidence_links_exist():
 
 def test_all_readme_languages_link_to_requests_and_current_functionality():
     for name in ("README.md", "README_ES.md", "README_AST.md"):
-        text = (ROOT / name).read_text()
+        text = (ROOT / name).read_text(encoding="utf-8")
         assert "specs/REQUESTS.md" in text
         assert "specs/CURRENT.md" in text
+
+
+def test_registry_checks_work_with_utf8_mode_disabled():
+    import os
+    import subprocess
+    import sys
+
+    env = dict(os.environ, LC_ALL="C", PYTHONCOERCECLOCALE="0")
+    code = (
+        "import runpy; checks = runpy.run_path('tests/test_spec_registry.py'); "
+        "checks['test_every_feature_has_artifacts_request_and_current_inventory'](); "
+        "checks['test_registry_and_current_evidence_links_exist'](); "
+        "checks['test_all_readme_languages_link_to_requests_and_current_functionality']()"
+    )
+    result = subprocess.run(
+        [sys.executable, "-X", "utf8=0", "-c", code], cwd=ROOT, env=env,
+        capture_output=True, text=True, encoding="utf-8", timeout=20,
+    )
+    assert result.returncode == 0, result.stderr
