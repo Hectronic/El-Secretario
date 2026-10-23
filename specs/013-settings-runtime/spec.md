@@ -83,3 +83,12 @@ audio/transcription choices, and RAG behavior without exposing secrets by defaul
 - 2026-09-10: moved provider adapters, factory/configuration validation, and retry
   policy out of `src/ai_provider.py` into `src/ai_providers/`; the original module
   remains the compatible import boundary for application callers.
+
+## Living implementation reference
+
+Reviewed: 2026-10-22. Preferencias de proveedores, temas y prompts; navegación actual definida por 037.
+
+- Owner: [src/ui/settings](../../src/ui/settings).
+- Existing coverage: [tests/integration/test_settings_experience.py](../../tests/integration/test_settings_experience.py); execution results and remaining validation belong in `plan.md`.
+- Request: [REQ-013](../REQUESTS.md); current feature map: [CURRENT.md](../CURRENT.md).
+- Requirements and acceptance examples above describe the contract; proposed timings or resource targets require measured evidence before being treated as guarantees.

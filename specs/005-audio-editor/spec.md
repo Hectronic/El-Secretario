@@ -78,3 +78,12 @@ Users need to inspect and edit recordings before continuing with transcription, 
 
 - Should the old marker-based trim controls in `RecordingWidget` be deprecated now that the waveform editor exists?
 - Should audio-edit operations become an explicit service with a non-Qt command model for easier testing?
+
+## Living implementation reference
+
+Reviewed: 2026-10-22. Edición de audio y guardado sobre la grabación de origen.
+
+- Owner: [src/ui/audio_editor](../../src/ui/audio_editor).
+- Existing coverage: [tests/integration/test_audio_editor_persistence.py](../../tests/integration/test_audio_editor_persistence.py); execution results and remaining validation belong in `plan.md`.
+- Request: [REQ-005](../REQUESTS.md); current feature map: [CURRENT.md](../CURRENT.md).
+- Requirements and acceptance examples above describe the contract; proposed timings or resource targets require measured evidence before being treated as guarantees.

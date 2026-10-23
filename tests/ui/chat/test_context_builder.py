@@ -85,3 +85,25 @@ def test_build_chat_session_contexts_serializes_current_selection():
     assert {"type": "tag", "value": "ops"} in result
     assert {"type": "notebook", "value": 1} in result
     assert {"type": "recording", "value": 7} in result
+
+
+def test_explicit_pomodoro_context_includes_metadata_notes_and_session_selection():
+    db = MagicMock()
+    session = {"title": "Deep work", "started_at": "2026-09-25T09:00:00", "tags": ["Planning"]}
+    db.fetch_pomodoro.return_value = session
+    db.fetch_productivity_notes.return_value = [
+        {"kind": "text", "title": "Outline", "body": "Draft roadmap", "transcription": None}
+    ]
+    panel = _Panel()
+    text = build_chat_context_text(db, MagicMock(), None, "question", panel, set(),
+                                   forced_pomodoro_ids={4})
+    assert "Deep work" in text
+    assert "Planning" in text
+    assert "Draft roadmap" in text
+    db.fetch_pomodoro.assert_called_once_with(4)
+
+    unselected = build_chat_context_text(db, MagicMock(), None, "question", panel, set())
+    assert "Deep work" not in unselected
+
+    saved = build_chat_session_contexts(panel, set(), {4})
+    assert {"type": "pomodoro", "value": 4} in saved

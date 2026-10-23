@@ -152,3 +152,12 @@ changing capture state.
 5. Tray unavailable → in-app status remains accurate without an adapter error.
 6. Shutdown while active → timers, signal connections, tray state, and guardian
    references are cleaned up.
+
+## Living implementation reference
+
+Reviewed: 2026-10-22. Guardian de grabación integrado en el ciclo de captura.
+
+- Owner: [src/ui/recording_in_progress/guardian.py](../../src/ui/recording_in_progress/guardian.py).
+- Existing coverage: [tests/ui/recording_in_progress/test_guardian.py](../../tests/ui/recording_in_progress/test_guardian.py); execution results and remaining validation belong in `plan.md`.
+- Request: [REQ-015](../REQUESTS.md); current feature map: [CURRENT.md](../CURRENT.md).
+- Requirements and acceptance examples above describe the contract; proposed timings or resource targets require measured evidence before being treated as guarantees.

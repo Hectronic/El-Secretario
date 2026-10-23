@@ -73,6 +73,7 @@ class ChatWidget(QWidget):
         self.conversation_runtime = conversation_runtime or ChatConversationRuntime()
         self.current_session_id = session_id
         self.forced_record_ids = set()
+        self.forced_pomodoro_ids = set()
         self.forced_record_labels = []
         self.display_mode = "tab"
         self.floating_minimized = False
@@ -165,6 +166,10 @@ class ChatWidget(QWidget):
                 if item.data(Qt.ItemDataRole.UserRole) == nid:
                     item.setCheckState(Qt.CheckState.Checked)
                     break
+        elif ctx_type == "pomodoro":
+            pomodoro_id = int(ctx.get("value"))
+            self.forced_pomodoro_ids.add(pomodoro_id)
+            self.context_panel.forced_pomodoro_ids = sorted(self.forced_pomodoro_ids)
         self.context_panel._update_status_labels()
         self.context_panel.refresh_entries()
         self.context_panel.context_changed.emit()
@@ -203,6 +208,7 @@ class ChatWidget(QWidget):
             query=query,
             context_panel=self.context_panel,
             forced_record_ids=self.forced_record_ids,
+            forced_pomodoro_ids=self.forced_pomodoro_ids,
             return_sources=True,
         )
         self._pending_sources = source_cards(raw_sources)
@@ -237,6 +243,7 @@ class ChatWidget(QWidget):
             self.chat_history,
             self.context_panel,
             self.forced_record_ids,
+            self.forced_pomodoro_ids,
         )
         self.session_updated.emit()
         self._refresh_title()
@@ -351,6 +358,10 @@ class ChatWidget(QWidget):
             record = self.db.fetch_record(record_id) or {}
             label = record.get("title") or f"Registro {record_id}"
             menu.addAction(f"Quitar registro: {label}", lambda rid=record_id: self.remove_context_item("record", rid))
+        for pomodoro_id in sorted(self.forced_pomodoro_ids):
+            pomodoro = self.db.fetch_pomodoro(pomodoro_id) or {}
+            label = pomodoro.get("title") or f"Pomodoro {pomodoro_id}"
+            menu.addAction(f"Quitar Pomodoro: {label}", lambda pid=pomodoro_id: self.remove_context_item("pomodoro", pid))
         for tag in self.context_panel.get_active_tags():
             menu.addAction(f"Quitar etiqueta: {tag}", lambda value=tag: self.remove_context_item("tag", value))
         if self.context_panel.current_date_filter:
@@ -363,7 +374,11 @@ class ChatWidget(QWidget):
             menu.exec(QCursor.pos())
 
     def remove_context_item(self, kind, value=None):
-        if kind == "record":
+        if kind == "pomodoro":
+            self.forced_pomodoro_ids.discard(int(value))
+            self.context_panel.forced_pomodoro_ids = sorted(self.forced_pomodoro_ids)
+            self.context_panel.refresh_entries()
+        elif kind == "record":
             record_id = int(value)
             self.forced_record_ids.discard(record_id)
             self.forced_record_labels = [
@@ -444,6 +459,7 @@ class ChatWidget(QWidget):
     def apply_context_state(self, state):
         """Apply context edits made in the main window's active-chat section."""
         self.context_panel.apply_state(state)
+        self.forced_pomodoro_ids = set(self.context_panel.forced_pomodoro_ids)
         self.forced_record_ids = {
             int(record["id"])
             for record in self.context_panel.forced_records

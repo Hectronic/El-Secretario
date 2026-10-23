@@ -65,3 +65,12 @@ Users need a recording detail view that lets them review and maintain the saved 
 ## Open Questions
 
 - Should the same copy action eventually be exposed from history context menus or search results?
+
+## Living implementation reference
+
+Reviewed: 2026-10-22. Edición de título, etiquetas y notas sobre registros persistidos.
+
+- Owner: [src/ui/recording/metadata_panel.py](../../src/ui/recording/metadata_panel.py).
+- Existing coverage: [tests/integration/test_recording_widget_persistence.py](../../tests/integration/test_recording_widget_persistence.py); execution results and remaining validation belong in `plan.md`.
+- Request: [REQ-004](../REQUESTS.md); current feature map: [CURRENT.md](../CURRENT.md).
+- Requirements and acceptance examples above describe the contract; proposed timings or resource targets require measured evidence before being treated as guarantees.

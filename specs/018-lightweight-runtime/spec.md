@@ -148,3 +148,12 @@ threshold may be used to justify a behavior regression.
 
 - Measurements and accepted thresholds belong in SPEC-016.
 - Runtime cleanup and failure semantics belong in SPEC-017.
+
+## Living implementation reference
+
+Reviewed: 2026-10-22. Carga diferida de proveedores y perfiles de instalación opcionales.
+
+- Owner: [src/worker_components/runtime.py](../../src/worker_components/runtime.py).
+- Existing coverage: [tests/integration/test_install_scripts.py](../../tests/integration/test_install_scripts.py); execution results and remaining validation belong in `plan.md`.
+- Request: [REQ-018](../REQUESTS.md); current feature map: [CURRENT.md](../CURRENT.md).
+- Requirements and acceptance examples above describe the contract; proposed timings or resource targets require measured evidence before being treated as guarantees.

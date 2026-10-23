@@ -23,3 +23,12 @@ Isolate audio player controls by restructuring the reproduction state flow under
 The player controls of `RecordingWidget` are now delegated to `MediaPlayerContext` and its `PlayerState` hierarchy. `StoppedState`, `PlayingState`, `PausedState`, and `TrimmingState` own valid playback transitions and synchronize Play, Pause, Stop, seek, and trim controls. The existing widget methods and `RecordingActionsCoordinator` remain as compatibility entry points that forward to the context.
 
 Audio trimming enters `TrimmingState`, which pauses active playback and locks playback controls while keeping trim inputs available. Completing or failing the trim returns the context safely to `StoppedState`.
+
+## Living implementation reference
+
+Reviewed: 2026-10-22. Estados del reproductor y transición de controles de grabación.
+
+- Owner: [src/ui/recording/media_player_state.py](../../src/ui/recording/media_player_state.py).
+- Existing coverage: [tests/integration/test_recording_player_state.py](../../tests/integration/test_recording_player_state.py); execution results and remaining validation belong in `plan.md`.
+- Request: [REQ-030](../REQUESTS.md); current feature map: [CURRENT.md](../CURRENT.md).
+- Requirements and acceptance examples above describe the contract; proposed timings or resource targets require measured evidence before being treated as guarantees.

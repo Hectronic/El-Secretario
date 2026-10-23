@@ -233,3 +233,12 @@ available without taking space away from the answer by default.
 - Source metadata is stored as optional fields on assistant messages. Older
   session messages retain their original `{role, content}` shape and render an
   honest no-provenance state.
+
+## Living implementation reference
+
+Reviewed: 2026-10-22. Contexto interactivo, fuentes por respuesta y cancelación de solicitudes.
+
+- Owner: [src/ui/chat](../../src/ui/chat).
+- Existing coverage: [tests/integration/test_chat_window_persistence.py](../../tests/integration/test_chat_window_persistence.py); execution results and remaining validation belong in `plan.md`.
+- Request: [REQ-036](../REQUESTS.md); current feature map: [CURRENT.md](../CURRENT.md).
+- Requirements and acceptance examples above describe the contract; proposed timings or resource targets require measured evidence before being treated as guarantees.

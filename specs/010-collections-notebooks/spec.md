@@ -83,3 +83,12 @@ then open those groups as focused views or chat contexts.
 
 - Should notebook persistence migrate from its dedicated SQLite file to the
   aggregate persistence package in a future explicit migration?
+
+## Living implementation reference
+
+Reviewed: 2026-10-22. Notas de cuaderno y organización mediante etiquetas persistidas.
+
+- Owner: [src/persistence/notebooks.py](../../src/persistence/notebooks.py).
+- Existing coverage: [tests/integration/test_notebook_widget_persistence.py](../../tests/integration/test_notebook_widget_persistence.py); execution results and remaining validation belong in `plan.md`.
+- Request: [REQ-010](../REQUESTS.md); current feature map: [CURRENT.md](../CURRENT.md).
+- Requirements and acceptance examples above describe the contract; proposed timings or resource targets require measured evidence before being treated as guarantees.

@@ -1,3 +1,5 @@
+import pytest
+
 from PyQt6.QtCore import QSettings
 from PyQt6.QtWidgets import QMessageBox, QPushButton, QLineEdit
 
@@ -272,3 +274,130 @@ def test_secret_controls_are_masked_responsive_and_accessible(qtbot, monkeypatch
     show_button.click()
     assert secret.echoMode() == QLineEdit.EchoMode.Normal
     assert show_button.text() == "Hide"
+
+
+def test_search_settings_content_stays_grouped_at_top_when_window_grows(qtbot, monkeypatch, tmp_path):
+    widget, _settings = _widget(monkeypatch, tmp_path)
+    qtbot.addWidget(widget)
+    widget.resize(1100, 700)
+    widget.show()
+    widget.category_list.setCurrentRow(CATEGORIES.index("Search & knowledge"))
+    qtbot.wait(20)
+    small_y = widget.rag_actions_widget.mapTo(widget.surface, widget.rag_actions_widget.rect().topLeft()).y()
+    widget.resize(1100, 1000)
+    qtbot.wait(20)
+    large_y = widget.rag_actions_widget.mapTo(widget.surface, widget.rag_actions_widget.rect().topLeft()).y()
+
+    assert abs(large_y - small_y) <= 5
+    assert widget.audio_panel.height() < 200
+    assert widget.category_list.sizeHintForRow(0) >= 36
+    assert widget.category_heading.text() == "Search & knowledge"
+
+
+def test_settings_follow_live_theme_changes_without_rebuilding_controls(qtbot, qapp, monkeypatch, tmp_path):
+    from src.ui.theme_styles import DARK_STYLESHEET, LIGHT_STYLESHEET
+
+    previous = qapp.styleSheet()
+    widget, _settings = _widget(monkeypatch, tmp_path)
+    qtbot.addWidget(widget)
+    widget.show()
+    theme_control = widget.general_panel.theme_combo
+    try:
+        for sheet, help_color in ((DARK_STYLESHEET, "#b5c1d0"), (LIGHT_STYLESHEET, "#526174")):
+            qapp.setStyleSheet(sheet)
+            qapp.processEvents()
+            assert help_color in widget.styleSheet()
+            assert widget.general_panel.theme_combo is theme_control
+            first = widget.category_list.visualItemRect(widget.category_list.item(0))
+            second = widget.category_list.visualItemRect(widget.category_list.item(1))
+            assert first.height() >= 40
+            assert first.bottom() < second.top()
+    finally:
+        qapp.setStyleSheet(previous)
+
+
+@pytest.fixture(params=[None, 14])
+def settings_system_font(qapp, request):
+    from PyQt6.QtGui import QFont
+
+    previous = qapp.font()
+    if request.param is not None:
+        qapp.setFont(QFont("Segoe UI", request.param))
+    try:
+        yield
+    finally:
+        qapp.setFont(previous)
+
+
+def test_narrow_settings_navigation_leaves_room_for_controls(qtbot, monkeypatch, tmp_path, settings_system_font):
+    from PyQt6.QtCore import QPoint
+
+    widget, _settings = _widget(monkeypatch, tmp_path)
+    qtbot.addWidget(widget)
+    widget.resize(680, 540)
+    widget.show()
+    widget.category_picker.setCurrentIndex(CATEGORIES.index("Automation & notifications"))
+    qtbot.wait(20)
+
+    assert widget.category_list.isHidden()
+    assert widget.category_picker.isVisible()
+    assert widget._category == "Automation & notifications"
+    control = widget.productivity_panel.focus_minutes
+    right = control.mapTo(widget.surface, QPoint(control.width(), 0)).x()
+    assert right <= widget.surface_scroll.viewport().width()
+    assert widget.surface.width() <= widget.surface_scroll.viewport().width()
+    for category in CATEGORIES:
+        widget.category_picker.setCurrentIndex(CATEGORIES.index(category))
+        qtbot.wait(20)
+        assert widget.surface.width() <= widget.surface_scroll.viewport().width(), category
+    widget.category_picker.setCurrentIndex(CATEGORIES.index("Automation & notifications"))
+    widget.resize(1100, 700)
+    qtbot.wait(20)
+    assert widget.category_list.isVisible()
+    assert widget.category_picker.isHidden()
+    assert widget.category_list.currentItem().text() == "Automation & notifications"
+
+
+def test_narrow_settings_actions_do_not_force_the_window_wider(qtbot, monkeypatch, tmp_path):
+    widget, _settings = _widget(monkeypatch, tmp_path)
+    qtbot.addWidget(widget)
+    actions = (widget.reset_category_btn, widget.discard_btn, widget.save_btn)
+    # Native fonts or translated action labels can each need this much width;
+    # one action fits comfortably, while their old horizontal row does not.
+    for action in actions:
+        action.setMinimumWidth(310)
+    widget.resize(680, 540)
+    widget.show()
+    qtbot.wait(20)
+    assert widget.width() == 680
+    assert widget.category_picker.isVisible()
+    assert widget.category_list.isHidden()
+    for action in actions:
+        right = action.mapTo(widget, action.rect().topRight()).x()
+        assert right < widget.width()
+
+
+def test_compact_device_row_fits_long_native_device_names(qtbot, monkeypatch, tmp_path):
+    widget, _settings = _widget(monkeypatch, tmp_path)
+    qtbot.addWidget(widget)
+    widget.category_picker.setCurrentIndex(CATEGORIES.index("Recording & devices"))
+    device_name = "USB conference microphone with a long operating-system device name " * 5
+    widget.audio_panel.mic_combo.addItem(device_name, 77)
+    widget.audio_panel.mic_combo.setCurrentIndex(widget.audio_panel.mic_combo.count() - 1)
+    widget.resize(680, 540)
+    widget.show()
+    qtbot.wait(20)
+    assert widget.surface.width() <= widget.surface_scroll.viewport().width()
+    assert widget.audio_panel.mic_combo.currentText() == device_name
+
+
+def test_compact_integration_actions_stack_with_their_status(qtbot, monkeypatch, tmp_path):
+    widget, _settings = _widget(monkeypatch, tmp_path)
+    qtbot.addWidget(widget)
+    widget.general_panel.copy_mcp_config_btn.setMinimumWidth(340)
+    widget.general_panel.mcp_status_label.setMinimumWidth(340)
+    widget.resize(680, 540)
+    widget.show()
+    widget.category_picker.setCurrentIndex(CATEGORIES.index("Integrations"))
+    qtbot.wait(20)
+    assert widget.surface.width() <= widget.surface_scroll.viewport().width()

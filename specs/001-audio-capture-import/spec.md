@@ -75,3 +75,12 @@ Users need a fast landing surface to start a recording, import audio, search, an
 
 - Should microphone scanning move from the widget wrapper into a fuller device-discovery helper once audio-device behavior has broader tests?
 - None for the current WelcomeWidget boundary.
+
+## Living implementation reference
+
+Reviewed: 2026-10-22. Grabación e importación con persistencia y ciclo de captura Qt.
+
+- Owner: [src/audio.py](../../src/audio.py).
+- Existing coverage: [tests/integration/test_recording_in_progress_lifecycle.py](../../tests/integration/test_recording_in_progress_lifecycle.py); execution results and remaining validation belong in `plan.md`.
+- Request: [REQ-001](../REQUESTS.md); current feature map: [CURRENT.md](../CURRENT.md).
+- Requirements and acceptance examples above describe the contract; proposed timings or resource targets require measured evidence before being treated as guarantees.

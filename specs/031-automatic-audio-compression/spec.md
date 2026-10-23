@@ -2,7 +2,7 @@
 
 Status: Implemented
 Owner: Héctor Álvarez López <hector.alvarez@diagroup.com>
-Last updated: 2026-09-19
+Last updated: 2026-10-22
 
 ## Problem
 Currently, El Secretario records all microphone captures in raw PCM WAV format. At 16000Hz mono, WAV files consume about 115 MB for each hour of recorded audio. For power users with massive meeting history (such as the active 25 GB recordings folder), this causes high physical disk consumption and strains local system resources over time. Since human voice recordings don't require raw uncompressed PCM bandwidth, they can be highly compressed with almost zero perceptible loss in transcription (STT) accuracy.
@@ -22,4 +22,13 @@ Implement an automatic, background audio compression system. Immediately after a
 ## Implementation
 Completed WAV captures are encoded immediately by `AudioCompressionJob` in a daemon background thread using FFmpeg (`libmp3lame`, mono, 16 kHz, 32 kbps). The WAV remains available while transcription is active. Once the recording widget releases its source, the job conditionally swaps the SQLite filename to the MP3 and removes the original WAV.
 
-The media source is detached before releasing it so Windows backends can close their file handle. A failed encoding leaves the original WAV and database reference untouched; a deletion failure retains both files while keeping the valid MP3 reference.
+The media source is detached before releasing it so Windows backends can close their file handle. A failed encoding leaves the original WAV and database reference untouched; a transient sharing/permission error is retried up to 10 times, 100 ms apart, inside the background worker so Qt can finish releasing its Windows file handle. A persistent deletion failure retains both files while keeping the valid MP3 reference.
+
+## Living implementation reference
+
+Reviewed: 2026-10-22. Compresión integrada en el ciclo de vida de grabación.
+
+- Owner: [src/audio.py](../../src/audio.py).
+- Existing coverage: [tests/integration/test_recording_compression_lifecycle.py](../../tests/integration/test_recording_compression_lifecycle.py); execution results and remaining validation belong in `plan.md`.
+- Request: [REQ-031](../REQUESTS.md); current feature map: [CURRENT.md](../CURRENT.md).
+- Requirements and acceptance examples above describe the contract; proposed timings or resource targets require measured evidence before being treated as guarantees.

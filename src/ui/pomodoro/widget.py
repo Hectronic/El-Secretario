@@ -4,14 +4,15 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from PyQt6.QtCore import QSettings, QTimer, pyqtSignal
+from PyQt6.QtCore import QSettings, QTimer, Qt, pyqtSignal
 from PyQt6.QtWidgets import (
-    QCheckBox, QFormLayout, QHBoxLayout, QLabel, QLineEdit, QMessageBox,
+    QCheckBox, QFormLayout, QGroupBox, QHBoxLayout, QLabel, QLineEdit, QMessageBox,
     QPushButton, QSpinBox, QTextEdit, QVBoxLayout, QWidget,
 )
 
 from src.app.pomodoro.audio_notes import AudioNoteCapture
 from src.audio import Recorder
+from src.ui.welcome.pomodoro_labels import pomodoro_labels
 
 
 class PomodoroWidget(QWidget):
@@ -28,11 +29,22 @@ class PomodoroWidget(QWidget):
         self.audio = AudioNoteCapture(recorder or Recorder(), persistence,
                                       storage_dir=audio_dir or Path.cwd() / "productivity_audio")
         layout = QVBoxLayout(self)
+        self.secondary_group = QGroupBox("Setup, breaks and notes")
+        self.secondary_group.setCheckable(True)
+        self.secondary_group.setChecked(False)
+        secondary_layout = QVBoxLayout(self.secondary_group)
+        self.secondary_content = QWidget()
+        secondary_layout.addWidget(self.secondary_content)
+        secondary_layout = QVBoxLayout(self.secondary_content)
+        self.secondary_content.setVisible(False)
+        self.secondary_group.toggled.connect(self.secondary_content.setVisible)
         form = QFormLayout()
         self.title_input = QLineEdit()
         self.title_input.setPlaceholderText("What are you focusing on?")
         if self.service._session:
             self.title_input.setText(self.service._session["title"])
+        else:
+            self.title_input.setText(pomodoro_labels()["quick_focus"])
         form.addRow("Title", self.title_input)
         self.tags_input = QLineEdit()
         self.tags_input.setPlaceholderText("Comma-separated tags")
@@ -47,17 +59,14 @@ class PomodoroWidget(QWidget):
         self.tray_notifications.setEnabled(False)
         self.tray_notifications.setToolTip("Change this preference in Settings → Automation & notifications.")
         form.addRow("Notifications", self.tray_notifications)
-        layout.addLayout(form)
-
         self.time_label = QLabel()
+        self.time_label.setStyleSheet("font-size: 56px; font-weight: bold; padding: 18px;")
+        self.time_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(self.time_label)
         controls = QHBoxLayout()
         self.start_button = QPushButton("Start focus")
         self.start_button.clicked.connect(self.start_focus)
         controls.addWidget(self.start_button)
-        self.save_metadata_button = QPushButton("Save title/tags")
-        self.save_metadata_button.clicked.connect(self.save_metadata)
-        controls.addWidget(self.save_metadata_button)
         self.pause_button = QPushButton("Pause")
         self.pause_button.clicked.connect(self.toggle_pause)
         controls.addWidget(self.pause_button)
@@ -68,6 +77,12 @@ class PomodoroWidget(QWidget):
         self.cancel_button.clicked.connect(self.cancel_focus)
         controls.addWidget(self.cancel_button)
         layout.addLayout(controls)
+
+        self.save_metadata_button = QPushButton("Save title/tags")
+        self.save_metadata_button.clicked.connect(self.save_metadata)
+        form.addRow("", self.save_metadata_button)
+        secondary_layout.addLayout(form)
+        layout.addWidget(self.secondary_group)
 
         breaks_row = QHBoxLayout()
         self.short_break_button = QPushButton("Start short break")
@@ -85,20 +100,20 @@ class PomodoroWidget(QWidget):
         self.break_cancel_button = QPushButton("Cancel break")
         self.break_cancel_button.clicked.connect(self.cancel_break)
         breaks_row.addWidget(self.break_cancel_button)
-        layout.addLayout(breaks_row)
+        secondary_layout.addLayout(breaks_row)
         self.break_label = QLabel()
-        layout.addWidget(self.break_label)
+        secondary_layout.addWidget(self.break_label)
 
-        layout.addWidget(QLabel("Notes"))
+        secondary_layout.addWidget(QLabel("Notes"))
         self.note_title = QLineEdit()
         self.note_title.setPlaceholderText("Note title")
-        layout.addWidget(self.note_title)
+        secondary_layout.addWidget(self.note_title)
         self.note_tags = QLineEdit()
         self.note_tags.setPlaceholderText("Note tags, comma-separated")
-        layout.addWidget(self.note_tags)
+        secondary_layout.addWidget(self.note_tags)
         self.note_body = QTextEdit()
         self.note_body.setPlaceholderText("Write a note during or outside a Pomodoro")
-        layout.addWidget(self.note_body)
+        secondary_layout.addWidget(self.note_body)
         notes_row = QHBoxLayout()
         self.save_note_button = QPushButton("Save text note")
         self.save_note_button.clicked.connect(self.save_text_note)
@@ -112,7 +127,7 @@ class PomodoroWidget(QWidget):
         notes_row.addWidget(self.cancel_audio_button)
         self.transcribe_audio = QCheckBox("Transcribe audio note")
         notes_row.addWidget(self.transcribe_audio)
-        layout.addLayout(notes_row)
+        secondary_layout.addLayout(notes_row)
         self.status_label = QLabel()
         layout.addWidget(self.status_label)
         self._audio_transcription = None

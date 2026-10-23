@@ -144,3 +144,12 @@ Required integration cases:
 
 - Performance thresholds and measurements belong in SPEC-016.
 - Failure and cleanup contracts belong in SPEC-017.
+
+## Living implementation reference
+
+Reviewed: 2026-10-22. Indexación y reindexación con continuidad y recuperación de trabajos.
+
+- Owner: [src/rag/engine.py](../../src/rag/engine.py).
+- Existing coverage: [tests/app/summary_queue/test_rag_reindex.py](../../tests/app/summary_queue/test_rag_reindex.py); execution results and remaining validation belong in `plan.md`.
+- Request: [REQ-019](../REQUESTS.md); current feature map: [CURRENT.md](../CURRENT.md).
+- Requirements and acceptance examples above describe the contract; proposed timings or resource targets require measured evidence before being treated as guarantees.

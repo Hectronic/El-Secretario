@@ -56,6 +56,7 @@ class ContextManagerPanel(QWidget):
         self.current_date_filter = None
         self.active_global_tags = []
         self.forced_records = []
+        self.forced_pomodoro_ids = []
 
         self.init_ui()
         self.load_notebooks()
@@ -111,7 +112,9 @@ class ContextManagerPanel(QWidget):
             for entry in self.notebook_db.get_entries(notebook_id)
         ]
         for text, tooltip in entry_descriptors(
-            state.forced_records, fetch_context_records(self.db, state), notebook_entries
+            state.forced_records, fetch_context_records(self.db, state), notebook_entries,
+            [session for pid in state.forced_pomodoro_ids
+             if (session := self.db.fetch_pomodoro(pid))],
         ):
             item = QListWidgetItem(text)
             if tooltip:
@@ -142,6 +145,7 @@ class ContextManagerPanel(QWidget):
         self.current_week_monday = None
         self.active_global_tags = []
         self.forced_records = []
+        self.forced_pomodoro_ids = []
         for i in range(self.nb_list.count()):
             self.nb_list.item(i).setCheckState(Qt.CheckState.Unchecked)
         self._update_status_labels()
@@ -203,6 +207,7 @@ class ContextManagerPanel(QWidget):
         self.nb_list.blockSignals(False)
 
         self.forced_records = state.forced_records
+        self.forced_pomodoro_ids = state.forced_pomodoro_ids
         self.sync_cb.blockSignals(True)
         self.sync_cb.setChecked(state.sync_enabled)
         self.sync_cb.blockSignals(False)
@@ -223,6 +228,7 @@ class ContextManagerPanel(QWidget):
             tags=list(self.active_global_tags),
             notebook_ids=self.get_active_notebooks(),
             forced_records=[dict(record) for record in self.forced_records],
+            forced_pomodoro_ids=list(self.forced_pomodoro_ids),
             sync_enabled=self.sync_cb.isChecked(),
             collapsed=self.is_collapsed(),
         )

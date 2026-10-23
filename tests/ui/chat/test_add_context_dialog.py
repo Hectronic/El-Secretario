@@ -63,6 +63,20 @@ def test_add_context_dialog_selects_date(qtbot):
     assert dialog.selected_context["value"] == dialog.date_edit.date().toString("yyyy-MM-dd")
 
 
+def test_add_context_dialog_explicitly_selects_pomodoro(qtbot):
+    db = MagicMock()
+    db.fetch_pomodoros.return_value = [{"id": 8, "title": "Planning", "started_at": "2026-09-25", "state": "completed"}]
+    notebook_db = MagicMock()
+    notebook_db.get_notebooks.return_value = []
+    db.get_all_tags.return_value = []
+    dialog = AddContextDialog(db, notebook_db)
+    qtbot.addWidget(dialog)
+    dialog.tabs.setCurrentWidget(dialog.pomodoro_list)
+    dialog.pomodoro_list.setCurrentRow(0)
+    dialog.on_accept()
+    assert dialog.selected_context == {"type": "pomodoro", "value": 8, "label": "Planning"}
+
+
 def test_add_context_dialog_rejects_without_selection(qtbot):
     dialog = _make_dialog(qtbot)
     dialog.tabs.setCurrentIndex(0)

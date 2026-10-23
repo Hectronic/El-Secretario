@@ -52,6 +52,12 @@ class AddContextDialog(QDialog):
         self.load_tags()
         self.tabs.addTab(self.tag_list, "Tags")
 
+        self.pomodoro_list = QListWidget()
+        fetch_pomodoros = getattr(self.db, "fetch_pomodoros", None)
+        for session in fetch_pomodoros() if callable(fetch_pomodoros) else []:
+            item = QListWidgetItem(f"🍅 {session['title']} · {session['started_at'][:10]} · {session['state']}")
+            item.setData(Qt.ItemDataRole.UserRole, {"type": "pomodoro", "value": session["id"], "label": session["title"]})
+            self.pomodoro_list.addItem(item)
         date_widget = QWidget()
         date_layout = QVBoxLayout(date_widget)
         self.date_edit = QDateEdit()
@@ -61,6 +67,7 @@ class AddContextDialog(QDialog):
         date_layout.addWidget(self.date_edit)
         date_layout.addStretch()
         self.tabs.addTab(date_widget, "Date")
+        self.tabs.addTab(self.pomodoro_list, "Pomodoros")
 
         layout.addWidget(self.tabs)
 
@@ -98,6 +105,10 @@ class AddContextDialog(QDialog):
         elif idx == 2:
             date_str = self.date_edit.date().toString("yyyy-MM-dd")
             self.selected_context = {"type": "date", "value": date_str, "label": date_str}
+        elif idx == 3:
+            item = self.pomodoro_list.currentItem()
+            if item:
+                self.selected_context = item.data(Qt.ItemDataRole.UserRole)
 
         if self.selected_context:
             self.accept()

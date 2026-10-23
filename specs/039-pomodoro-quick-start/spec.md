@@ -1,9 +1,9 @@
 # SPEC-039: Simple Pomodoro And Unified Activity Discovery
 
-Status: Proposed
+Status: Implemented and validated
 Owner: Productivity workflows
 Related: SPEC-034 Pomodoro Sessions And Activity Timeline; SPEC-006 RAG Search; SPEC-007 Chat Sessions
-Last updated: 2026-09-27
+Last updated: 2026-10-22
 
 ## Problem
 
@@ -216,3 +216,12 @@ main focus workflow.
   the Welcome quick-start, the single shared activity timeline, general search
   and chat discovery, and the simplified timer screen.
 - Register implementation status in `specs/README.md`.
+
+## Living implementation reference
+
+Reviewed: 2026-10-22. Inicio desde Bienvenida, detalles plegables, cronología mixta, búsqueda local y contexto Pomodoro explícito.
+
+- Owner: [src/ui/main_window/productivity.py](../../src/ui/main_window/productivity.py).
+- Existing coverage: [tests/integration/test_pomodoro_main_window.py](../../tests/integration/test_pomodoro_main_window.py); execution results and remaining validation belong in `plan.md`.
+- Request: [REQ-039](../REQUESTS.md); current feature map: [CURRENT.md](../CURRENT.md).
+- Requirements and acceptance examples above describe the contract; proposed timings or resource targets require measured evidence before being treated as guarantees.

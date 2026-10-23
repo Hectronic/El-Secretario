@@ -151,3 +151,12 @@ Users need long-running AI and transcription work to run sequentially, visibly, 
   workers, completion handling, persistence actions, and external integrations;
   do not fold it into maintenance changes to the Qt adapter.
 - Should RAG reindexing eventually move from `src/app/summary_queue/rag_reindex.py` to a broader RAG service package if non-queue callers need it?
+
+## Living implementation reference
+
+Reviewed: 2026-10-22. Generación y cola de resúmenes diarios/semanales con persistencia y recuperación.
+
+- Owner: [src/app/summary_queue](../../src/app/summary_queue).
+- Existing coverage: [tests/integration/test_summary_generation_service.py](../../tests/integration/test_summary_generation_service.py); execution results and remaining validation belong in `plan.md`.
+- Request: [REQ-011](../REQUESTS.md); current feature map: [CURRENT.md](../CURRENT.md).
+- Requirements and acceptance examples above describe the contract; proposed timings or resource targets require measured evidence before being treated as guarantees.

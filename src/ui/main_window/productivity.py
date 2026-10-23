@@ -18,6 +18,7 @@ from src.ui.meetings.widget import RecurringMeetingsWidget
 from src.ui.pomodoro.widget import PomodoroWidget
 from src.ui.timeline.widget import TimelineWidget
 from src.ui.recording_in_progress_widget import RecordingInProgressWidget
+from src.ui.welcome.pomodoro_labels import pomodoro_labels
 
 
 class ProductivityCoordinator:
@@ -31,6 +32,7 @@ class ProductivityCoordinator:
         self.timer = QTimer(window)
         self.timer.timeout.connect(self._tick)
         self.timer.start(250)
+        self.refresh_welcome_pomodoro()
         self.meeting_runtime = MeetingSchedulerRuntime(self.meeting_scheduler, window)
         self.meeting_runtime.reminder_due.connect(self._show_meeting_reminder)
         self.meeting_runtime.catch_up_available.connect(
@@ -89,7 +91,44 @@ class ProductivityCoordinator:
             elif focus_finished:
                 manager.refresh_menu()
 
+        self.refresh_welcome_pomodoro()
+
+    def refresh_welcome_pomodoro(self):
+        welcome = getattr(self.window, "welcome_widget", None)
+        if welcome is None:
+            return
+        active_break = self.break_service.state in ("running", "paused")
+        if active_break:
+            welcome.set_pomodoro_state(self.break_service.state, self.break_service.remaining_seconds, "Break")
+        else:
+            welcome.set_pomodoro_state(self.service.state, self.service.remaining_seconds, self.service.title)
+
+    def open_pomodoro_from_welcome(self):
+        widget = self.open_pomodoro()
+        break_active = self.break_service.state in ("running", "paused")
+        if break_active:
+            widget.secondary_group.setChecked(True)
+        if self.service.state not in ("running", "paused") and not break_active:
+            try:
+                minutes = int(self.settings.value("pomodoro/focus_minutes", 25))
+                if not 1 <= minutes <= 240:
+                    raise ValueError("Focus duration must be between 1 and 240 minutes")
+                title = pomodoro_labels()["quick_focus"]
+                widget.title_input.setText(title)
+                widget.tags_input.clear()
+                self.service.start(title, "", minutes * 60)
+                widget.status_label.setText("Focus started")
+                widget.activity_changed.emit()
+                widget.refresh()
+            except Exception as error:
+                self.window.handle_status_message(f"Pomodoro start failed: {error}")
+                widget.status_label.setText(f"Start failed: {error}")
+        self.refresh_views()
+        self.refresh_welcome_pomodoro()
+        return widget
+
     def refresh_views(self):
+        self.refresh_welcome_pomodoro()
         refresh_tags = getattr(self.window, "refresh_tag_filter", None)
         if callable(refresh_tags):
             refresh_tags()
@@ -236,6 +275,16 @@ class ProductivityCoordinator:
         return widget
 
     def open_source(self, event_type, source_id):
+        if event_type in ("daily_summary", "weekly_summary"):
+            summary = (self.window.db.fetch_daily_summary_by_id(source_id) if event_type == "daily_summary"
+                       else self.window.db.fetch_weekly_summary_by_id(source_id))
+            if summary:
+                summary["type"] = "daily" if event_type == "daily_summary" else "weekly"
+                self.window.open_summary_tab(summary)
+            return
+        if event_type == "record":
+            self.window.open_item_tab(int(source_id))
+            return
         if event_type == "meeting_occurrence":
             self.open_meeting_details(int(source_id))
             return

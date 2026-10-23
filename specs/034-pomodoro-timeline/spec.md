@@ -199,3 +199,12 @@ the project’s existing safe-delete policy. No audio bytes are stored in SQLite
   verifies the reused STT adapter passes saved backend, model, compute type, and
   `force_cpu` policy to the worker.
 - README, README_ES, and README_AST document the new controls and recovery flow.
+
+## Living implementation reference
+
+Reviewed: 2026-10-22. Ciclo de foco, descansos y notas; cronología compartida ampliada por 039.
+
+- Owner: [src/app/pomodoro](../../src/app/pomodoro).
+- Existing coverage: [tests/integration/test_pomodoro_timeline_flow.py](../../tests/integration/test_pomodoro_timeline_flow.py); execution results and remaining validation belong in `plan.md`.
+- Request: [REQ-034](../REQUESTS.md); current feature map: [CURRENT.md](../CURRENT.md).
+- Requirements and acceptance examples above describe the contract; proposed timings or resource targets require measured evidence before being treated as guarantees.

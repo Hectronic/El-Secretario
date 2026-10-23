@@ -97,3 +97,12 @@ self.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.WindowSyst
 - **Manual Verification:**
   - Check window movement stability on Windows, Ubuntu (offscreen and native), and macOS.
   - Verify that menu bar triggers options (e.g. opens settings tab, imports file).
+
+## Living implementation reference
+
+Reviewed: 2026-10-22. Barra de título y acciones de ventana con guardas de plataforma.
+
+- Owner: [src/ui/main_window](../../src/ui/main_window).
+- Existing coverage: [tests/ui/main_window/test_title_bar.py](../../tests/ui/main_window/test_title_bar.py); execution results and remaining validation belong in `plan.md`.
+- Request: [REQ-026](../REQUESTS.md); current feature map: [CURRENT.md](../CURRENT.md).
+- Requirements and acceptance examples above describe the contract; proposed timings or resource targets require measured evidence before being treated as guarantees.

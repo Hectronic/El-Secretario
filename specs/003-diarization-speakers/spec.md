@@ -85,3 +85,12 @@ configuration.
 
 - Should speaker names become reusable profile metadata rather than per-recording
   text replacements?
+
+## Living implementation reference
+
+Reviewed: 2026-10-22. Activación de diarización y conservación de la política de ejecución STT.
+
+- Owner: [src/worker_components](../../src/worker_components).
+- Existing coverage: [tests/test_diarization_toggle.py](../../tests/test_diarization_toggle.py); execution results and remaining validation belong in `plan.md`.
+- Request: [REQ-003](../REQUESTS.md); current feature map: [CURRENT.md](../CURRENT.md).
+- Requirements and acceptance examples above describe the contract; proposed timings or resource targets require measured evidence before being treated as guarantees.

@@ -385,7 +385,17 @@ class AudioCompressionJob:
                 raise RuntimeError("Recording changed or was deleted before compression completed.")
             database_swapped = True
             try:
-                os.remove(self.source_path)
+                # Qt/FFmpeg may close its Windows file handle asynchronously
+                # after setSource(QUrl()). Retry only sharing/permission errors
+                # here in the background worker, never on the Qt event loop.
+                for attempt in range(10):
+                    try:
+                        os.remove(self.source_path)
+                        break
+                    except PermissionError:
+                        if attempt == 9:
+                            raise
+                        time.sleep(0.1)
             except OSError:
                 logging.warning("Compressed recording retained original WAV %s", self.source_path)
             logging.info(

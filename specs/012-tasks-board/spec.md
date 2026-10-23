@@ -67,3 +67,12 @@ Users need a reliable task board and sidebar that show actionable items from rec
 ## Open Questions
 
 - Should task board filtering move to an app-level service if more tabs need the same normalization logic?
+
+## Living implementation reference
+
+Reviewed: 2026-10-22. Tareas persistidas, filtros y cambios de estado desde el tablero.
+
+- Owner: [src/ui/tasks](../../src/ui/tasks).
+- Existing coverage: [tests/integration/test_tasks_board_persistence.py](../../tests/integration/test_tasks_board_persistence.py); execution results and remaining validation belong in `plan.md`.
+- Request: [REQ-012](../REQUESTS.md); current feature map: [CURRENT.md](../CURRENT.md).
+- Requirements and acceptance examples above describe the contract; proposed timings or resource targets require measured evidence before being treated as guarantees.

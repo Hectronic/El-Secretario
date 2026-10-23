@@ -2,7 +2,7 @@
 
 Status: Implemented
 Owner: Settings experience
-Last updated: 2026-10-03
+Last updated: 2026-10-22
 
 ## Problem
 
@@ -171,3 +171,28 @@ change values by itself. Category and disclosure state are remembered locally.
   Hide, and Copy actions; their inputs can shrink in narrow layouts.
 - Full-suite validation: 1003 passed, 1 skipped (system tray unavailable), 11
   subtests passed on 2026-10-03.
+
+## Living implementation reference
+
+Reviewed: 2026-10-22. Categorías buscables, cambios pendientes y restablecimiento por ámbito.
+
+- Owner: [src/ui/settings](../../src/ui/settings).
+- Existing coverage: [tests/integration/test_settings_experience.py](../../tests/integration/test_settings_experience.py); execution results and remaining validation belong in `plan.md`.
+- Request: [REQ-037](../REQUESTS.md); current feature map: [CURRENT.md](../CURRENT.md).
+- Requirements and acceptance examples above describe the contract; proposed timings or resource targets require measured evidence before being treated as guarantees.
+
+## Compact presentation (REQ-037.1, 2026-10-22)
+
+Settings categories have clearly spaced navigation items and a current-category heading. Existing control panels are grouped into bordered sections at their natural height, aligned to the top; growing the window leaves unused space below the controls instead of spreading it between sections. Hidden form rows do not reserve space. Help/default text and the primary save action use contrast appropriate to the active light/dark theme; live theme changes preserve the existing controls and staged state. Advanced-mode hints describe only the current category. Below 860 px, an accessible category selector replaces the sidebar, leaving the content its full width; selection and search stay synchronized.
+
+The presentation helper belongs to `src/ui/settings/presentation.py`; the shell keeps category/search navigation, validation, staged saves and existing RAG signals. No setting keys or runtime/provider policy change. Coverage includes a resize regression, live-theme category geometry and a real QSettings/Qt integration path through Save, Reload RAG and category navigation.
+
+## Windows font metrics (REQ-037.2)
+
+Informational labels and checkbox captions wrap to the available width rather than imposing a sentence-wide minimum. The existing QCheckBox remains the state/signal owner and retains an accessible name; clicking its wrapping caption toggles the same control. Both ordinary and larger system fonts must fit the complete settings surface inside a narrow viewport across all seven categories, with no hidden horizontal overflow.
+
+Compact mode also stacks footer actions. The available page width governs responsive navigation; action-row minimum hints must not widen the containing window or force it back into sidebar mode.
+
+In compact mode, form labels, controls and their reset actions use separate lines; RAG maintenance actions also stack. Drop-down minimum widths depend on a bounded content length rather than the longest device/model name; selected values remain complete and unchanged. Wide layouts restore inline rows.
+
+Auxiliary MCP/update buttons and their status text also stack in compact mode. The integration actions use concise captions, “Copy MCP config” and “Repair shortcuts”; tooltip detail and actions are preserved.

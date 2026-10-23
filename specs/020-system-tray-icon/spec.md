@@ -48,3 +48,12 @@ Currently, the application may only appear in the system tray under certain cond
 
 - Should the tray icon have a left-click default action (e.g., toggle window visibility)?
 - Do we need to handle special cases for macOS where the menu bar is used instead of a traditional system tray?
+
+## Living implementation reference
+
+Reviewed: 2026-10-22. Integración de bandeja con las guardas de disponibilidad de Qt.
+
+- Owner: [src/ui/system_tray_manager.py](../../src/ui/system_tray_manager.py).
+- Existing coverage: [tests/ui/test_system_tray_manager.py](../../tests/ui/test_system_tray_manager.py); execution results and remaining validation belong in `plan.md`.
+- Request: [REQ-020](../REQUESTS.md); current feature map: [CURRENT.md](../CURRENT.md).
+- Requirements and acceptance examples above describe the contract; proposed timings or resource targets require measured evidence before being treated as guarantees.

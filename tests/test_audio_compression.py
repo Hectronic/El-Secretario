@@ -88,3 +88,43 @@ def test_background_job_preserves_wav_and_database_on_encoder_failure(tmp_path):
     assert source.exists()
     assert db.fetch_record(record_id)["filename"] == "meeting.wav"
     assert errors == [(record_id, "encoder unavailable")]
+
+
+@pytest.mark.parametrize("persistent", [False, True])
+def test_background_job_handles_windows_source_lock_without_losing_compressed_audio(
+    tmp_path, monkeypatch, persistent
+):
+    source = tmp_path / "locked.wav"
+    _wav(source)
+    db = DBManager(str(tmp_path / "locked.sqlite"))
+    record_id = db.save(source.name, "", 1.0, "Locked capture")
+    target = source.with_suffix(".mp3")
+    attempts = []
+    finished = []
+    real_remove = os.remove
+
+    def locked_remove(path):
+        if Path(path) == source:
+            attempts.append(path)
+            if persistent or len(attempts) < 3:
+                raise PermissionError("Windows media backend still holds the WAV")
+        real_remove(path)
+
+    def encoder(_path):
+        target.write_bytes(b"compressed")
+        return str(target)
+
+    monkeypatch.setattr("src.audio.os.remove", locked_remove)
+    job = AudioCompressionJob(
+        source, record_id, db, encoder=encoder,
+        on_success=lambda *args: finished.append(args),
+    ).start()
+    job.release_source()
+    job.thread.join(timeout=5)
+
+    assert not job.thread.is_alive()
+    assert len(attempts) >= 3
+    assert source.exists() is persistent
+    assert target.exists()
+    assert db.fetch_record(record_id)["filename"] == target.name
+    assert finished == [(record_id, str(target))]

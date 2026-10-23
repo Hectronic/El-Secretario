@@ -36,3 +36,12 @@ Users need one safe place to maintain stored data, run batch workflows, move dat
 - 2026-09-08: extracted RAG and data-transfer actions to `src/ui/tools/` and corrected batch-tab persistence injection.
 - 2026-09-09: extracted the tabbed Qt composition to `src/ui/tools/view.py`; the
   façade keeps action and tab-factory ownership.
+
+## Living implementation reference
+
+Reviewed: 2026-10-22. Exportación de datos y herramientas que consumen los puertos de la aplicación.
+
+- Owner: [src/data_export.py](../../src/data_export.py).
+- Existing coverage: [tests/integration/test_tools_widget_ports.py](../../tests/integration/test_tools_widget_ports.py); execution results and remaining validation belong in `plan.md`.
+- Request: [REQ-014](../REQUESTS.md); current feature map: [CURRENT.md](../CURRENT.md).
+- Requirements and acceptance examples above describe the contract; proposed timings or resource targets require measured evidence before being treated as guarantees.

@@ -97,3 +97,77 @@ def test_saved_stt_preferences_reach_next_job_and_rag_signal_uses_persisted_conf
     assert settings.value("rag_persist_directory") == "new-vectors"
     assert settings.value("app_theme") == "System"
     assert widget.has_unsaved_changes()
+
+
+def test_compact_settings_layout_keeps_real_save_and_rag_actions_working(qtbot, monkeypatch, tmp_path):
+    from src.ui.settings.catalog import CATEGORIES
+
+    monkeypatch.setenv("EL_SECRETARIO_SKIP_AUDIO_ENUM", "1")
+    settings = QSettings(str(tmp_path / "compact-settings.ini"), QSettings.Format.IniFormat)
+    settings.setValue("settings/category", "Search & knowledge")
+    monkeypatch.setattr("src.ui.settings.widget.QSettings", lambda *_args: settings)
+    widget = SettingsWidget()
+    qtbot.addWidget(widget)
+    widget.resize(1100, 850)
+    widget.show()
+    widget.advanced_toggle.click()
+    widget.rag_panel.persist_dir_input.setText("compact-vectors")
+    qtbot.waitUntil(widget.save_btn.isEnabled)
+    widget.save_btn.click()
+    assert settings.value("rag_persist_directory") == "compact-vectors"
+    assert not widget.has_unsaved_changes()
+    spy = QSignalSpy(widget.rag_reload_requested)
+    widget.rag_reload_btn.click()
+    assert len(spy) == 1
+    assert spy[0][0]["persist_directory"] == "compact-vectors"
+    widget.category_list.setCurrentRow(CATEGORIES.index("Recording & devices"))
+    assert widget.audio_panel.mic_combo.isVisible()
+    assert widget.rag_panel.isHidden()
+    assert widget.category_heading.text() == "Recording & devices"
+    assert settings.value("settings/category") == "Recording & devices"
+
+
+    # Wrapping the caption must retain normal click, accessibility and save
+    # behavior on the original QCheckBox, through real Qt events and QSettings.
+    from PyQt6.QtCore import Qt
+    from src.ui.settings.presentation import CheckBoxDescription
+
+    widget.category_list.setCurrentRow(CATEGORIES.index("Automation & notifications"))
+    field = next(field for field in widget.catalog if field.key == "pomodoro/tray_notifications")
+    caption = field.wrapper.findChild(CheckBoxDescription)
+    before = field.control.isChecked()
+    assert field.control.accessibleName()
+    widget.surface_scroll.ensureWidgetVisible(caption)
+    qtbot.mouseClick(caption, Qt.MouseButton.LeftButton)
+    assert field.control.isChecked() is not before
+    qtbot.waitUntil(widget.save_btn.isEnabled)
+    widget.save_btn.click()
+    assert settings.value("pomodoro/tray_notifications", type=bool) is not before
+
+
+def test_compact_settings_footer_fits_inside_real_tab_host_and_saves(qtbot, monkeypatch, tmp_path):
+    from PyQt6.QtCore import Qt
+    from PyQt6.QtWidgets import QTabWidget
+    from src.ui.settings.catalog import CATEGORIES
+
+    monkeypatch.setenv("EL_SECRETARIO_SKIP_AUDIO_ENUM", "1")
+    settings = QSettings(str(tmp_path / "tab-settings.ini"), QSettings.Format.IniFormat)
+    monkeypatch.setattr("src.ui.settings.widget.QSettings", lambda *_args: settings)
+    host = QTabWidget()
+    qtbot.addWidget(host)
+    widget = SettingsWidget()
+    for action in (widget.reset_category_btn, widget.discard_btn, widget.save_btn):
+        action.setMinimumWidth(310)
+    host.addTab(widget, "Settings")
+    host.resize(680, 540)
+    host.show()
+    qtbot.waitUntil(widget.category_picker.isVisible)
+    assert host.width() == 680
+    assert widget.width() < 680
+    widget.category_picker.setCurrentIndex(CATEGORIES.index("Automation & notifications"))
+    widget.productivity_panel.focus_minutes.setValue(42)
+    qtbot.waitUntil(widget.save_btn.isEnabled)
+    qtbot.mouseClick(widget.save_btn, Qt.MouseButton.LeftButton)
+    assert settings.value("pomodoro/focus_minutes", type=int) == 42
+    for action in (widget.reset_category_btn, widget.discard_btn, widget.save_btn):
+        assert action.mapTo(widget, action.rect().topRight()).x() < widget.width()

@@ -14,19 +14,23 @@
 import json
 import os
 
-from PyQt6.QtCore import QSettings, QTimer, Qt, pyqtSignal
+from PyQt6.QtCore import QEvent, QSettings, QSize, QTimer, Qt, pyqtSignal
 from PyQt6.QtWidgets import (
+    QApplication,
     QBoxLayout,
     QCheckBox,
+    QComboBox,
     QFormLayout,
     QHBoxLayout,
     QLabel,
+    QLayout,
     QLineEdit,
     QListWidget,
     QListWidgetItem,
     QMessageBox,
     QPushButton,
     QScrollArea,
+    QSizePolicy,
     QVBoxLayout,
     QWidget,
 )
@@ -44,6 +48,10 @@ from src.ui.settings.prompts_panel import PromptsSettingsPanel
 from src.ui.settings.productivity_panel import ProductivitySettingsPanel
 from src.ui.settings.rag_panel import RAGSettingsPanel
 from src.ui.settings.store import SettingsOverlay
+from src.ui.settings.presentation import (
+    collapse_hidden_form_rows, compact_settings_panel, set_compact_settings_panel,
+    setting_control_view, settings_styles,
+)
 
 
 RESTART_KEYS = {"enable_auto_update", "enable_mcp_server"}
@@ -83,7 +91,12 @@ class SettingsWidget(QWidget):
         return self.category_list
 
     def _build_shell(self):
+        self.setObjectName("settingsPage")
+        # Available page width chooses the compact layout. Do not let a wide
+        # action row raise the window minimum before resizeEvent can reflow it.
+        self.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
         root = QVBoxLayout(self)
+        root.setSizeConstraint(QLayout.SizeConstraint.SetNoConstraint)
         root.setContentsMargins(18, 16, 18, 12)
         root.setSpacing(10)
 
@@ -107,14 +120,24 @@ class SettingsWidget(QWidget):
         self.search_input.textChanged.connect(self._update_search_results)
         root.addWidget(self.search_input)
 
+        self.category_picker = QComboBox()
+        self.category_picker.setObjectName("settingsCategoryPicker")
+        self.category_picker.setAccessibleName("Settings category")
+        self.category_picker.addItems(CATEGORIES)
+        self.category_picker.currentIndexChanged.connect(self._on_category_changed)
+        self.category_picker.hide()
+        root.addWidget(self.category_picker)
+
         body = QHBoxLayout()
         body.setSpacing(12)
         self.category_list = QListWidget()
         self.category_list.setObjectName("settingsCategories")
-        self.category_list.setMinimumWidth(205)
+        self.category_list.setSpacing(3)
+        self.category_list.setMinimumWidth(235)
         self.category_list.setMaximumWidth(270)
         for category in CATEGORIES:
             item = QListWidgetItem(category)
+            item.setSizeHint(QSize(210, 44))
             item.setToolTip(CATEGORY_SUMMARIES[category])
             self.category_list.addItem(item)
         self.category_list.currentRowChanged.connect(self._on_category_changed)
@@ -122,7 +145,11 @@ class SettingsWidget(QWidget):
 
         content = QVBoxLayout()
         content.setSpacing(8)
+        self.category_heading = QLabel()
+        self.category_heading.setObjectName("settingsCategoryHeading")
+        content.addWidget(self.category_heading)
         self.category_summary = QLabel()
+        self.category_summary.setObjectName("settingsCategorySummary")
         self.category_summary.setWordWrap(True)
         content.addWidget(self.category_summary)
         self.advanced_summary = QLabel()
@@ -172,7 +199,9 @@ class SettingsWidget(QWidget):
         restart_row.addWidget(self.restart_btn)
         root.addLayout(restart_row)
 
-        footer = QHBoxLayout()
+        footer = QBoxLayout(QBoxLayout.Direction.TopToBottom)
+        self.footer_layout = footer
+        footer.setSpacing(6)
         self.reset_category_btn = QPushButton("Reset category…")
         self.reset_category_btn.clicked.connect(self._reset_category)
         footer.addWidget(self.reset_category_btn)
@@ -181,10 +210,53 @@ class SettingsWidget(QWidget):
         self.discard_btn.clicked.connect(self.discard_settings)
         footer.addWidget(self.discard_btn)
         self.save_btn = QPushButton("Save settings")
+        self.save_btn.setObjectName("settingsSaveButton")
         self.save_btn.setDefault(True)
         self.save_btn.clicked.connect(self.save_settings)
         footer.addWidget(self.save_btn)
         root.addLayout(footer)
+        self._refresh_presentation()
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        self._update_compact_layout()
+
+    def _update_compact_layout(self):
+        if hasattr(self, "category_picker"):
+            compact = self.width() < 860
+            self.category_list.setVisible(not compact)
+            self.category_picker.setVisible(compact)
+            if hasattr(self, "footer_layout"):
+                direction = (QBoxLayout.Direction.TopToBottom if compact
+                             else QBoxLayout.Direction.LeftToRight)
+                self.footer_layout.setDirection(direction)
+            if hasattr(self, "catalog"):
+                for panel in (self.general_panel, self.audio_panel, self.rag_panel,
+                              self.prompts_panel, self.productivity_panel):
+                    set_compact_settings_panel(panel, compact)
+                self.rag_actions_widget.layout().setDirection(direction)
+
+    def _refresh_presentation(self):
+        if getattr(self, "_refreshing_presentation", False):
+            return
+        self._refreshing_presentation = True
+        try:
+            app = QApplication.instance()
+            if app.styleSheet():
+                dark = "#2b2b2b" in app.styleSheet()
+            else:
+                dark = app.palette().color(self.backgroundRole()).lightness() < 128
+            sheet = settings_styles(dark)
+            if self.styleSheet() != sheet:
+                self.setStyleSheet(sheet)
+        finally:
+            self._refreshing_presentation = False
+
+    def changeEvent(self, event):
+        super().changeEvent(event)
+        if event.type() in (QEvent.Type.PaletteChange, QEvent.Type.ApplicationPaletteChange,
+                            QEvent.Type.StyleChange) and hasattr(self, "save_btn"):
+            self._refresh_presentation()
 
     def _build_panels(self):
         self._clear_surface()
@@ -197,6 +269,7 @@ class SettingsWidget(QWidget):
             self.general_panel, self.audio_panel, self.rag_panel,
             self.prompts_panel, self.productivity_panel,
         ):
+            compact_settings_panel(panel)
             self.surface_layout.addWidget(panel)
 
         self.rag_actions_widget = QWidget(self.surface)
@@ -213,6 +286,7 @@ class SettingsWidget(QWidget):
         action_layout.addWidget(self.rag_reindex_btn)
         action_layout.addStretch(1)
         self.surface_layout.addWidget(self.rag_actions_widget)
+        self.surface_layout.addStretch(1)
 
         self.catalog = build_setting_catalog(self)
         self.defaults = effective_defaults(self.catalog)
@@ -220,6 +294,7 @@ class SettingsWidget(QWidget):
             self._install_field_chrome(field)
         self._prepare_static_controls()
         self._connect_dirty_tracking()
+        self._update_compact_layout()
 
     def _connect_dirty_tracking(self):
         seen = set()
@@ -265,9 +340,10 @@ class SettingsWidget(QWidget):
             wrap_layout.setContentsMargins(0, 2, 0, 4)
             wrap_layout.setSpacing(3)
             control_row = QHBoxLayout()
+            control_row.setObjectName("settingsFieldActions")
             control_row.setContentsMargins(0, 0, 0, 0)
             target.setParent(wrapper)
-            control_row.addWidget(target, 1)
+            control_row.addWidget(setting_control_view(target, field.category), 1)
             reset = QPushButton("Reset")
             reset.setAccessibleName(f"Reset {field.label} to default")
             reset.setToolTip(f"Restore default: {self._default_text(field)}")
@@ -302,8 +378,9 @@ class SettingsWidget(QWidget):
             wrap_layout = QVBoxLayout(wrapper)
             wrap_layout.setContentsMargins(0, 4, 0, 4)
             control_row = QHBoxLayout()
+            control_row.setObjectName("settingsFieldActions")
             target.setParent(wrapper)
-            control_row.addWidget(target, 1)
+            control_row.addWidget(setting_control_view(target, field.category), 1)
             reset = QPushButton("Reset")
             reset.setAccessibleName(f"Reset {field.label} to default")
             reset.setToolTip(f"Restore default: {self._default_text(field)}")
@@ -313,9 +390,11 @@ class SettingsWidget(QWidget):
             wrap_layout.addLayout(control_row)
             help_label = QLabel(field.help + "  " + field.timing, wrapper)
             help_label.setWordWrap(True)
+            help_label.setProperty("class", "settings-help")
             wrap_layout.addWidget(help_label)
             default_label = QLabel("Default: " + self._default_text(field), wrapper)
             default_label.setWordWrap(True)
+            default_label.setProperty("class", "settings-default")
             wrap_layout.addWidget(default_label)
             field.error_label = QLabel("", wrapper)
             field.error_label.setWordWrap(True)
@@ -415,12 +494,7 @@ class SettingsWidget(QWidget):
         if hasattr(self, "catalog"):
             self._apply_visibility()
         if hasattr(self, "advanced_summary"):
-            names = [field.label for field in self.catalog if field.advanced]
-            self.advanced_summary.setText(
-                "Advanced mode includes: " + ", ".join(names[:7]) + (" and more." if len(names) > 7 else ".")
-                if not self._advanced else "Advanced settings are shown in their owning categories."
-            )
-            self.advanced_summary.setVisible(not self._advanced)
+            self._update_advanced_summary()
 
     def _show_category(self, category):
         if category not in CATEGORIES:
@@ -428,7 +502,9 @@ class SettingsWidget(QWidget):
         self._category = category
         self._restoring_category = True
         self.category_list.setCurrentRow(CATEGORIES.index(category))
+        self.category_picker.setCurrentIndex(CATEGORIES.index(category))
         self._restoring_category = False
+        self.category_heading.setText(category)
         self.category_summary.setText(CATEGORY_SUMMARIES[category])
         self.settings.setValue("settings/category", category)
         self._apply_visibility()
@@ -469,14 +545,19 @@ class SettingsWidget(QWidget):
         self.general_panel.ollama_widget.setVisible(category == "AI & chat")
         if hasattr(self, "rag_actions_widget"):
             self.rag_actions_widget.setVisible(category == "Search & knowledge")
+        for panel in visible_panels:
+            collapse_hidden_form_rows(panel)
         self._update_advanced_summary()
 
     def _update_advanced_summary(self):
         if not self._advanced:
+            category = self._search_override or self._category
+            fields = [field for field in self.catalog if field.advanced and field.category == category]
+            if not fields:
+                self.advanced_summary.hide()
+                return
             active = []
-            for field in self.catalog:
-                if not field.advanced:
-                    continue
+            for field in fields:
                 value = field.control
                 if field.key in {"hf_token", "gemini_key"}:
                     configured = bool(value.text().strip())
@@ -484,7 +565,7 @@ class SettingsWidget(QWidget):
                         active.append(field.label + " configured")
                     continue
                 if isinstance(value, QCheckBox):
-                    active_value = value.isChecked()
+                    active_value = value.isChecked() != bool(field.default)
                 elif hasattr(value, "currentText"):
                     active_value = value.currentText()
                     active_value = active_value not in ("", "auto", str(field.default))
@@ -499,7 +580,7 @@ class SettingsWidget(QWidget):
             if len(active) > 5:
                 summary += f", and {len(active) - 5} more"
             self.advanced_summary.setText(
-                "Advanced choices in use: " + (summary + "." if summary else "none.")
+                ("Advanced choices in use: " + summary + "." if summary else "Advanced options are available for this category.")
                 + " Enable Advanced settings to review them."
             )
             self.advanced_summary.show()
@@ -515,6 +596,7 @@ class SettingsWidget(QWidget):
         if self.has_unsaved_changes() and not self._resolve_pending_edits():
             self._restoring_category = True
             self.category_list.setCurrentRow(CATEGORIES.index(self._category))
+            self.category_picker.setCurrentIndex(CATEGORIES.index(self._category))
             self._restoring_category = False
             return
         self._show_category(requested)
@@ -525,6 +607,7 @@ class SettingsWidget(QWidget):
             self.search_results.clear()
             self.search_results.hide()
             self.category_list.setEnabled(True)
+            self.category_picker.setEnabled(True)
             self._search_override = None
             self._show_category(self._previous_search_category)
             return
@@ -539,6 +622,7 @@ class SettingsWidget(QWidget):
                 self.search_results.addItem(item)
         self.search_results.setVisible(self.search_results.count() > 0)
         self.category_list.setEnabled(False)
+        self.category_picker.setEnabled(False)
         if self.search_results.count() == 0:
             self.search_results.addItem("No settings found. Try another keyword.")
             self.search_results.show()
@@ -551,6 +635,7 @@ class SettingsWidget(QWidget):
         self._search_override = field.category
         if field.advanced and not self._advanced:
             self._set_advanced(True)
+        self.category_heading.setText(field.category)
         self.category_summary.setText(CATEGORY_SUMMARIES[field.category])
         self._apply_visibility()
         # A result can point into the currently inactive AI provider section.
@@ -562,6 +647,9 @@ class SettingsWidget(QWidget):
         self.category_list.blockSignals(True)
         self.category_list.setCurrentRow(CATEGORIES.index(field.category))
         self.category_list.blockSignals(False)
+        self.category_picker.blockSignals(True)
+        self.category_picker.setCurrentIndex(CATEGORIES.index(field.category))
+        self.category_picker.blockSignals(False)
         self.surface_scroll.ensureWidgetVisible(field.wrapper or field.control)
         field.control.setFocus(Qt.FocusReason.OtherFocusReason)
         QTimer.singleShot(0, lambda control=field.control: control.setFocus(Qt.FocusReason.OtherFocusReason))

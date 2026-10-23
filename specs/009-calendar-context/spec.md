@@ -21,3 +21,12 @@ Last updated: 2026-09-07
 - `tests/integration/test_calendar_selection_sync.py` verifies real SQLite filtering
   and emitted synchronization after progressive navigation, plus the selected-date
   summary request through the real queue boundary to persisted daily-summary state.
+
+## Living implementation reference
+
+Reviewed: 2026-10-22. Selección de fechas y sincronización de los consumidores de contexto.
+
+- Owner: [src/ui/calendar](../../src/ui/calendar).
+- Existing coverage: [tests/integration/test_calendar_selection_sync.py](../../tests/integration/test_calendar_selection_sync.py); execution results and remaining validation belong in `plan.md`.
+- Request: [REQ-009](../REQUESTS.md); current feature map: [CURRENT.md](../CURRENT.md).
+- Requirements and acceptance examples above describe the contract; proposed timings or resource targets require measured evidence before being treated as guarantees.

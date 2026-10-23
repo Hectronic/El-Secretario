@@ -213,3 +213,12 @@ The server is fully decoupled from the PyQt GUI main thread via an active subcla
   - Send HTTP requests to retrieve recordings, fetch transcripts, and verify status responses are correct.
 - **Action Safe-threading verification:**
   - Programmatically trigger `POST /record/start` via curl and verify that PyQt safely triggers the GUI microphone capture and updates the layout.
+
+## Living implementation reference
+
+Reviewed: 2026-10-22. Servidor HTTP local y gestión de sus recursos.
+
+- Owner: [src/api/server.py](../../src/api/server.py).
+- Existing coverage: [tests/test_local_api.py](../../tests/test_local_api.py); execution results and remaining validation belong in `plan.md`.
+- Request: [REQ-024](../REQUESTS.md); current feature map: [CURRENT.md](../CURRENT.md).
+- Requirements and acceptance examples above describe the contract; proposed timings or resource targets require measured evidence before being treated as guarantees.

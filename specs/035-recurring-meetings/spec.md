@@ -170,3 +170,12 @@ occurrences as non-reschedulable history when they link to a recording.
   behavior, including the lack of external calendar sync/background-daemon
   guarantee.
 - Register implementation status in `specs/README.md`.
+
+## Living implementation reference
+
+Reviewed: 2026-10-22. Plantillas, ocurrencias y recordatorios con fuentes persistidas.
+
+- Owner: [src/app/scheduling](../../src/app/scheduling).
+- Existing coverage: [tests/integration/test_recurring_meetings_flow.py](../../tests/integration/test_recurring_meetings_flow.py); execution results and remaining validation belong in `plan.md`.
+- Request: [REQ-035](../REQUESTS.md); current feature map: [CURRENT.md](../CURRENT.md).
+- Requirements and acceptance examples above describe the contract; proposed timings or resource targets require measured evidence before being treated as guarantees.
