@@ -83,7 +83,8 @@ tras reiniciar; inicializar, recargar e indexar RAG siguen siendo acciones expl�
 
 1.  **Token de Hugging Face**: Requerido para la diarización de hablantes (identificar quién está hablando).
     -   Crea un token en: [https://huggingface.co/settings/tokens](https://huggingface.co/settings/tokens)
-    -   Asegúrate de haber aceptado las condiciones de usuario para el modelo `pyannote/speaker-diarization-3.1`.
+    -   Asegúrate de haber aceptado las condiciones de uso de [`pyannote/speaker-diarization-3.1`](https://huggingface.co/pyannote/speaker-diarization-3.1) y [`pyannote/segmentation-3.0`](https://huggingface.co/pyannote/segmentation-3.0).
+    - En Ajustes → Transcripción y hablantes, usa **Comprobar diarización** para comprobar el token introducido y el acceso al modelo. Guarda los cambios del token antes de transcribir. Si falla la diarización, se conserva la transcripción y la grabación muestra un aviso con acceso a ajustes. La comprobación no ejecuta inferencia ni verifica la GPU.
 
 2.  **Clave API de Gemini**: Requerida por defecto para las funciones del Asistente de IA (chat).
     -   Obtén tu clave API en: [https://aistudio.google.com/app/apikey](https://aistudio.google.com/app/apikey)

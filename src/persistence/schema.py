@@ -41,6 +41,7 @@ class SchemaManager(RepositoryBase):
                     cleaned_text TEXT,
                     is_favorite INTEGER DEFAULT 0,
                     is_diarized INTEGER DEFAULT 0,
+                    diarization_warning TEXT,
                     transcription_model TEXT,
                     processing_attempts INTEGER DEFAULT 0,
                     last_error TEXT,
@@ -295,6 +296,8 @@ class SchemaManager(RepositoryBase):
                     cursor.execute('ALTER TABLE records ADD COLUMN is_favorite INTEGER DEFAULT 0')
                 if 'is_diarized' not in columns:
                     cursor.execute('ALTER TABLE records ADD COLUMN is_diarized INTEGER DEFAULT 0')
+                if 'diarization_warning' not in columns:
+                    cursor.execute('ALTER TABLE records ADD COLUMN diarization_warning TEXT')
                 if 'transcription_model' not in columns:
                     cursor.execute('ALTER TABLE records ADD COLUMN transcription_model TEXT')
                 if 'processing_attempts' not in columns:

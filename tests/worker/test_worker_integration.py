@@ -239,3 +239,19 @@ def test_long_audio_diarization_worker_reports_batched_cuda_progress(qtbot, monk
     assert "Diarizing: speaker counting..." in statuses
     assert "Diarizing: speaker clustering..." in statuses
     assert "Diarizing: reconstructing diarization..." in statuses
+
+
+def test_requested_diarization_without_token_preserves_text_and_reports_failure(qtbot, monkeypatch, tmp_path):
+    audio_path = tmp_path / "missing-token.wav"
+    _write_dummy_audio(audio_path)
+    monkeypatch.setattr(
+        "src.worker_components.transcriber_thread._run_transcription_in_subprocess",
+        lambda **_kwargs: [{"start": 0.0, "end": 1.0, "text": "hello"}],
+    )
+    thread = TranscriberThread(str(audio_path), device="cpu", compute_type="int8",
+                               total_duration=1.0, enable_diarization=True, hf_token="")
+    with qtbot.waitSignal(thread.finished, timeout=3000) as blocker:
+        thread.start()
+    assert blocker.args[0]["text"] == "hello"
+    assert blocker.args[0]["is_diarized"] is False
+    assert blocker.args[0]["diarization_warning"]

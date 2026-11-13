@@ -15,6 +15,7 @@
 from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QListWidget, 
                              QListWidgetItem, QPushButton, QLabel, QMessageBox, QProgressBar)
 from src.app.summary_queue.actions import QueueActionCoordinator
+from src.ui.diarization_text import diarization_text
 from src.app.summary_queue.presentation import (
     build_queue_management_snapshot,
     format_history_entry,
@@ -203,13 +204,16 @@ class QueueManagementWidget(QWidget):
     def _apply_history_labels(self, labels):
         self.history_list.clear()
         for label in labels:
+            if " - " in label:
+                prefix, message = label.rsplit(" - ", 1)
+                label = prefix + " - " + diarization_text(message)
             self.history_list.addItem(QListWidgetItem(label))
 
     def _format_history_entry(self, entry):
         return format_history_entry(entry)
 
     def _on_status_update(self, message):
-        status_text = normalize_status_message(message)
+        status_text = normalize_status_message(diarization_text(message))
         if not status_text:
             return
         self.live_status_label.setText(status_text)

@@ -89,6 +89,10 @@ class QueueWorkerExecutionCoordinator:
         try:
             logging.info("Queue: applying completion actions for task type=%s.", task.get("type"))
             self.completion_actions().apply(self.handle_completion(task, result))
+            if isinstance(result, dict) and result.get("diarization_warning"):
+                warning = result["diarization_warning"]
+                self.append_history("warning", task, warning)
+                self.emit_status(warning)
         except Exception:
             logging.exception("Queue: persistence error for task type=%s.", task.get("type"))
 

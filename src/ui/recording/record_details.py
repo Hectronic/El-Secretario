@@ -2,6 +2,7 @@
 
 from PyQt6.QtCore import QSettings
 
+from src.ui.diarization_text import diarization_text
 from src.ui.recording.rag_indexing import index_saved_record_changes
 from src.ui.recording.state import record_has_ai_text
 
@@ -44,6 +45,11 @@ class RecordingDetailsCoordinator:
             widget.tags_input.setEnabled(True)
             widget.is_diarized_check_meta.setChecked(bool(record["is_diarized"]))
             widget.is_diarized_check_meta.setEnabled(True)
+            warning = record.get("diarization_warning") or ""
+            if hasattr(widget, "diarization_warning_label"):
+                widget.diarization_warning_label.setText(diarization_text(warning))
+                widget.diarization_warning_label.setVisible(bool(warning))
+                widget.diarization_settings_button.setVisible(bool(warning))
             widget.date_label.setText(record["created_at"])
             widget.duration_label.setText(f"{record['duration']:.1f}s")
             widget._configure_audio_edit_bounds(record["duration"])
