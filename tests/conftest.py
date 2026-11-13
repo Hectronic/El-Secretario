@@ -1,3 +1,4 @@
+import importlib
 import os
 import sys
 import tempfile
@@ -56,8 +57,40 @@ _suppress_third_party_swig_warnings()
 _QSETTINGS_TEMP_DIR = None
 
 
+def _prepare_sounddevice(*, run_audio_hw):
+    """Isolate the optional audio-hardware edge when PortAudio cannot start."""
+    try:
+        importlib.import_module("sounddevice")
+    except Exception as error:
+        if type(error).__name__ != "PortAudioError" or type(error).__module__ != "sounddevice":
+            raise
+        if run_audio_hw:
+            raise pytest.UsageError(f"Cannot run real audio hardware tests: {error}") from error
+
+        fallback = types.ModuleType("sounddevice")
+        fallback.PortAudioError = type(error)
+
+        def unavailable(*_args, **_kwargs):
+            raise RuntimeError("PortAudio unavailable in this test environment")
+
+        def query_devices(*args, **_kwargs):
+            if args:
+                unavailable()
+            return []
+
+        fallback.InputStream = unavailable
+        fallback.query_devices = query_devices
+        sys.modules["sounddevice"] = fallback
+        warnings.warn(
+            "PortAudio could not initialize; non-hardware tests use an unavailable audio edge. "
+            "Real audio tests require --run-audio-hw and a working PortAudio installation.",
+            RuntimeWarning,
+        )
+
+
 def pytest_configure(config):
     _suppress_third_party_swig_warnings()
+    _prepare_sounddevice(run_audio_hw=config.getoption("--run-audio-hw"))
     _isolate_qsettings_user_scope()
 
 

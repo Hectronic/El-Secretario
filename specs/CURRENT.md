@@ -64,3 +64,7 @@ La revisión local encuentra los 40 contratos con sus tres artefactos y referenc
 ## Diagnóstico de diarización
 
 - [041: Diagnóstico y resultado de diarización](041-diarization-diagnostics/spec.md): comprobación explícita de token/acceso en Ajustes, avisos persistentes y resultado efectivo del worker. Propietarios: [worker](../src/worker_components/diarization_diagnostics.py), [Ajustes](../src/ui/settings/diarization_check.py) y [persistencia](../src/persistence/records.py). Evidencia: [integración Qt/SQLite](../tests/integration/test_diarization_diagnostics.py). La validación de audio real, GPU y escritorios nativos sigue pendiente. Los resultados remotos pueden ser indeterminados. Los mensajes de diagnóstico y avisos admiten español, asturiano e inglés según el sistema.
+
+## Seguimiento de pruebas sin hardware (2026-11-13)
+
+- [001: Captura e importación](001-audio-capture-import/spec.md): el entorno de pruebas aísla el hardware si falla la inicialización de PortAudio; `--run-audio-hw` sigue requiriendo audio real. Detalles y resultados en su plan.
