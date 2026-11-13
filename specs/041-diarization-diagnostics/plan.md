@@ -55,3 +55,7 @@ La estructura del fixture de configuración se contrastó con el [config.yaml of
 La interfaz de esta función selecciona textos en español, asturiano o inglés según `QLocale.system()`. Los mensajes persistidos no incluyen credenciales y se traducen al mostrarse en la grabación y el historial.
 
 Una ejecución anterior fue interrumpida por el agente mientras una prueba Qt de audio escribía un archivo; pytest registró un `KeyboardInterrupt` en esa prueba. La suite final anterior se ejecutó sin interrupciones y pasó.
+
+## Entrega de 2026-11-13
+
+La rama `041-diarization-diagnostics` se publicó para revisión en [PR #68](https://github.com/Hectronic/El-Secretario/pull/68), a petición del usuario (REQ-041.2). Las comprobaciones locales y las validaciones manuales pendientes están registradas arriba; la CI de la PR tiene su propio estado en GitHub.

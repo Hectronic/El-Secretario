@@ -92,4 +92,4 @@ Origen: requisitos FR-001–FR-014 y criterios de aceptación de SPEC-039. Todos
 | --- | --- | --- | --- |
 | REQ-041 | Saber fácilmente por qué la diarización ha dejado de funcionar y qué hacer; preparar una nueva spec para aprobación previa. | Implementada | Usuario en esta sesión; propuesta [SPEC-041](041-diarization-diagnostics/spec.md) aprobada e implementada en rama `041-diarization-diagnostics`. |
 | REQ-041.1 | Aprobar e implementar el diagnóstico en una rama nueva. | Implementada | Usuario en esta sesión; rama `041-diarization-diagnostics` y [SPEC-041](041-diarization-diagnostics/spec.md). Validación manual en la instalación del usuario pendiente. |
-| REQ-041.2 | Crear una PR con la mejora de diagnóstico de diarización. | En curso | Usuario en esta sesión; rama `041-diarization-diagnostics` y [SPEC-041](041-diarization-diagnostics/spec.md). |
+| REQ-041.2 | Crear una PR con la mejora de diagnóstico de diarización. | Implementada | Usuario en esta sesión; [PR #68](https://github.com/Hectronic/El-Secretario/pull/68) y [SPEC-041](041-diarization-diagnostics/spec.md). |
