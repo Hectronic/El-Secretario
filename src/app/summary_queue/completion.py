@@ -70,12 +70,20 @@ def persist_weekly_summary_result(db, task: Dict, result: Any) -> List[Dict]:
 
 def persist_transcription_result(db, task: Dict, result: Dict) -> List[Dict]:
     text = result["text"]
-    db.update_transcription(
-        task["record_id"],
-        text,
-        is_diarized=result.get("is_diarized", False),
-        transcription_model=result.get("model_name"),
-    )
+    if "diarization_warning" in result:
+        replaced = db.apply_transcription_outcome(
+            task["record_id"], text, is_diarized=result.get("is_diarized", False),
+            transcription_model=result.get("model_name"), warning=result["diarization_warning"],
+        )
+        if not replaced:
+            return []
+    else:
+        db.update_transcription(
+            task["record_id"],
+            text,
+            is_diarized=result.get("is_diarized", False),
+            transcription_model=result.get("model_name"),
+        )
     if not should_chain_summary_after_transcription(task):
         return []
 

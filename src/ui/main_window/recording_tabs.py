@@ -278,6 +278,13 @@ class RecordingTabCoordinator:
             logging.exception("Failed while handling recording completion flow.")
             QMessageBox.critical(window, "Error", f"Failed to save recording: {error}")
 
+    def open_diarization_settings(self):
+        self.window.open_settings_tab()
+        settings = self.window.central_tabs.currentWidget()
+        if hasattr(settings, "_show_category"):
+            settings.search_input.clear()
+            settings._show_category("Transcription & speakers")
+
     def _wire_recording_widget(self, rec_widget):
         rec_widget.recording_saved.connect(lambda w=rec_widget: self.handle_recording_widget_saved(w))
         rec_widget.recording_deleted.connect(self.handle_recording_widget_deleted)
@@ -287,4 +294,6 @@ class RecordingTabCoordinator:
             rec_widget.start_chat_requested.connect(lambda contexts: self.window.open_chat_tab(initial_contexts=contexts))
         if hasattr(rec_widget, "open_audio_editor_requested"):
             rec_widget.open_audio_editor_requested.connect(self.window.open_recording_editor_tab)
+        if hasattr(rec_widget, "settings_requested"):
+            rec_widget.settings_requested.connect(self.open_diarization_settings)
         rec_widget.close_requested.connect(lambda: self.window.close_tab(self.window.central_tabs.indexOf(rec_widget)))

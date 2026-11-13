@@ -79,3 +79,23 @@ Origen: requisitos FR-001–FR-014 y criterios de aceptación de SPEC-039. Todos
 | REQ-037.1 | Mejorar en la misma PR la apariencia de ajustes mostrada en la captura. | Implementada | Usuario en esta sesión y captura; SPEC-037. |
 | REQ-037.2 | Corregir los recortes de ajustes con fuentes y métricas de Windows. | Implementada | Usuario en esta sesión; fallos del run 39813238392; SPEC-037. |
 | REQ-040.5 | Corregir la lectura de documentación UTF-8 en la CI Windows con locale cp1252. | Implementada | Usuario en esta sesión; fallos del run 39813238392; SPEC-040. |
+
+## Auditoría de estado (2026-11-12)
+
+| ID | Petición | Estado | Origen / entrega |
+| --- | --- | --- | --- |
+| REQ-040.6 | Revisar el estado del proyecto, sus specs y el trabajo pendiente. | Implementada | Usuario en esta sesión; auditoría local y evidencia en [plan de 040](040-living-specs/plan.md). No implica implementar las mejoras identificadas. |
+
+## Diagnóstico de diarización (2026-11-12)
+
+| ID | Petición | Estado | Origen / entrega |
+| --- | --- | --- | --- |
+| REQ-041 | Saber fácilmente por qué la diarización ha dejado de funcionar y qué hacer; preparar una nueva spec para aprobación previa. | Implementada | Usuario en esta sesión; propuesta [SPEC-041](041-diarization-diagnostics/spec.md) aprobada e implementada en rama `041-diarization-diagnostics`. |
+| REQ-041.1 | Aprobar e implementar el diagnóstico en una rama nueva. | Implementada | Usuario en esta sesión; rama `041-diarization-diagnostics` y [SPEC-041](041-diarization-diagnostics/spec.md). Validación manual en la instalación del usuario pendiente. |
+| REQ-041.2 | Crear una PR con la mejora de diagnóstico de diarización. | Implementada | Usuario en esta sesión; [PR #68](https://github.com/Hectronic/El-Secretario/pull/68) y [SPEC-041](041-diarization-diagnostics/spec.md). |
+
+## Fallo de Ubuntu en PR #68 (2026-11-13)
+
+| ID | Petición | Estado | Origen / entrega |
+| --- | --- | --- | --- |
+| REQ-001.1 | Investigar y corregir el fallo de la pipeline Ubuntu de la PR #68. | Implementada | Usuario en esta sesión; run 43349738105 y [SPEC-001](001-audio-capture-import/spec.md). |

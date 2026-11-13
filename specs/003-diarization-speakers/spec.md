@@ -94,3 +94,7 @@ Reviewed: 2026-10-22. Activación de diarización y conservación de la polític
 - Existing coverage: [tests/test_diarization_toggle.py](../../tests/test_diarization_toggle.py); execution results and remaining validation belong in `plan.md`.
 - Request: [REQ-003](../REQUESTS.md); current feature map: [CURRENT.md](../CURRENT.md).
 - Requirements and acceptance examples above describe the contract; proposed timings or resource targets require measured evidence before being treated as guarantees.
+
+## Resultado y diagnóstico (SPEC-041)
+
+La diarización solicitada se refleja como realizada únicamente si el worker obtuvo un resultado. Un fallo conserva la transcripción disponible, muestra una advertencia persistida y permite abrir los ajustes de transcripción. La comprobación de token y acceso se solicita explícitamente desde Ajustes; no ejecuta inferencia. Véase [SPEC-041](../041-diarization-diagnostics/spec.md) para límites y validación.

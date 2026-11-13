@@ -82,7 +82,8 @@ indexar RAG siguen siendo aiciones esplícites.
 
 1.  **Token de Hugging Face**: Requeríu pa la diarización de falantes (identificar quién ta falando).
     -   Crea un token en: [https://huggingface.co/settings/tokens](https://huggingface.co/settings/tokens)
-    -   Asegúrate de tener aceptao les condiciones d'usuariu pal modelu `pyannote/speaker-diarization-3.1`.
+    -   Asegúrate de tener aceptaes les condiciones d'usuariu de [`pyannote/speaker-diarization-3.1`](https://huggingface.co/pyannote/speaker-diarization-3.1) y [`pyannote/segmentation-3.0`](https://huggingface.co/pyannote/segmentation-3.0).
+    - N’Axustes → Transcripción y falantes, usa **Comprobar diarización** pa comprobar el token introducíu y l’accesu al modelu. Guarda los cambios del token enantes de trescribir. Si falla la diarización, caltiénse la trescripción y la grabación amuesa un avisu con accesu a axustes. La comprobación nun executa inferencia nin comprueba la GPU.
 
 2.  **Clave API de Gemini**: Requerida por defeutu pa les funciones del Asistente d'IA (chat).
     -   Llogra la to clave API en: [https://aistudio.google.com/app/apikey](https://aistudio.google.com/app/apikey)

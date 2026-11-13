@@ -9,3 +9,7 @@
 - [x] T007 Add tray-unavailable fallback and terminal cleanup coverage.
 - [x] T008 Run focused real Qt/SQLite integration and full virtualenv tests;
   update README and README_ES.
+
+## Seguimiento abierto identificado el 2026-11-12
+
+- [ ] T009 Ejecutar y registrar comprobaciones manuales de apariencia, foco y comportamiento de la bandeja nativa en Windows, Ubuntu y macOS; incluir escritorio sin bandeja utilizable. Pendiente ya reconocido en el plan.

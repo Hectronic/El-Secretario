@@ -17,3 +17,8 @@
 - [x] T012 Make secondary controls actually collapse and verify expansion.
 - [x] T013 Reuse the coordinator timer and verify the visible paused state.
 - [x] T014 Record the final full-suite result and publish the reviewed branch/PR.
+
+## Seguimiento abierto identificado el 2026-11-12
+
+- [ ] T015 Registrar comprobación visual nativa de inicio rápido, temporizador y cronología en Windows, Ubuntu y macOS; offscreen no acredita esta validación.
+- [ ] T016 Medir composición y paginación de la cronología mixta con historiales grandes antes de decidir si necesita optimización. Seguimiento ya reconocido en el plan.

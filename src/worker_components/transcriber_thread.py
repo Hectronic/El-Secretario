@@ -27,6 +27,7 @@ from src.transcription_options import get_whisper_model_name, is_sherpa_onnx_mod
 from src.worker_components import device_selection as worker_device_selection
 from src.worker_components import engine as worker_engine
 from src.worker_components.error_messages import transcription_error_message
+from src.worker_components.diarization_diagnostics import MODEL_ID, runtime_warning, safe_detail
 from src.worker_components import sherpa as worker_sherpa
 from src.worker_components import runtime as worker_runtime
 from src.worker_components import settings as worker_settings
@@ -376,6 +377,7 @@ class TranscriberThread(QThread):
                     self.progress.emit(min(prog, 100))
 
             diarization = None
+            diarization_warning = ""
             pipeline_cls = (
                 _get_pyannote_pipeline_class()
                 if (self.enable_diarization and self.hf_token)
@@ -442,7 +444,7 @@ class TranscriberThread(QThread):
 
                     def load_diarization_pipeline(use_gpu: bool):
                         loaded = pipeline_cls.from_pretrained(
-                            "pyannote/speaker-diarization-3.1",
+                            MODEL_ID,
                             use_auth_token=self.hf_token,
                         )
                         if loaded:
@@ -463,7 +465,7 @@ class TranscriberThread(QThread):
                     except Exception as gpu_load_error:
                         if not should_move_to_gpu or not _is_cuda_runtime_failure(gpu_load_error):
                             raise
-                        logging.warning("Could not load pyannote on CUDA; retrying on CPU: %s", gpu_load_error)
+                        logging.warning("Could not load pyannote on CUDA; retrying on CPU: %s", safe_detail(gpu_load_error, self.hf_token))
                         self.status_update.emit("GPU diarization could not start; retrying on CPU...")
                         try:
                             torch.cuda.empty_cache()
@@ -471,7 +473,7 @@ class TranscriberThread(QThread):
                             pass
                         pipeline = load_diarization_pipeline(False)
                         should_move_to_gpu = False
-                        gpu_reason = f"CUDA initialization failed; CPU fallback: {gpu_load_error}"
+                        gpu_reason = "CUDA initialization failed; CPU fallback"
                     if pipeline:
                         logging.info(
                             "Pyannote pipeline device=%s. Reason: %s",
@@ -509,8 +511,7 @@ class TranscriberThread(QThread):
                             raise
                         logging.warning(
                             "CUDA diarization failed; retrying pyannote on CPU: %s",
-                            gpu_error,
-                            exc_info=True,
+                            safe_detail(gpu_error, self.hf_token),
                         )
                         self.status_update.emit("GPU diarization failed; retrying on CPU...")
                         del pipeline
@@ -528,9 +529,16 @@ class TranscriberThread(QThread):
                         time.time() - diarization_started_at,
                     )
                 except Exception as e:
-                    logging.error(f"Diarization failed: {e}", exc_info=True)
+                    diarization_warning = runtime_warning(e, token=self.hf_token)
+                    logging.error("Diarization failed (%s): %s", type(e).__name__, safe_detail(e, self.hf_token))
+            elif self.enable_diarization and not self.hf_token:
+                diarization_warning = runtime_warning(missing_token=True)
             elif self.enable_diarization and self.hf_token and not pipeline_cls:
+                diarization_warning = runtime_warning(missing_dependency=True)
                 logging.warning("Diarization requested but pyannote.audio is unavailable.")
+
+            if self.enable_diarization and diarization is None and not diarization_warning:
+                diarization_warning = runtime_warning()
 
             self.status_update.emit("Merging results...")
             if self.enable_diarization:
@@ -554,7 +562,8 @@ class TranscriberThread(QThread):
                 "transcription_time": transcription_time,
                 "audio_duration": self.total_duration,
                 "audio_size_bytes": os.path.getsize(self.audio_path),
-                "is_diarized": self.enable_diarization,
+                "is_diarized": diarization is not None,
+                "diarization_warning": diarization_warning,
             }
 
             self._persist_working_transcription_settings()

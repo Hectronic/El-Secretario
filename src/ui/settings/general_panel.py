@@ -26,6 +26,7 @@ from PyQt6.QtWidgets import (
 )
 
 from src.ui.secret_field_widget import SecretFieldWidget
+from src.ui.settings.diarization_check import DiarizationCheckWidget
 from src.ui.styles import apply_theme
 
 
@@ -49,10 +50,11 @@ class GeneralSettingsPanel(QWidget):
 
         hf_val = self.settings.value("hf_token", "")
         self.hf_container, self.token_input = self._create_token_field(hf_val, "hf_...")
+        self.hf_diagnostic_container = DiarizationCheckWidget(self.hf_container, self.token_input, self)
 
         lbl_hf = QLabel("Hugging Face Token:")
         lbl_hf.setStyleSheet("font-weight: bold;")
-        form_layout.addRow(lbl_hf, self.hf_container)
+        form_layout.addRow(lbl_hf, self.hf_diagnostic_container)
 
         ai_section_label = QLabel("🤖 AI Provider")
         ai_section_label.setStyleSheet("font-size: 18px; font-weight: bold; color: #607D8B; margin-top: 20px;")

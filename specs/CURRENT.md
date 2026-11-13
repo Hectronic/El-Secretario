@@ -51,3 +51,20 @@ Inventario vivo revisado el 2026-10-22 sobre esta rama. Cada spec enlazada manti
 - 039: revisión automatizada en Linux/offscreen; no sustituye una comprobación visual nativa en los tres sistemas. La cronología compone las fuentes al leer; para historiales grandes queda pendiente medir el coste de paginación antes de optimizar.
 - 016, 032 y 033: los tiempos y consumos de escenarios históricos son objetivos o mediciones de un host concreto. No garantizan latencia de 50 ms, RSS inferior a 150 MB ni VRAM cero en cualquier equipo.
 - Las peticiones históricas se recuperan de los artefactos disponibles; no se inventan fechas ni detalles de conversaciones ausentes.
+
+## Auditoría de seguimiento (2026-11-12)
+
+La revisión local encuentra los 40 contratos con sus tres artefactos y referencias de código/pruebas navegables. Antes de registrar los seguimientos, las 268 tareas estaban marcadas como completas y no había ninguna abierta; esto no representaba todos los límites descritos en los planes. La evidencia de esta revisión se registra en el [plan de 040](040-living-specs/plan.md).
+
+- Los seguimientos manuales de bandeja y los de visualización/paginación de la cronología quedan ahora abiertos en las tareas de 038 y 039, sin cambiar su estado de implementación.
+- 16 specs conservan `Owner: TBD` en la cabecera pese a tener referencias de propietario al final. Hay planes antiguos sin comandos, entorno y resultados concretos; por ejemplo, 001, 002 y 034. Su normalización queda en las tareas de 040, sin inventar validaciones históricas.
+- Las secciones `Open Questions` contienen propuestas de evolución sin decisión, incluidas migraciones de contratos de cola/contexto y adaptadores RAG. No equivalen a funcionalidades comprometidas ni a fallos demostrados; falta revisar cuáles siguen vigentes.
+- Esta auditoría usa Linux/Qt offscreen. No verifica el estado remoto de CI ni sustituye pruebas con hardware, proveedores reales, CUDA o escritorios nativos.
+
+## Diagnóstico de diarización
+
+- [041: Diagnóstico y resultado de diarización](041-diarization-diagnostics/spec.md): comprobación explícita de token/acceso en Ajustes, avisos persistentes y resultado efectivo del worker. Propietarios: [worker](../src/worker_components/diarization_diagnostics.py), [Ajustes](../src/ui/settings/diarization_check.py) y [persistencia](../src/persistence/records.py). Evidencia: [integración Qt/SQLite](../tests/integration/test_diarization_diagnostics.py). La validación de audio real, GPU y escritorios nativos sigue pendiente. Los resultados remotos pueden ser indeterminados. Los mensajes de diagnóstico y avisos admiten español, asturiano e inglés según el sistema.
+
+## Seguimiento de pruebas sin hardware (2026-11-13)
+
+- [001: Captura e importación](001-audio-capture-import/spec.md): el entorno de pruebas aísla el hardware si falla la inicialización de PortAudio; `--run-audio-hw` sigue requiriendo audio real. Detalles y resultados en su plan.

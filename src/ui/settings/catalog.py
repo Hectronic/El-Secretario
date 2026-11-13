@@ -200,8 +200,8 @@ def build_setting_catalog(widget):
         "Transcription & speakers", default_sherpa_model_url(), a.sherpa_model_url_input,
         advanced=True, synonyms=("download", "URL"), validator=_url, owner=a)
     add("hf_token", "Hugging Face token", "Access token needed for speaker diarization models.",
-        "Transcription & speakers", "", g.token_input, view=g.hf_container, advanced=True,
-        synonyms=("speaker diarization", "token", "credential", "GPU", "CUDA"), owner=g)
+        "Transcription & speakers", "", g.token_input, view=g.hf_diagnostic_container, advanced=False,
+        synonyms=("speaker diarization", "token", "credential"), owner=g)
     add("force_cpu", "Force CPU", "Disable GPU acceleration for transcription and diarization.",
         "Transcription & speakers", False, a.force_cpu_check, advanced=True,
         synonyms=("GPU", "CUDA", "processor"), owner=a)

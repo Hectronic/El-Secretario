@@ -3,6 +3,7 @@
 import logging
 import os
 
+from src.ui.diarization_text import diarization_text
 from src.ui.recording.rag_indexing import index_transcription_result_after_refresh
 from src.ui.recording.state import to_bool
 from src.ui.recording.transcription_flow import (
@@ -74,7 +75,7 @@ class RecordingTranscriptionCoordinator:
             widget.current_record_id,
         )
         emit_finished_trace(widget.summary_task_queue, widget.current_record_id, result)
-        widget.status_changed.emit("Saved.")
+        widget.status_changed.emit(diarization_text(result.get("diarization_warning")) if result.get("diarization_warning") else "Saved.")
         widget.progress_changed.emit(-2)
         widget.retranscribe_btn.setEnabled(True)
         text = result["text"]
@@ -87,7 +88,7 @@ class RecordingTranscriptionCoordinator:
         )
         widget.load_record(widget.current_record_id)
         widget.recording_saved.emit()
-        if widget.auto_summarize_after_transcription and text.strip():
+        if not result.get("diarization_warning") and widget.auto_summarize_after_transcription and text.strip():
             widget._enqueue_post_transcription_ai_tasks()
         index_transcription_result_after_refresh(
             rag=widget.rag,

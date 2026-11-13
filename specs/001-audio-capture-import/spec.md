@@ -84,3 +84,7 @@ Reviewed: 2026-10-22. Grabación e importación con persistencia y ciclo de capt
 - Existing coverage: [tests/integration/test_recording_in_progress_lifecycle.py](../../tests/integration/test_recording_in_progress_lifecycle.py); execution results and remaining validation belong in `plan.md`.
 - Request: [REQ-001](../REQUESTS.md); current feature map: [CURRENT.md](../CURRENT.md).
 - Requirements and acceptance examples above describe the contract; proposed timings or resource targets require measured evidence before being treated as guarantees.
+
+## Aislamiento de audio en pruebas sin hardware
+
+Si PortAudio no puede inicializarse durante las pruebas ordinarias, el entorno de pytest sustituye exclusivamente la arista `sounddevice` por una implementación que informa de ausencia de dispositivos y rechaza la captura. La aplicación y las ejecuciones con PortAudio disponible siguen usando el módulo real. Si se solicita `--run-audio-hw`, un fallo de inicialización se comunica como error y no se sustituye el dispositivo. Otros errores de importación no se ocultan. Contratos en [tests/test_audio_test_environment.py](../../tests/test_audio_test_environment.py) y [tests/integration/test_recording_in_progress_lifecycle.py](../../tests/integration/test_recording_in_progress_lifecycle.py); resultados en [plan.md](plan.md).

@@ -100,7 +100,8 @@ reload, and reindex remain explicit actions.
 
 1.  **Hugging Face Token**: Required for speaker diarization (identifying who is speaking).
     -   Create a token at: [https://huggingface.co/settings/tokens](https://huggingface.co/settings/tokens)
-    -   Ensure you have accepted the user conditions for the `pyannote/speaker-diarization-3.1` model.
+    -   Ensure you have accepted the user conditions for both [`pyannote/speaker-diarization-3.1`](https://huggingface.co/pyannote/speaker-diarization-3.1) and [`pyannote/segmentation-3.0`](https://huggingface.co/pyannote/segmentation-3.0).
+    - In Settings → Transcription & speakers, use **Check diarization** to check the entered token and model access. Save token changes before transcribing. If diarization fails, the recording retains its transcript and shows a warning with a link to settings. The check does not run inference or verify GPU availability.
 
 2.  **Gemini API Key**: Required for the AI Assistant (chat) features by default.
     -   Get your API key at: [https://aistudio.google.com/app/apikey](https://aistudio.google.com/app/apikey)

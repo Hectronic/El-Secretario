@@ -302,6 +302,22 @@ class RecordsRepository(RepositoryBase):
             cursor.execute(query, params)
             conn.commit()
 
+    def apply_transcription_outcome(self, record_id: int, text: str, *, is_diarized: bool, transcription_model: str, warning: str) -> bool:
+        """Persist warning and retain an existing transcript when diarization failed."""
+        with self.get_connection() as conn:
+            conn.execute("BEGIN IMMEDIATE")
+            row = conn.execute("SELECT transcription FROM records WHERE id = ?", (record_id,)).fetchone()
+            if not row:
+                return False
+            preserve = bool(warning and str(row[0] or "").strip())
+            if preserve:
+                conn.execute("UPDATE records SET diarization_warning = ? WHERE id = ?", (warning, record_id))
+            else:
+                conn.execute("UPDATE records SET transcription = ?, is_diarized = ?, transcription_model = ?, diarization_warning = ? WHERE id = ?",
+                             (text, int(is_diarized), transcription_model, warning or None, record_id))
+            conn.commit()
+            return not preserve
+
     def update_recording_notes(self, record_id: int, notes: str) -> None:
         """Update user notes associated with a recording."""
         with self.get_connection() as conn:

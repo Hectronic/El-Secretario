@@ -62,6 +62,7 @@ class RecordingWidget(QWidget):
     status_changed = pyqtSignal(str)
     progress_changed = pyqtSignal(int)
     audio_source_released = pyqtSignal()
+    settings_requested = pyqtSignal()
 
     def __init__(
         self,

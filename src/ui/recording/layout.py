@@ -1,7 +1,8 @@
 """Visual composition for recording detail and audio-edit tabs."""
 
-from PyQt6.QtWidgets import QDoubleSpinBox, QFrame, QGroupBox, QHBoxLayout, QLabel, QVBoxLayout
+from PyQt6.QtWidgets import QDoubleSpinBox, QFrame, QGroupBox, QHBoxLayout, QLabel, QPushButton, QVBoxLayout
 
+from src.ui.diarization_text import diarization_text
 from src.ui.recording.actions_bar import build_actions_bar
 from src.ui.recording.content_tabs import build_content_tabs
 from src.ui.recording.controls import create_action_button, create_playback_controls, create_primary_action
@@ -32,6 +33,15 @@ def _build_transcription_controls(widget, layout):
     widget.diarization_check = panel.diarization_check
     widget.retranscribe_btn = panel.retranscribe_btn
     layout.addLayout(panel.layout)
+    widget.diarization_warning_label = QLabel()
+    widget.diarization_warning_label.setWordWrap(True)
+    widget.diarization_warning_label.setAccessibleName(diarization_text("Diarization warning"))
+    widget.diarization_warning_label.hide()
+    layout.addWidget(widget.diarization_warning_label)
+    widget.diarization_settings_button = QPushButton(diarization_text("Open settings for diarization"))
+    widget.diarization_settings_button.clicked.connect(widget.settings_requested.emit)
+    widget.diarization_settings_button.hide()
+    layout.addWidget(widget.diarization_settings_button)
 
 
 

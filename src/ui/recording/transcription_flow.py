@@ -186,12 +186,18 @@ def persist_direct_transcription_result(db, current_record_id, filename, result)
 
     if current_record_id:
         log_transcription_metrics(db, current_record_id, result)
-        db.update_transcription(
-            current_record_id,
-            text,
-            is_diarized=is_diarized,
-            transcription_model=model_name,
-        )
+        if "diarization_warning" in result:
+            db.apply_transcription_outcome(
+                current_record_id, text, is_diarized=is_diarized,
+                transcription_model=model_name, warning=result["diarization_warning"],
+            )
+        else:
+            db.update_transcription(
+                current_record_id,
+                text,
+                is_diarized=is_diarized,
+                transcription_model=model_name,
+            )
         db.update_duration(current_record_id, duration)
         return current_record_id
 
@@ -203,4 +209,6 @@ def persist_direct_transcription_result(db, current_record_id, filename, result)
         transcription_model=model_name,
     )
     log_transcription_metrics(db, new_record_id, result)
+    if result.get("diarization_warning"):
+        db.apply_transcription_outcome(new_record_id, text, is_diarized=False, transcription_model=model_name, warning=result["diarization_warning"])
     return new_record_id

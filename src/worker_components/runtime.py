@@ -15,12 +15,14 @@
 import logging
 import os
 import platform
+import threading
 from importlib.metadata import PackageNotFoundError, version
 
 import torch
 
 _PYANNOTE_PIPELINE_CLS = None
 _PYANNOTE_IMPORT_ATTEMPTED = False
+_PYANNOTE_IMPORT_LOCK = threading.Lock()
 
 
 def pkg_version(name: str) -> str:
@@ -41,19 +43,18 @@ def get_pyannote_pipeline_class():
     dependency.
     """
     global _PYANNOTE_PIPELINE_CLS, _PYANNOTE_IMPORT_ATTEMPTED
-    if _PYANNOTE_IMPORT_ATTEMPTED:
+    with _PYANNOTE_IMPORT_LOCK:
+        if _PYANNOTE_IMPORT_ATTEMPTED:
+            return _PYANNOTE_PIPELINE_CLS
+        try:
+            from pyannote.audio import Pipeline as ImportedPipeline
+            _PYANNOTE_PIPELINE_CLS = ImportedPipeline
+        except Exception as e:
+            logging.warning("pyannote.audio is not available for diarization: %s", e)
+            _PYANNOTE_PIPELINE_CLS = None
+        _PYANNOTE_IMPORT_ATTEMPTED = True
         return _PYANNOTE_PIPELINE_CLS
 
-    _PYANNOTE_IMPORT_ATTEMPTED = True
-    try:
-        from pyannote.audio import Pipeline as ImportedPipeline
-
-        _PYANNOTE_PIPELINE_CLS = ImportedPipeline
-    except Exception as e:
-        logging.warning("pyannote.audio is not available for diarization: %s", e)
-        _PYANNOTE_PIPELINE_CLS = None
-
-    return _PYANNOTE_PIPELINE_CLS
 
 
 def flush_log_handlers():

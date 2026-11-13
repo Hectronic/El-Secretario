@@ -56,6 +56,7 @@
 - [039-pomodoro-quick-start](039-pomodoro-quick-start/spec.md)
 
 - [040-living-specs](040-living-specs/spec.md)
+- [041-diarization-diagnostics](041-diarization-diagnostics/spec.md)
 
 ## Cross-feature invariants
 
